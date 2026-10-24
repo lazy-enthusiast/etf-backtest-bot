@@ -69,7 +69,7 @@ export const SHARED_CORE_SYSTEM = `你是使用者的私人退休規劃師，同
   2. holdings 的鍵是 Yahoo Finance 代號，值是權重百分比，總和為 100。
   3. rebalance 只能是 none、monthly、quarterly、semiannual、annual。
   4. 可選 start、end（YYYY-MM-DD）。要限定起始年份時請填 start（例如 "1980-01-01"）；通常省略以取得最長共同歷史。
-  5. 只使用【可回測代號】清單中的代號；清單外的代號要請使用者在本機執行 \`npm run fetch -- 代號\` 後再試。
+  5. 代號以 Yahoo Finance 可解析者為準（前端經 Worker 即時抓價）；【可回測代號】為建議清單（含長歷史替代序列）。清單外的常見美股／ETF 也可直接使用，無需本機 fetch。
 
 二、調整退休消費、年齡、儲蓄、通膨等假設時，附上 plan 區塊：
 

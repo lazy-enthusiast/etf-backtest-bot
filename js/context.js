@@ -75,7 +75,11 @@ export async function buildBacktestContext() {
   const parts = [];
   try {
     const meta = await loadMeta();
-    parts.push('【可回測代號】（括號內為含替代序列後最早年份）：' + backtestableSymbols(meta).map(s => `${s}(${earliestDate(meta, s).slice(0, 4)})`).join('、'));
+    const listed = backtestableSymbols(meta).map(s => {
+      const ed = earliestDate(meta, s);
+      return ed ? `${s}(${ed.slice(0, 4)})` : s;
+    }).join('、');
+    parts.push('【可回測代號】Yahoo Finance 可解析的美股／ETF／基金代號皆可即時抓取（經 Worker）；下列為對照表＋本地長歷史合成建議清單（括號為含替代序列後最早年份）：' + listed);
   } catch (e) {
     parts.push('【可回測代號】載入失敗');
   }

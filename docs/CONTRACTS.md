@@ -2,7 +2,7 @@
 
 個人用 ETF 退休規劃工具（「退休航道」）：設定退休計劃與 ETF 組合，在瀏覽器以歷史價格回測並模擬每個起始月份的累積／提領結果；AI 讀取結果、提出改良組合或計劃調整，使用者一鍵套用並重算。
 
-前端是靜態 HTML（GitHub Pages），回測與退休模擬在瀏覽器執行，價格／CPI 資料是 repo 內的靜態 JSON。AI 對話經 Cloudflare Worker → Vercel Proxy → OpenRouter。本 repo 由 deep-water 幕僚 chatbot 改造而來。
+前端是靜態 HTML（GitHub Pages），回測與退休模擬在瀏覽器執行。`data/` 只放長歷史合成序列與 CPI；一般 ETF／基金經 Worker `GET /api/series` 向 Yahoo 即時抓價。AI 對話經 Cloudflare Worker → Vercel Proxy → OpenRouter。
 
 三層（前端／Worker／Proxy）各有存在理由，不要合併。改請求／回應 shape 時，同步檢查 `js/`（尤其 chat／context／ai-controls）、Worker、Proxy。所有金鑰走環境變數，不要硬編碼。
 
@@ -15,13 +15,15 @@
   index.html + styles/app.css + js/app.js
       │  import
       ├──────────────────►  backtest/engine.js、backtest/retirement.js
-      │  fetch（同源靜態檔）
-      ├──────────────────►  backtest/index-mapping.json、data/manifest.json、data/*.json
+      │  fetch（同源：合成／CPI）
+      ├──────────────────►  backtest/index-mapping.json、data/manifest.json、data/{SYNTHETIC,CPI}.json
+      │  X-App-Auth GET /api/series?symbol=
+      ├──────────────────►  Worker ──► Yahoo Chart API（Cache API 24h）
       │
-      │  X-App-Auth（使用者輸入的密碼，存在 localStorage）
+      │  X-App-Auth（對話）
       v
 Cloudflare Worker（etf-backtest-worker）
-  worker/src/index.js  ←  cors / auth / mem0 / openrouter / brain
+  worker/src/index.js  ←  cors / auth / yahoo / mem0 / openrouter / brain
       │  X-Proxy-Secret
       v
 Vercel Proxy
@@ -31,7 +33,7 @@ Vercel Proxy
 OpenRouter  →  Claude / 其他模型
 
 本機（開發者電腦）
-  backtest/data-fetcher.js（facade）+ fetch/* ──► Yahoo／合成序列 ──► data/*.json
+  backtest/data-fetcher.js ──► 更新合成／CPI（或離線快取）──► data/
   npm run dev ──► 靜態前端 :5173 + wrangler dev :8787
 ```
 
@@ -61,9 +63,10 @@ OpenRouter  →  Claude / 其他模型
 | `backtest/fetch/` | `yahoo.js`、`synthetic.js`、`cache.js` |
 | `backtest/index-mapping.json` | ETF → 延伸歷史用的替代序列 |
 | `backtest/cli.js` | 終端機回測；`--withdraw` 做提領測試 |
-| `data/` | 價格／CPI 快取與 `manifest.json`；需提交進 git |
+| `data/` | 僅 SYNTHETIC／CPI 與瘦身 `manifest.json`；一般 ETF 不提交 |
 | `scripts/dev.js` | 本機一鍵啟動前端 + Worker（服務 index／styles／js／backtest／data） |
-| `worker/src/index.js` | 薄路由、SSE、組請求 |
+| `worker/src/index.js` | 薄路由（含 `/api/series`）、SSE、組請求 |
+| `worker/src/yahoo.js` | Yahoo 代抓，回傳與 `data/*.json` 同 shape |
 | `worker/src/cors.js`／`auth.js`／`mem0.js`／`openrouter.js` | CORS、驗證、Mem0、Proxy 呼叫 |
 | `worker/src/brain.js` | 退休規劃師 prompt、摘要 prompt、模型清單、`pickModelKey` |
 | `worker/wrangler.toml` | Worker 名稱（`etf-backtest-worker`）、公開 vars（含 `PROXY_URL`…`/api/chat`） |
@@ -74,7 +77,7 @@ OpenRouter  →  Claude / 其他模型
 
 ## 回測引擎（`backtest/engine.js`）
 
-### 價格資料格式（`data/<檔名>.json`）
+### 價格資料格式（本地 `data/` 或 Worker `/api/series`）
 
 ```json
 {
@@ -85,9 +88,9 @@ OpenRouter  →  Claude / 其他模型
 }
 ```
 
-- 價格為 Yahoo 調整收盤價（含股息與分割調整）；指數沒有調整價時用收盤價。
-- 檔名由 `symbolToFile()` 產生：`^GSPC` → `IDX_GSPC.json`、`GC=F` → `GC_F.json`。
-- `data/manifest.json`：`{ updatedAt, symbols: { [代號]: { name, currency, firstDate, lastDate } } }`。
+- 本地 `data/` 只放 `instrumentType` 為 `SYNTHETIC`／`CPI` 的長歷史序列；其餘由前端呼叫 `GET /api/series?symbol=`（需 `X-App-Auth`）向 Yahoo 抓 adj close。
+- 檔名由 `symbolToFile()` 產生（僅本地檔）：`^GSPC` → `IDX_GSPC.json`。
+- `data/manifest.json`：只列本地合成／CPI；前端成功遠端載入後會把 meta 寫進記憶體 manifest。
 - 特殊序列：`CPI_US`（通膨）、`US_STOCK_TR`／`US_10Y_TR`（長歷史合成總報酬）等。
 
 ### 延伸歷史（`index-mapping.json`）
@@ -262,14 +265,13 @@ OpenRouter  →  Claude / 其他模型
 
 ```bash
 npm run dev                           # 本機前端 + Worker
-npm run fetch -- QQQ GLD              # 抓指定 ETF 及其替代序列
-npm run fetch:all                     # 抓對照表內全部代號
-npm run fetch -- SPY --refresh        # 強制重抓
+npm run fetch -- US_STOCK_TR CPI_US   # 更新合成／CPI（其餘 ETF 改由 Worker 即時抓）
+npm run fetch:all                     # 含對照表代號的本機快取（可選，離線用）
 npm run backtest -- "SPY:60,TLT:40" --rebalance annual
 npm run backtest -- "VTI:60,IEF:40" --withdraw 4 --years 30
 ```
 
-抓完要 commit `data/` 並 push，GitHub Pages 上的前端才看得到。
+線上前端的 ETF 價格走 Worker Yahoo；只有改了合成／CPI 才需 commit `data/` 並 push。
 
 部署 Worker：`cd worker && npx wrangler deploy`（secrets 用 `wrangler secret put`，勿寫進 git）。
 

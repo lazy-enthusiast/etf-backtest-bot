@@ -3,6 +3,9 @@ import { getCorsHeaders } from './cors.js';
 import { isAuthorized } from './auth.js';
 import { mem0Search, mem0Add } from './mem0.js';
 import { callOpenRouterSync, callOpenRouterStream } from './openrouter.js';
+import { fetchFromYahoo, normalizeSymbol, SYMBOL_RE } from './yahoo.js';
+
+const SERIES_CACHE_TTL = 86400; // 24h；日線歷史夠用
 
 function parseSummaryResponse(raw, fallbackSummary) {
   try {
@@ -69,6 +72,58 @@ export default {
         status: ok ? 200 : 401,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
+    }
+
+    // ===== GET /api/series?symbol=XXX（Yahoo 代抓；需驗證；Cache API 24h）=====
+    if (url.pathname === '/api/series' && request.method === 'GET') {
+      if (!isAuthorized(request, env)) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+      const symbol = normalizeSymbol(url.searchParams.get('symbol'));
+      if (!SYMBOL_RE.test(symbol)) {
+        return new Response(JSON.stringify({ error: '無效代號' }), {
+          status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+      try {
+        const cache = caches.default;
+        const cacheKey = new Request(`https://series-cache.invalid/yahoo/${symbol}`, { method: 'GET' });
+        const hit = await cache.match(cacheKey);
+        if (hit) {
+          const body = await hit.text();
+          return new Response(body, {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Series-Cache': 'HIT',
+              ...corsHeaders
+            }
+          });
+        }
+        const data = await fetchFromYahoo(symbol);
+        const body = JSON.stringify(data);
+        const cached = new Response(body, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': `public, max-age=${SERIES_CACHE_TTL}`
+          }
+        });
+        ctx.waitUntil(cache.put(cacheKey, cached.clone()));
+        return new Response(body, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Series-Cache': 'MISS',
+            ...corsHeaders
+          }
+        });
+      } catch (err) {
+        const status = err.status === 404 ? 404 : 502;
+        const hint = status === 502 ? '（Yahoo 可能暫時拒答，請稍後再試）' : '';
+        return new Response(JSON.stringify({ error: (err.message || '抓取失敗') + hint }), {
+          status, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
     }
 
     // ===== /upload（R2；前端目前未使用，保留給日後附件落地）=====

@@ -2,7 +2,8 @@
 
 ## 這是什麼
 一個人用的 ETF 退休規劃工具：設定退休計劃參數與 ETF 組合，在瀏覽器以歷史價格回測並模擬「每個起始月份」的累積／提領結果；AI 對話讀取結果，提出改良組合或計劃調整。
-前端是純靜態 HTML + ES modules，跑在 GitHub Pages；回測與退休模擬在瀏覽器跑，價格／CPI 資料是 repo 內的靜態 JSON。
+前端是純靜態 HTML + ES modules，跑在 GitHub Pages；回測與退休模擬在瀏覽器跑。
+長歷史合成序列與 CPI 放在 repo 的 data/；一般 ETF／基金經 Worker 向 Yahoo 即時抓價（Cache API 快取）。
 AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換出口 IP、隔離 API key）。
 本 repo 由 deep-water 幕僚 chatbot 改造而來；Worker 名稱已改為 etf-backtest-worker，不要再部署成 deep-water-worker。
 
@@ -17,18 +18,19 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
   - fetch/yahoo.js、synthetic.js、cache.js：Yahoo／合成序列／快取與 manifest
   - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數／合成），依優先順序
   - cli.js：終端機回測（可加 --withdraw 做提領測試）
-- data/ → 價格／CPI 快取（提交進 git，由 GitHub Pages 提供給前端）
+- data/ → 僅長歷史合成序列與 CPI（提交進 git）；一般 ETF 不放這裡
 - scripts/dev.js → 本機一鍵：靜態前端（127.0.0.1:5173）+ wrangler dev；允許 index.html、styles/、js/、backtest/、data/
 - worker/ → Cloudflare Worker（邏輯層）
-  - src/index.js：薄路由
+  - src/index.js：薄路由（含 GET /api/series）
+  - src/yahoo.js：Yahoo chart 代抓（與 data/*.json 同 shape）
   - src/cors.js、auth.js、mem0.js、openrouter.js：CORS、驗證、Mem0、Proxy 呼叫
   - src/brain.js：prompt、MODEL_CONFIG、pickModelKey
 - proxy/ → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方
 
 ## 資料流
 AI：前端 → Worker（X-App-Auth 驗證）→ Proxy（X-Proxy-Secret 驗證）→ OpenRouter → Claude
-回測／退休：前端 fetch data/*.json + backtest/index-mapping.json → engine.js + retirement.js 在瀏覽器計算 → 結果文字化後隨每則訊息以 backtestContext 送給 Worker
-新代號：本機 `npm run fetch -- 代號` → commit data/ → push（瀏覽器無法直接抓 Yahoo，CORS）
+回測／退休：前端 fetch backtest/index-mapping.json + 本地 data/（僅 SYNTHETIC／CPI）；缺的 ETF／基金 → Worker GET /api/series（Yahoo）→ engine.js + retirement.js 在瀏覽器計算 → backtestContext 送給 Worker
+新代號：直接在前端輸入 Yahoo 可解析代號即可（經 Worker）；本機 `npm run fetch` 僅用於更新合成／CPI 或離線開發
 
 ## 環境變數（全部走 env，絕不硬編碼）
 Worker 持有：
