@@ -4,7 +4,8 @@ const YAHOO_CHART = 'https://query2.finance.yahoo.com/v8/finance/chart/';
 const EARLIEST = -2208988800; // 1900-01-01
 const YAHOO_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 
-export const SYMBOL_RE = /^[A-Z][A-Z0-9.^-]{0,11}$/;
+// 美股 ETF／共同基金、以及 0050.TW、2800.HK、GC=F 等常見 Yahoo 代號
+export const SYMBOL_RE = /^[A-Z0-9][A-Z0-9.^=-]{0,14}$/;
 
 export function normalizeSymbol(raw) {
   return String(raw || '').trim().toUpperCase();
