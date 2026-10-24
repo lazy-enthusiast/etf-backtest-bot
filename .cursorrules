@@ -1,25 +1,27 @@
-# etf-backtest-bot — 個人 ETF 回測 + AI 投資組合分析
+# etf-backtest-bot — 個人 ETF 退休規劃 + AI 顧問（「退休航道」）
 
 ## 這是什麼
-一個人用的 ETF 投資組合回測工具，附 AI 對話框：一邊回測、一邊讓 AI 分析結果並提出改良組合。
-前端是純靜態 HTML，跑在 GitHub Pages；回測引擎在瀏覽器跑，價格資料是 repo 內的靜態 JSON。
+一個人用的 ETF 退休規劃工具：設定退休計劃參數與 ETF 組合，在瀏覽器以歷史價格回測並模擬「每個起始月份」的累積／提領結果；AI 對話讀取結果，提出改良組合或計劃調整。
+前端是純靜態 HTML，跑在 GitHub Pages；回測與退休模擬在瀏覽器跑，價格／CPI 資料是 repo 內的靜態 JSON。
 AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換出口 IP、隔離 API key）。
 本 repo 由 deep-water 幕僚 chatbot 改造而來；Worker 名稱已改為 etf-backtest-worker，不要再部署成 deep-water-worker。
 
 ## 架構（各有存在理由，不要合併）
-- index.html → 前端 UI（GitHub Pages）。對話、回測面板、淨值曲線；localStorage 存對話、historySummary、組合、存取密碼
-- backtest/ → 回測引擎與資料工具
-  - engine.js：純計算、無 I/O，Node 與瀏覽器共用（前端以 ES module import）
-  - data-fetcher.js：Node 專用，從 Yahoo Finance 抓調整收盤價寫入 data/，並更新 data/manifest.json
-  - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數），依優先順序
-  - cli.js：終端機回測
-- data/ → 價格快取（提交進 git，由 GitHub Pages 提供給前端）
+- index.html → 前端 UI（GitHub Pages）。退休計劃表單、組合編輯、成功率／軌跡儀表板、AI 顧問；localStorage 存對話、historySummary、計劃、組合、存取密碼
+- backtest/ → 回測與退休模擬（純計算）及資料工具
+  - engine.js：組合回測，純計算、無 I/O，Node 與瀏覽器共用
+  - retirement.js：實質月報酬、歷史起始月退休模擬、SWR／PWR；純計算、無 I/O
+  - data-fetcher.js：Node 專用，從 Yahoo Finance（及合成序列）寫入 data/，更新 data/manifest.json
+  - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數／合成），依優先順序
+  - cli.js：終端機回測（可加 --withdraw 做提領測試）
+- data/ → 價格／CPI 快取（提交進 git，由 GitHub Pages 提供給前端）
+- scripts/dev.js → 本機一鍵：靜態前端（127.0.0.1:5173）+ wrangler dev
 - worker/ → Cloudflare Worker（邏輯層）。驗證、摘要、記憶、模型選擇、SSE 串流
 - proxy/ → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方
 
 ## 資料流
 AI：前端 → Worker（X-App-Auth 驗證）→ Proxy（X-Proxy-Secret 驗證）→ OpenRouter → Claude
-回測：前端 fetch data/*.json + backtest/index-mapping.json → engine.js 在瀏覽器計算 → 結果文字化後隨每則訊息以 backtestContext 送給 Worker
+回測／退休：前端 fetch data/*.json + backtest/index-mapping.json → engine.js + retirement.js 在瀏覽器計算 → 結果文字化後隨每則訊息以 backtestContext 送給 Worker
 新代號：本機 `npm run fetch -- 代號` → commit data/ → push（瀏覽器無法直接抓 Yahoo，CORS）
 
 ## 環境變數（全部走 env，絕不硬編碼）
@@ -29,7 +31,7 @@ Worker 持有：
 - PROXY_SECRET = 打 proxy 用的密鑰
 - MEM0_API_KEY = Mem0 的 key
 - MEM0_USER_ID = 與 deep-water 分開（避免記憶混用）
-- ALLOWED_ORIGIN = CORS 允許的來源
+- ALLOWED_ORIGIN = CORS 允許的來源（可逗號分隔多個，例如 Pages + localhost）
 - MY_BUCKET = R2 bucket（/upload 端點用，可不綁）
 
 Proxy 持有：
@@ -42,17 +44,18 @@ Proxy 持有：
 3. 摘要回傳 JSON：{ history_summary, complexity, task_tag }
 4. 依 complexity 挑模型：<=4 用 Haiku-4.5，>4 用 Sonnet-5
 5. 組 system block：
- - SHARED_CORE_SYSTEM（投資組合分析師 prompt，有 cache_control）
- - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆 + 目前回測結果）
+ - SHARED_CORE_SYSTEM（退休規劃師 prompt，有 cache_control）
+ - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆 + 目前回測／退休模擬結果）
 6. 經 proxy 呼叫 OpenRouter，stream 回前端
 7. SSE 第一個 event 是 meta（含新 summary），前端存回 localStorage
 
 ## 前後端契約（改了要兩邊同步）
 - SSE meta event 格式
-- 請求 body 的 backtestContext（字串，Worker 截斷至 12000 字）
-- AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }。
-  格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 index.html 的 parsePortfolioBlock()
-- engine.js 的 runBacktest() 輸出 shape（index.html 的 describeResult()/renderBacktestResult() 依賴它）
+- 請求 body 的 backtestContext（字串，Worker 截斷至 12000 字；含計劃參數、退休模擬、組合績效）
+- AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }
+- AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency）+ 可選 note
+  格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 index.html 的 parsePortfolioBlock()／parsePlanBlock()
+- engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）
 
 ## 模型池
 - Haiku-4.5 = anthropic/claude-haiku-4.5 （輕量任務）
@@ -61,12 +64,12 @@ Proxy 持有：
 - 標題用 = meta-llama/llama-3.1-8b-instruct（便宜快）
 
 ## 編輯規則
-- 改 worker 的請求/回應 shape 時，同步檢查 index.html 和 proxy
+- 改 worker 的請求／回應 shape 時，同步檢查 index.html 和 proxy
 - 不要在 worker 或 index.html 硬編碼任何 key 或密碼
-- engine.js 保持無 I/O（不得 import node:fs 等），否則瀏覽器會壞
+- engine.js／retirement.js 保持無 I/O（不得 import node:fs 等），否則瀏覽器會壞
 - SHARED_CORE_SYSTEM 很長，改動要謹慎（有 prompt caching 成本）
 - 動任何跟 token 預算、摘要觸發、模型選擇有關的邏輯前，先問我
-- 回測數據限制（價格指數不含股息、幣別未換算、Sharpe 用 rf=0）要在結果 warnings 或 UI 中揭露，不要悄悄忽略
+- 回測／模擬數據限制（價格指數不含股息、月度合成平滑波動、幣別未換算、Sharpe 用 rf=0、循環序列、CPI 缺月）要在結果 warnings 或 UI 中揭露，不要悄悄忽略
 
 ## 已知待優化（不要主動改，先問）
 - 摘要每輪都跑，即使內容增量很小
@@ -74,3 +77,4 @@ Proxy 持有：
 - Mem0 search 每輪都打 API，沒快取
 - backtestContext 每輪都送（約 1–3k tokens），未做「結果沒變就不送」
 - 不做匯率換算；Sharpe 未使用真實無風險利率
+- 系統以固定權重回測；下滑路徑僅能當概念建議

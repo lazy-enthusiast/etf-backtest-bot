@@ -1,202 +1,379 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ETF 回測助手</title>
+<title>退休航道 · ETF 退休規劃</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script type="module">
 import * as engine from './backtest/engine.js';
-window.BacktestEngine = engine;
-window.dispatchEvent(new Event('backtest-engine-ready'));
+import * as retirement from './backtest/retirement.js';
+window.RP_MODULES = { engine, retirement };
+window.dispatchEvent(new Event('rp-modules-ready'));
 </script>
 
 <style>
   * { box-sizing: border-box; }
   :root {
-    --bg: #ffffff; --sidebar-bg: #f7f7f8; --border: #e5e5e5; --text: #222; --text-light: #777;
-    --hover: #ececec; --active: #e3e3e3; --user-bg: #2563eb; --user-text: #fff;
-    --bot-bg: #f1f1f1; --bot-text: #222; --error-bg: #fde2e2; --error-text: #b42318;
-    --input-border: #ddd; --accent: #2563eb; --code-bg: #282c34;
+    --bg: #f3f5f9; --surface: #ffffff; --surface-2: #f7f8fb; --border: #e3e7ef;
+    --text: #18202f; --muted: #6b7485; --faint: #9aa3b2;
+    --accent: #4f46e5; --accent-2: #0ea5e9; --accent-soft: rgba(79, 70, 229, 0.10);
+    --good: #059669; --warn: #d97706; --bad: #dc2626;
+    --good-soft: rgba(5, 150, 105, 0.12); --warn-soft: rgba(217, 119, 6, 0.12); --bad-soft: rgba(220, 38, 38, 0.12);
+    --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.06);
+    --radius: 16px; --code-bg: #282c34;
   }
   body.dark {
-    --bg: #1e1f22; --sidebar-bg: #17181a; --border: #33343a; --text: #e6e6e6; --text-light: #9a9a9a;
-    --hover: #2a2b2f; --active: #34363b; --user-bg: #3b82f6; --user-text: #fff;
-    --bot-bg: #2a2b2f; --bot-text: #e6e6e6; --error-bg: #4a2323; --error-text: #ff9a9a;
-    --input-border: #44454a; --accent: #3b82f6; --code-bg: #282c34;
+    --bg: #0d1117; --surface: #151b24; --surface-2: #1b2230; --border: #263041;
+    --text: #e6eaf2; --muted: #98a2b3; --faint: #6b7485;
+    --accent: #818cf8; --accent-2: #38bdf8; --accent-soft: rgba(129, 140, 248, 0.14);
+    --good: #34d399; --warn: #fbbf24; --bad: #f87171;
+    --good-soft: rgba(52, 211, 153, 0.14); --warn-soft: rgba(251, 191, 36, 0.14); --bad-soft: rgba(248, 113, 113, 0.14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
   }
-  body { margin: 0; font-family: -apple-system, sans-serif; display: flex; height: 100vh; background: var(--bg); color: var(--text); }
-  #sidebar { width: 260px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 12px; }
-  #topRow { display: flex; gap: 6px; margin-bottom: 8px; }
-  #newChatBtn { flex: 1; padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; font-size: 14px; }
-  #themeBtn { padding: 10px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; font-size: 14px; }
-  #searchBox { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--bg); color: var(--text); font-size: 13px; margin-bottom: 8px; }
-  #convList { overflow-y: auto; flex: 1; }
-  .convItem { position: relative; display: flex; align-items: center; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 14px; margin-bottom: 4px; }
-  .convItem:hover { background: var(--hover); }
-  .convItem.active { background: var(--active); }
-  .convTitle { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .moreBtn { padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--text-light); }
-  .moreBtn:hover { background: var(--active); }
-  .menu { position: absolute; right: 8px; top: 36px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index: 10; overflow: hidden; }
-  .menu div { padding: 8px 16px; font-size: 13px; cursor: pointer; white-space: nowrap; color: var(--text); }
-  .menu div:hover { background: var(--hover); }
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #topbar { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; position: relative; }
-  #topbar label { font-size: 13px; color: var(--text-light); }
-  #modelSelect { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--input-border); background: var(--bg); color: var(--text); font-size: 13px; }
-  #messages { flex: 1; overflow-y: auto; padding: 24px; }
-  .msgWrap { max-width: 76%; margin-bottom: 18px; display: flex; flex-direction: column; }
-  .msgWrap.user { margin-left: auto; align-items: flex-end; }
-  .msgWrap.bot, .msgWrap.error { margin-right: auto; align-items: flex-start; }
-  .msgContent { padding: 10px 14px; border-radius: 12px; line-height: 1.6; word-break: break-word; }
-  .msgWrap.user .msgContent { background: var(--user-bg); color: var(--user-text); white-space: pre-wrap; }
-  .msgWrap.bot .msgContent { background: var(--bot-bg); color: var(--bot-text); }
-  .msgWrap.error .msgContent { background: var(--error-bg); color: var(--error-text); }
-  .msgContent p { margin: 0 0 8px; }
-  .msgContent p:last-child { margin-bottom: 0; }
-  .msgContent ul, .msgContent ol { margin: 4px 0 8px 20px; }
-  .codeBlockContainer { position: relative; margin: 8px 0; border-radius: 6px; overflow: hidden; background: var(--code-bg); }
-  .codeBlockHeader { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); padding: 4px 12px; font-size: 12px; color: #abb2bf; font-family: monospace; }
-  .codeCopyBtn { border: none; background: transparent; color: #abb2bf; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px; }
-  .codeCopyBtn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-  .msgContent pre { margin: 0; padding: 12px; overflow-x: auto; background: var(--code-bg); }
-  .msgContent code { font-family: 'Fira Code', Consolas, Monaco, monospace; font-size: 13px; }
-  .msgMeta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--text-light); }
-  .msgMeta button { border: none; background: none; cursor: pointer; color: var(--text-light); font-size: 12px; padding: 2px 4px; border-radius: 4px; }
-  .msgMeta button:hover { background: var(--hover); color: var(--text); }
-  #inputBar { display: flex; padding: 16px; border-top: 1px solid var(--border); gap: 8px; align-items: flex-end; }
-  #inputBox { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--bg); color: var(--text); font-size: 14px; resize: none; max-height: 160px; overflow-y: auto; font-family: inherit; }
-  #sendBtn { padding: 0 20px; border: none; border-radius: 8px; background: var(--accent); color: white; cursor: pointer; height: 40px; }
-  #attachBtn { border: none; background: none; cursor: pointer; font-size: 18px; color: var(--text-light); height: 40px; width: 36px; border-radius: 8px; }
-  #attachBtn:hover { background: var(--hover); color: var(--text); }
-  #attachPreview { padding: 8px 16px 0; }
-  .attachChip { display: inline-flex; align-items: center; gap: 6px; background: var(--hover); border-radius: 6px; padding: 4px 10px; font-size: 12px; color: var(--text-light); }
-  .attachChip button { border: none; background: none; cursor: pointer; color: var(--text-light); font-size: 14px; padding: 0; line-height: 1; }
-  .attachChip button:hover { color: var(--text); }
-  .msgAttachChip { display: inline-flex; align-items: center; gap: 4px; background: var(--hover); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--text-light); margin-top: 4px; }
-  .debugBlock { margin-top: 6px; max-width: 100%; font-size: 12px; }
-  .debugBlock summary { cursor: pointer; color: var(--text-light); user-select: none; }
-  .debugBlock summary:hover { color: var(--text); }
-  .debugBlock pre { margin: 6px 0 0; padding: 10px; background: var(--code-bg); color: #abb2bf; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-family: 'Fira Code', Consolas, Monaco, monospace; }
-  .debugTag { margin-top: 4px; color: var(--text-light); }
-  .topBtn { padding: 6px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px; }
-  .topBtn:hover { background: var(--hover); }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif; display: flex; flex-direction: column; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+
+  /* ===== App bar ===== */
+  .appbar { display: flex; align-items: center; gap: 14px; padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: 0.02em; white-space: nowrap; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; font-size: 16px; }
+  .brand small { display: block; font-weight: 500; font-size: 11px; color: var(--muted); letter-spacing: 0; }
+  .plan-chip { padding: 6px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .spacer { flex: 1; }
+  .icon-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; height: 34px; min-width: 34px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+  .icon-btn:hover { background: var(--surface-2); }
+  #advisorToggle { display: none; }
 
-  #btPanel { width: 420px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--sidebar-bg); overflow-y: auto; padding: 14px; font-size: 13px; display: flex; flex-direction: column; gap: 12px; }
-  #btPanel.hidden { display: none; }
-  #btPanel h4 { margin: 0 0 8px; font-size: 14px; }
-  .btMuted { color: var(--text-light); font-weight: normal; font-size: 12px; }
-  .btRow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-  .btRow input, .btControls select, .btControls input { padding: 5px 8px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; }
-  .btRow .btSym { flex: 1; min-width: 0; text-transform: uppercase; }
-  .btRow .btW { width: 72px; text-align: right; }
-  .btIconBtn { border: none; background: none; color: var(--text-light); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
-  .btIconBtn:hover { background: var(--hover); color: var(--text); }
-  .btControls { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; margin-top: 4px; }
-  .btPrimary { padding: 7px 12px; border: none; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-size: 13px; }
-  .btSecondary { padding: 7px 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px; }
-  .btPrimary:disabled, .btSecondary:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btStatus { color: var(--text-light); font-size: 12px; min-height: 16px; }
-  .btStatus.error { color: var(--error-text); }
-  .btStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .btStat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
-  .btStat .k { color: var(--text-light); font-size: 11px; }
-  .btStat .v { font-size: 15px; font-weight: 600; }
-  .btStat .p { color: var(--text-light); font-size: 11px; }
-  .btChartWrap { position: relative; height: 240px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
-  .btTable { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .btTable th, .btTable td { padding: 3px 4px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
-  .btTable th:first-child, .btTable td:first-child { text-align: left; }
-  .btResult details summary { cursor: pointer; color: var(--text-light); margin: 4px 0; }
-  .btWarnings { margin: 0; padding-left: 18px; color: #b45309; font-size: 12px; }
-  body.dark .btWarnings { color: #fbbf24; }
-  .neg { color: #dc2626; }
-  body.dark .neg { color: #f87171; }
-
-  .pfCard { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--bg); }
-  .pfName { font-weight: 600; margin-bottom: 6px; }
-  .pfHoldings { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-  .pfChip { background: var(--hover); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
-  .pfMeta { font-size: 12px; color: var(--text-light); margin-bottom: 8px; }
-  .pfActions { display: flex; gap: 6px; }
-
-  #authOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  /* ===== Auth overlay ===== */
+  #authOverlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
   #authOverlay[hidden] { display: none; }
-  .authBox { background: var(--bg); color: var(--text); padding: 24px; border-radius: 12px; width: 360px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
-  .authBox h3 { margin: 0; }
-  .authBox p { margin: 0; font-size: 13px; color: var(--text-light); }
-  .authBox input { padding: 10px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--bg); color: var(--text); font-size: 14px; }
-  #authError { color: var(--error-text); font-size: 12px; min-height: 16px; }
+  .authBox { background: var(--surface); color: var(--text); padding: 24px; border-radius: 16px; width: min(380px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .authBox h3 { margin: 0; font-size: 16px; }
+  .authBox p { margin: 0; font-size: 13px; color: var(--muted); }
+  .authBox input { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 14px; outline: none; }
+  .authBox input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #authError { color: var(--bad); font-size: 12px; min-height: 16px; }
+
+  /* ===== Shell ===== */
+  .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 340px minmax(0, 1fr) 420px; }
+  .setup { border-right: 1px solid var(--border); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; background: var(--bg); }
+  .dash { overflow-y: auto; padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .advisor { border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+  .card-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 14.5px; font-weight: 700; }
+  .card-title .hint { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* ===== Plan form ===== */
+  .plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field.wide { grid-column: 1 / -1; }
+  .field label { font-size: 12px; color: var(--muted); }
+  .input-wrap { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 0 10px; height: 36px; }
+  .input-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input-wrap input, .input-wrap select { flex: 1; min-width: 0; border: none; outline: none; background: transparent; height: 100%; }
+  .input-wrap .unit { font-size: 12px; color: var(--faint); margin-left: 6px; white-space: nowrap; }
+  .seg { display: flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { flex: 1; border: none; background: transparent; border-radius: 8px; padding: 6px 8px; font-size: 12.5px; color: var(--muted); }
+  .seg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+  .timeline { margin-top: 12px; height: 8px; border-radius: 999px; background: var(--surface-2); display: flex; overflow: hidden; border: 1px solid var(--border); }
+  .timeline .acc { background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+  .timeline .ret { background: linear-gradient(90deg, #f59e0b, #ef4444); opacity: 0.75; }
+  .timeline-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ===== Portfolio editor ===== */
+  .holding { display: grid; grid-template-columns: minmax(0, 1fr) 76px 26px; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .holding .bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-top: -4px; }
+  .holding .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .holding input { width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 9px; outline: none; }
+  .holding input:focus { border-color: var(--accent); }
+  .holding .sym { text-transform: uppercase; font-weight: 600; }
+  .holding .w { text-align: right; }
+  .x-btn { border: none; background: none; color: var(--faint); font-size: 15px; border-radius: 6px; height: 26px; }
+  .x-btn:hover { color: var(--bad); background: var(--bad-soft); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
+  .btn:hover { background: var(--surface-2); }
+  .btn.primary { border: none; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-weight: 600; box-shadow: 0 6px 16px rgba(79, 70, 229, 0.25); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.block { width: 100%; padding: 12px; font-size: 14px; }
+  details.adv summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+  .calc-bar { position: sticky; bottom: 0; padding-top: 4px; background: linear-gradient(transparent, var(--bg) 30%); }
+  .status { font-size: 12px; color: var(--muted); min-height: 18px; margin-top: 6px; text-align: center; }
+  .status.error { color: var(--bad); }
+
+  /* ===== KPIs ===== */
+  .kpis { display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; gap: 14px; }
+  .kpi { position: relative; overflow: hidden; }
+  .kpi .label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .kpi .value { font-size: 26px; font-weight: 750; letter-spacing: -0.01em; margin-top: 6px; line-height: 1.15; }
+  .kpi .sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .kpi .delta { font-size: 12px; font-weight: 600; margin-top: 4px; }
+  .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+  .kpi-hero { display: flex; gap: 16px; align-items: center; background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface); }
+  .ring { width: 112px; height: 112px; flex-shrink: 0; }
+  .ring circle { fill: none; stroke-width: 11; }
+  .ring .track { stroke: var(--surface-2); }
+  .ring .meter { stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset 0.6s ease; }
+  .ring text { font-size: 22px; font-weight: 800; fill: var(--text); }
+  .ring .ring-sub { font-size: 10px; font-weight: 600; fill: var(--muted); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+
+  .chart-box { position: relative; height: 320px; }
+  .chart-box.short { height: 260px; }
+  .legend-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* ===== Tabs ===== */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: -4px -4px 14px; padding: 0 4px; }
+  .tabs button { border: none; background: none; padding: 10px 12px; font-size: 13.5px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  .tab-panel[hidden] { display: none; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+  .stat .k { font-size: 11.5px; color: var(--muted); }
+  .stat .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .stat .p { font-size: 11px; color: var(--faint); }
+  .neg { color: var(--bad); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  table.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .tbl th { text-align: right; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .tbl td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .tbl th:first-child, .tbl td:first-child { text-align: left; }
+  .tbl-wrap { overflow-x: auto; }
+  .heat td { text-align: center; font-variant-numeric: tabular-nums; }
+  .warn-list { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 12.5px; }
+  .section-h { font-size: 13px; font-weight: 700; margin: 16px 0 8px; }
+  .toggle-line { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .toggle-line label { font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
+
+  /* ===== Advisor ===== */
+  .adv-head { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .adv-title { display: flex; align-items: center; gap: 10px; }
+  .adv-title .avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent-2), var(--accent)); display: grid; place-items: center; color: #fff; font-size: 15px; }
+  .adv-title b { font-size: 14.5px; }
+  .adv-title .muted { font-size: 11.5px; display: block; }
+  .adv-controls { display: flex; gap: 6px; }
+  .adv-controls select { flex: 1; min-width: 0; height: 32px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); padding: 0 8px; font-size: 12.5px; }
+  .adv-controls .icon-btn { height: 32px; min-width: 32px; padding: 0 8px; }
+  #convMenu { position: relative; }
+  .menu { position: absolute; right: 0; top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); z-index: 30; min-width: 140px; overflow: hidden; }
+  .menu button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 9px 14px; font-size: 13px; }
+  .menu button:hover { background: var(--surface-2); }
+  .menu button.danger { color: var(--bad); }
+
+  #messages { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { display: flex; flex-direction: column; max-width: 100%; }
+  .msg.user { align-items: flex-end; }
+  .bubble { padding: 10px 13px; border-radius: 14px; line-height: 1.6; word-break: break-word; max-width: 100%; }
+  .msg.user .bubble { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border-bottom-right-radius: 4px; white-space: pre-wrap; max-width: 88%; }
+  .msg.bot .bubble { background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.error .bubble { background: var(--bad-soft); color: var(--bad); }
+  .bubble p { margin: 0 0 8px; } .bubble p:last-child { margin-bottom: 0; }
+  .bubble ul, .bubble ol { margin: 4px 0 8px 18px; padding: 0; }
+  .bubble h1, .bubble h2, .bubble h3 { font-size: 14.5px; margin: 12px 0 6px; }
+  .bubble table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; display: block; overflow-x: auto; }
+  .bubble th, .bubble td { border: 1px solid var(--border); padding: 4px 8px; }
+  .bubble code { font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px; }
+  .code-box { margin: 8px 0; border-radius: 8px; overflow: hidden; background: var(--code-bg); }
+  .code-head { display: flex; justify-content: space-between; padding: 4px 10px; font-size: 11.5px; color: #abb2bf; background: rgba(0, 0, 0, 0.3); font-family: monospace; }
+  .code-head button { border: none; background: none; color: #abb2bf; font-size: 11.5px; }
+  .bubble pre { margin: 0; padding: 10px; overflow-x: auto; background: var(--code-bg); }
+  .msg-meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; font-size: 11px; color: var(--faint); }
+  .msg-meta button { border: none; background: none; color: var(--faint); font-size: 11px; padding: 1px 4px; border-radius: 4px; }
+  .msg-meta button:hover { color: var(--text); background: var(--surface-2); }
+  .attach-tag { margin-top: 4px; font-size: 11px; color: var(--muted); }
+  details.debug { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  details.debug pre { white-space: pre-wrap; background: var(--code-bg); color: #abb2bf; padding: 8px; border-radius: 6px; }
+
+  .action-card { border: 1px solid var(--accent); background: var(--surface); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+  .action-card.plan { border-color: var(--accent-2); }
+  .action-card .ac-title { font-weight: 700; margin-bottom: 6px; display: flex; gap: 6px; align-items: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
+  .ac-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .ac-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ac-actions .btn { padding: 6px 10px; font-size: 12.5px; }
+
+  .welcome { text-align: center; padding: 18px 8px; color: var(--muted); }
+  .welcome h3 { color: var(--text); margin: 8px 0 4px; font-size: 15px; }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+  .quick button { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 6px 11px; font-size: 12.5px; }
+  .quick button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .composer { border-top: 1px solid var(--border); padding: 10px 12px 12px; }
+  .composer-box { display: flex; align-items: flex-end; gap: 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); padding: 6px; }
+  .composer-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #inputBox { flex: 1; border: none; outline: none; background: transparent; resize: none; max-height: 160px; padding: 6px 4px; min-height: 22px; }
+  #sendBtn { border: none; border-radius: 10px; height: 34px; padding: 0 14px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-weight: 600; }
+  #sendBtn:disabled { opacity: 0.5; }
+  #attachBtn { border: none; background: none; height: 34px; width: 32px; border-radius: 8px; font-size: 16px; color: var(--muted); }
+  #attachBtn:hover { background: var(--surface); }
+  #attachPreview { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  #attachPreview button { border: none; background: none; color: var(--muted); }
+  .ctx-note { font-size: 11px; color: var(--faint); margin-top: 6px; text-align: center; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 1400px) { .shell { grid-template-columns: 320px minmax(0, 1fr) 380px; } .kpis { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: 1fr; overflow-y: auto; }
+    .setup { border-right: none; overflow: visible; }
+    .dash { overflow: visible; padding-top: 0; }
+    .advisor { position: fixed; inset: 0 0 0 auto; width: min(440px, 100%); z-index: 40; transform: translateX(100%); transition: transform 0.25s ease; box-shadow: -10px 0 30px rgba(0, 0, 0, 0.2); }
+    body.advisor-open .advisor { transform: none; }
+    #advisorToggle { display: inline-flex; }
+    .calc-bar { position: static; }
+    .plan-chip { display: none; }
+  }
+  @media (max-width: 640px) {
+    .kpis, .stat-grid, .two-col { grid-template-columns: 1fr 1fr; }
+    .kpi-hero { grid-column: 1 / -1; }
+    .appbar { padding: 8px 12px; gap: 8px; }
+    .brand small { display: none; }
+    .dash { padding: 0 12px 20px; } .setup { padding: 12px; }
+    .chart-box { height: 260px; }
+  }
 </style>
 </head>
 <body>
 
-<div id="sidebar">
-  <div id="topRow">
-    <button id="newChatBtn" onclick="newConversation()">+ 新對話</button>
-    <button id="themeBtn" onclick="toggleTheme()" title="切換深色模式">🌓</button>
+<header class="appbar">
+  <div class="brand">
+    <div class="brand-mark">◐</div>
+    <div>退休航道<small>ETF 歷史回測 × AI 退休規劃</small></div>
   </div>
-  <input id="searchBox" placeholder="搜尋對話..." oninput="renderSidebar()">
-  <div id="convList"></div>
+  <div class="plan-chip" id="planChip">—</div>
+  <div class="spacer"></div>
+  <button class="icon-btn" onclick="showAuthDialog()" title="更換存取密碼">🔑</button>
+  <button class="icon-btn" onclick="toggleTheme()" title="切換深色模式">🌓</button>
+  <button class="icon-btn" id="advisorToggle" onclick="toggleAdvisor()">💬 AI 顧問</button>
+</header>
+
+<div class="shell">
+  <!-- ===== 左：計劃與組合設定 ===== -->
+  <aside class="setup">
+    <section class="card">
+      <h3 class="card-title">🎯 我的退休計劃 <span class="hint">今日幣值</span></h3>
+      <div class="plan-grid" id="planForm"></div>
+      <div class="timeline" id="planTimeline"><div class="acc"></div><div class="ret"></div></div>
+      <div class="timeline-labels" id="planTimelineLabels"></div>
+    </section>
+
+    <section class="card">
+      <h3 class="card-title">📦 ETF 組合 <span class="hint" id="weightSum"></span></h3>
+      <div class="small muted" id="portfolioName" style="margin: -6px 0 10px;"></div>
+      <div id="holdings"></div>
+      <div class="row" style="margin-top: 4px;">
+        <button class="btn" onclick="addHoldingRow('', '')">＋ 新增 ETF</button>
+        <span class="spacer"></span>
+        <div class="input-wrap" style="height: 34px; width: 130px;">
+          <select id="rebalance" title="再平衡頻率"></select>
+        </div>
+      </div>
+      <details class="adv">
+        <summary>進階：限定回測期間</summary>
+        <div class="plan-grid">
+          <div class="field"><label for="btStart">起始日</label><div class="input-wrap"><input type="date" id="btStart"></div></div>
+          <div class="field"><label for="btEnd">結束日</label><div class="input-wrap"><input type="date" id="btEnd"></div></div>
+        </div>
+        <div class="small muted" style="margin-top: 6px;">留空 = 用所有資產共同可用的最長歷史（退休模擬越長越好）。</div>
+      </details>
+    </section>
+
+    <div class="calc-bar">
+      <button class="btn primary block" id="calcBtn" onclick="recalc({ markPrevious: true })">重新計算</button>
+      <div class="status" id="status"></div>
+    </div>
+  </aside>
+
+  <!-- ===== 中：儀表板 ===== -->
+  <main class="dash">
+    <section class="kpis" id="kpis">
+      <div class="card kpi kpi-hero">
+        <svg class="ring" viewBox="0 0 120 120">
+          <circle class="track" cx="60" cy="60" r="50"></circle>
+          <circle class="meter" id="ringMeter" cx="60" cy="60" r="50" stroke-dasharray="314.16" stroke-dashoffset="314.16"></circle>
+          <text x="60" y="62" text-anchor="middle" id="ringText">—</text>
+          <text x="60" y="80" text-anchor="middle" class="ring-sub">成功率</text>
+        </svg>
+        <div>
+          <div class="label">歷史成功率</div>
+          <div class="sub" id="kpiSuccessSub">—</div>
+          <div class="delta" id="kpiSuccessDelta"></div>
+        </div>
+      </div>
+      <div class="card kpi"><div class="label">退休時資產（中位數）</div><div class="value" id="kpiRetire">—</div><div class="sub" id="kpiRetireSub"></div><div class="delta" id="kpiRetireDelta"></div></div>
+      <div class="card kpi"><div class="label">可持續年支出（95% 成功）</div><div class="value" id="kpiSpend">—</div><div class="sub" id="kpiSpendSub"></div><div class="delta" id="kpiSpendDelta"></div></div>
+      <div class="card kpi"><div class="label">最差歷史起點</div><div class="value" id="kpiWorst">—</div><div class="sub" id="kpiWorstSub"></div></div>
+    </section>
+
+    <section class="card">
+      <h3 class="card-title">📈 資產軌跡 <span class="hint" id="fanHint"></span></h3>
+      <div class="chart-box"><canvas id="fanChart"></canvas></div>
+      <div class="legend-note" id="fanNote"></div>
+    </section>
+
+    <section class="card">
+      <div class="tabs" id="tabs">
+        <button data-tab="scenarios" class="on">歷史情境</button>
+        <button data-tab="performance">組合績效</button>
+        <button data-tab="assets">資產明細</button>
+      </div>
+      <div class="tab-panel" id="tab-scenarios"></div>
+      <div class="tab-panel" id="tab-performance" hidden></div>
+      <div class="tab-panel" id="tab-assets" hidden></div>
+    </section>
+  </main>
+
+  <!-- ===== 右：AI 退休顧問 ===== -->
+  <section class="advisor">
+    <div class="adv-head">
+      <div class="adv-title">
+        <div class="avatar">✦</div>
+        <div><b>AI 退休顧問</b><span class="muted">看得到你的計劃與回測結果</span></div>
+        <span class="spacer"></span>
+        <button class="icon-btn" id="advisorClose" onclick="toggleAdvisor(false)" title="關閉" style="display: none;">✕</button>
+      </div>
+      <div class="adv-controls">
+        <select id="convSelect" onchange="switchConversation(this.value)" title="對話"></select>
+        <button class="icon-btn" onclick="newConversation()" title="新對話">＋</button>
+        <div id="convMenu">
+          <button class="icon-btn" onclick="toggleConvMenu(event)" title="更多">⋯</button>
+        </div>
+      </div>
+      <div class="adv-controls">
+        <select id="modelSelect" onchange="changeModel()" title="AI 模型"></select>
+      </div>
+    </div>
+    <div id="messages"></div>
+    <div class="composer">
+      <div id="attachPreview" hidden></div>
+      <div class="composer-box">
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,application/pdf,.txt,.csv,.md" hidden onchange="handleFileSelect(event)">
+        <button id="attachBtn" onclick="document.getElementById('fileInput').click()" title="附加圖片／PDF／文字檔">📎</button>
+        <textarea id="inputBox" rows="1" placeholder="問問你的退休顧問…（Shift+Enter 換行）"></textarea>
+        <button id="sendBtn" onclick="sendMessage()">送出</button>
+      </div>
+      <div class="ctx-note">每則訊息都會附上目前的計劃參數與模擬結果</div>
+    </div>
+  </section>
 </div>
 
-<div id="main">
-  <div id="topbar">
-    <label for="modelSelect">AI Model：</label>
-    <select id="modelSelect" onchange="changeModel()">
-    </select>
-    <span class="spacer"></span>
-    <button class="topBtn" onclick="showAuthDialog()" title="更換存取密碼">🔑 密碼</button>
-    <button class="topBtn" onclick="toggleBacktestPanel()" title="顯示／隱藏回測面板">📈 回測面板</button>
-  </div>
-  <div id="messages"></div>
-  <div id="attachPreview" style="display:none;"></div>
-  <div id="inputBar">
-    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,application/pdf,.docx,.xlsx,.txt" style="display:none;" onchange="handleFileSelect(event)">
-    <button id="attachBtn" onclick="document.getElementById('fileInput').click()" title="附加檔案（圖片/PDF/Word/Excel/文字檔）">📎</button>
-    <textarea id="inputBox" rows="1" placeholder="輸入你的問題... (Shift+Enter 換行)"></textarea>
-    <button id="sendBtn" onclick="sendMessage()">送出</button>
-  </div>
-</div>
-
-<div id="btPanel">
-  <div>
-    <h4>投資組合 <span id="btPfName" class="btMuted"></span></h4>
-    <div id="btHoldings"></div>
-    <div class="btRow">
-      <button class="btSecondary" onclick="addHoldingRow('', '')">+ 新增資產</button>
-      <span class="spacer"></span>
-      <span id="btWeightSum" class="btMuted"></span>
-    </div>
-    <div class="btControls">
-      <label for="btRebalance">再平衡</label>
-      <select id="btRebalance"></select>
-      <label for="btStart">起始日</label>
-      <input type="date" id="btStart" title="留空 = 取最長共同歷史">
-      <label for="btEnd">結束日</label>
-      <input type="date" id="btEnd" title="留空 = 最新">
-    </div>
-    <div class="btRow" style="margin-top: 10px;">
-      <button class="btPrimary" onclick="runBacktestFromPanel()">執行回測</button>
-      <button class="btSecondary" id="btAskBtn" onclick="askAiAboutBacktest()" disabled>請 AI 分析結果</button>
-    </div>
-    <div id="btStatus" class="btStatus"></div>
-  </div>
-  <div id="btResult" class="btResult" hidden></div>
-</div>
-<datalist id="btSymbolList"></datalist>
+<datalist id="symbolList"></datalist>
 
 <div id="authOverlay" hidden>
   <div class="authBox">
@@ -204,46 +381,50 @@ window.dispatchEvent(new Event('backtest-engine-ready'));
     <p>密碼只存在這個瀏覽器（localStorage），不會寫進網頁原始碼。</p>
     <input type="password" id="authInput" placeholder="存取密碼" autocomplete="current-password">
     <div id="authError"></div>
-    <button class="btPrimary" id="authSubmitBtn" onclick="submitAuth()">確定</button>
+    <button class="btn primary" id="authSubmitBtn" onclick="submitAuth()">確定</button>
   </div>
 </div>
 
 <script>
-
+// ============================================================
+// 設定
+// ============================================================
 const WORKER_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
-  ? 'http://localhost:8787/'
+  ? 'http://127.0.0.1:8787/'
   : 'https://etf-backtest-worker.davchan-clp.workers.dev/';
 const AUTH_STORAGE_KEY = 'appAuth';
+
+const STORE = {
+  plan: 'rp.plan', portfolio: 'rp.portfolio', conversations: 'rp.conversations',
+  activeConv: 'rp.activeConv', theme: 'rp.theme', tab: 'rp.tab', logScale: 'rp.logScale'
+};
 
 function getAuth() {
   return localStorage.getItem(AUTH_STORAGE_KEY) || '';
 }
 
 function showAuthDialog(message) {
-  document.getElementById('authError').textContent = message || '';
-  document.getElementById('authOverlay').hidden = false;
-  const input = document.getElementById('authInput');
+  $('authError').textContent = message || '';
+  $('authOverlay').hidden = false;
+  const input = $('authInput');
   input.value = '';
   input.focus();
 }
 
 async function submitAuth() {
-  const input = document.getElementById('authInput');
-  const errorEl = document.getElementById('authError');
-  const btn = document.getElementById('authSubmitBtn');
+  const input = $('authInput');
+  const errorEl = $('authError');
+  const btn = $('authSubmitBtn');
   const password = input.value.trim();
   if (!password) return;
   btn.disabled = true;
   errorEl.textContent = '驗證中…';
   try {
     const res = await fetch(`${WORKER_URL}api/auth-check`, { headers: { 'X-App-Auth': password } });
-    if (res.status === 401) {
-      errorEl.textContent = '密碼錯誤';
-      return;
-    }
+    if (res.status === 401) { errorEl.textContent = '密碼錯誤'; return; }
     if (!res.ok) throw new Error('HTTP ' + res.status);
     localStorage.setItem(AUTH_STORAGE_KEY, password);
-    document.getElementById('authOverlay').hidden = true;
+    $('authOverlay').hidden = true;
   } catch (e) {
     errorEl.textContent = '無法連線到 Worker：' + e.message;
   } finally {
@@ -256,676 +437,106 @@ function handleUnauthorized() {
   showAuthDialog('密碼已失效，請重新輸入。');
 }
 
-document.getElementById('authInput').addEventListener('keydown', e => {
+const REBALANCE_LABELS = { annual: '每年再平衡', semiannual: '每半年', quarterly: '每季', monthly: '每月', none: '不再平衡' };
+const DEFAULT_PORTFOLIO = { name: '起始組合：股債 60/40', holdings: { VTI: 60, IEF: 40 }, rebalance: 'annual', start: '', end: '' };
+const CURRENCIES = ['HKD', 'USD', 'TWD', 'CNY', 'SGD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'];
+
+const PLAN_FIELDS = [
+  { key: 'currentAge', label: '目前年齡', unit: '歲', step: 1 },
+  { key: 'retireAge', label: '退休年齡', unit: '歲', step: 1 },
+  { key: 'endAge', label: '規劃至', unit: '歲', step: 1 },
+  { key: 'currency', label: '幣別', type: 'currency' },
+  { key: 'currentSavings', label: '現有投資資產', unit: '', step: 10000, money: true, wide: true },
+  { key: 'monthlyContribution', label: '每月投入（至退休）', unit: '/月', step: 1000, money: true, wide: true },
+  { key: 'annualSpending', label: '退休後每年支出', unit: '/年', step: 10000, money: true, wide: true },
+  { key: 'otherIncome', label: '其他退休收入', unit: '/年', step: 10000, money: true },
+  { key: 'otherIncomeAge', label: '收入起始年齡', unit: '歲', step: 1 },
+  { key: 'inflationMode', label: '通膨來源', type: 'inflation', wide: true },
+  { key: 'inflationRate', label: '通膨假設', unit: '%/年', step: 0.1 },
+  { key: 'feeRate', label: '費用＋成本', unit: '%/年', step: 0.05 }
+];
+const PLAN_LABELS = Object.fromEntries(PLAN_FIELDS.map(f => [f.key, f.label]));
+
+// ============================================================
+// 小工具
+// ============================================================
+const $ = id => document.getElementById(id);
+
+$('authInput').addEventListener('keydown', e => {
   if (e.key === 'Enter') submitAuth();
 });
 
-let MODEL_NAMES = {};
-
-async function loadModels() {
-  const res = await fetch(`${WORKER_URL}api/models`);
-  const data = await res.json();
-  const select = document.getElementById('modelSelect');
-  select.innerHTML = '';
-  MODEL_NAMES = {};
-  (data.models || []).forEach(m => {
-    const option = document.createElement('option');
-    option.value = m.key;
-    option.textContent = `${m.label}（${m.description}）`;
-    if (m.key === data.default) option.selected = true;
-    select.appendChild(option);
-    MODEL_NAMES[m.key] = m.label;
-  });
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+const pct = (x, d = 1) => (x == null || !Number.isFinite(x) ? '—' : `${(x * 100).toFixed(d)}%`);
+const num2 = x => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(2));
+const intFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const compactFmt = new Intl.NumberFormat('zh-TW', { notation: 'compact', maximumFractionDigits: 1 });
+const money = (x, cur = state.plan.currency) => (x == null || !Number.isFinite(x) ? '—' : `${cur} ${intFmt.format(Math.round(x))}`);
+const compact = x => (Number.isFinite(x) ? compactFmt.format(x) : '—');
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+function loadJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (e) { return fallback; }
+}
+function saveJSON(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.error('儲存失敗', key, e); }
 }
 
-let conversations = JSON.parse(localStorage.getItem('conversations') || '[]');
-conversations = conversations.filter(c => c && typeof c === 'object' && c.id && Array.isArray(c.messages));
-conversations.forEach(c => {
-  c.lastAttachment = undefined;
-  c.lastAiResponse = '';
-});
-let activeId = null;
-let openMenuId = null;
+// ============================================================
+// 狀態
+// ============================================================
+const state = {
+  plan: null,
+  portfolio: loadJSON(STORE.portfolio, DEFAULT_PORTFOLIO),
+  current: null,     // { label, portfolio, plan, result, sim, cpiFallbackMonths }
+  previous: null,
+  meta: null,
+  series: new Map(),
+  backtestCache: new Map(),
+  charts: {},
+  tab: localStorage.getItem(STORE.tab) || 'scenarios',
+  logScale: localStorage.getItem(STORE.logScale) !== '0',
+  isSending: false
+};
 
-if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark');
+if (localStorage.getItem(STORE.theme) === 'dark') document.body.classList.add('dark');
 
 function toggleTheme() {
   document.body.classList.toggle('dark');
-  localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+  localStorage.setItem(STORE.theme, document.body.classList.contains('dark') ? 'dark' : 'light');
+  renderDashboard();
 }
 
-function saveConversations() {
-  const toSave = conversations.map(c => {
-    const { lastAttachment, lastAiResponse, ...rest } = c;
-    return rest;
-  });
-  try {
-    localStorage.setItem('conversations', JSON.stringify(toSave));
-  } catch (e) {
-    console.error('儲存對話失敗:', e);
-  }
+function toggleAdvisor(force) {
+  const open = force ?? !document.body.classList.contains('advisor-open');
+  document.body.classList.toggle('advisor-open', open);
 }
-
-function getActiveConv() {
-  return conversations.find(c => c.id === activeId);
-}
-
-function touchConversation(id) {
-  const idx = conversations.findIndex(c => c.id === id);
-  if (idx > 0) {
-    const [c] = conversations.splice(idx, 1);
-    conversations.unshift(c);
-  }
-}
-
-function newConversation() {
-  const defaultModel = document.getElementById('modelSelect').value || 'auto';
-  const conv = {
-    id: Date.now().toString(),
-    title: '新對話',
-    model: defaultModel,
-    historySummary: '',
-    messages: []
-  };
-  conversations.unshift(conv);
-  activeId = conv.id;
-  openMenuId = null;
-  saveConversations();
-  renderSidebar();
-  renderMessages();
-}
-
-function changeModel() {
-  const conv = getActiveConv();
-  if (!conv) return;
-  conv.model = document.getElementById('modelSelect').value;
-  saveConversations();
-}
-
-function renderSidebar() {
-  const keyword = document.getElementById('searchBox').value.trim().toLowerCase();
-  const list = document.getElementById('convList');
-  list.innerHTML = '';
-
-  const filtered = conversations.filter(c => {
-    if (!keyword) return true;
-    if (c.title.toLowerCase().includes(keyword)) return true;
-    return c.messages.some(m => m.text.toLowerCase().includes(keyword));
-  });
-
-  filtered.forEach(c => {
-    const item = document.createElement('div');
-    item.className = 'convItem' + (c.id === activeId ? ' active' : '');
-
-    const title = document.createElement('div');
-    title.className = 'convTitle';
-    title.textContent = c.title;
-    title.onclick = () => { activeId = c.id; openMenuId = null; renderSidebar(); renderMessages(); };
-    item.appendChild(title);
-
-    const moreBtn = document.createElement('div');
-    moreBtn.className = 'moreBtn';
-    moreBtn.textContent = '⋯';
-    moreBtn.onclick = (e) => { e.stopPropagation(); openMenuId = (openMenuId === c.id ? null : c.id); renderSidebar(); };
-    item.appendChild(moreBtn);
-
-    if (openMenuId === c.id) {
-      const menu = document.createElement('div');
-      menu.className = 'menu';
-      const renameOpt = document.createElement('div');
-      renameOpt.textContent = '重新命名';
-      renameOpt.onclick = (e) => {
-        e.stopPropagation();
-        const newTitle = prompt('新的對話名稱：', c.title);
-        openMenuId = null;
-        if (newTitle && newTitle.trim()) { c.title = newTitle.trim(); saveConversations(); }
-        renderSidebar();
-      };
-      const delOpt = document.createElement('div');
-      delOpt.textContent = '刪除對話';
-      delOpt.onclick = (e) => {
-        e.stopPropagation();
-        openMenuId = null;
-        if (confirm('確定要刪除這個對話嗎？')) {
-          conversations = conversations.filter(x => x.id !== c.id);
-          if (activeId === c.id) { activeId = conversations[0]?.id || null; }
-          saveConversations();
-          renderSidebar();
-          renderMessages();
-        } else { renderSidebar(); }
-      };
-      menu.appendChild(renameOpt);
-      menu.appendChild(delOpt);
-      item.appendChild(menu);
-    }
-
-    list.appendChild(item);
-  });
-}
-
-function formatTime(ts) {
-  if (!ts) return '';
-  const d = new Date(ts);
-  return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-}
-
-function renderMarkdownAndFeatures(container, text) {
-  const rawHtml = marked.parse(text);
-  const cleanHtml = DOMPurify.sanitize(rawHtml);
-  container.innerHTML = cleanHtml;
-
-  if (window.renderMathInElement) {
-    renderMathInElement(container, {
-      delimiters: [
-        {left: '$$', right: '$$', display: true},
-        {left: '$', right: '$', display: false},
-        {left: '\\(', right: '\\)', display: false},
-        {left: '\\[', right: '\\]', display: true}
-      ],
-      throwOnError: false
-    });
-  }
-
-  container.querySelectorAll('pre code.language-portfolio').forEach((codeBlock) => {
-    const portfolio = parsePortfolioBlock(codeBlock.textContent);
-    if (portfolio) codeBlock.parentElement.replaceWith(buildPortfolioCard(portfolio));
-  });
-
-  container.querySelectorAll('pre code').forEach((codeBlock) => {
-    if (!codeBlock.classList.contains('language-portfolio')) hljs.highlightElement(codeBlock);
-
-    const pre = codeBlock.parentElement;
-    if (pre.parentElement.classList.contains('codeBlockContainer')) return;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'codeBlockContainer';
-
-    const lang = (codeBlock.className.match(/language-(\w+)/) || [])[1] || 'code';
-    const header = document.createElement('div');
-    header.className = 'codeBlockHeader';
-    header.innerHTML = '<span>' + lang + '</span>';
-
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'codeCopyBtn';
-    copyBtn.textContent = '複製程式碼';
-    copyBtn.onclick = () => {
-      navigator.clipboard.writeText(codeBlock.innerText).then(() => {
-        copyBtn.textContent = '✓ 已複製';
-        setTimeout(() => copyBtn.textContent = '複製程式碼', 1500);
-      });
-    };
-    header.appendChild(copyBtn);
-
-    pre.parentNode.insertBefore(wrapper, pre);
-    wrapper.appendChild(header);
-    wrapper.appendChild(pre);
-  });
-}
-
-function copyText(text, btn) {
-  navigator.clipboard.writeText(text).then(() => {
-    const old = btn.textContent;
-    btn.textContent = '✓ 已複製';
-    setTimeout(() => { btn.textContent = old; }, 1200);
-  });
-}
-
-function buildMessageEl(m, conv) {
-  const wrap = document.createElement('div');
-  wrap.className = 'msgWrap ' + m.role;
-
-  const content = document.createElement('div');
-  content.className = 'msgContent';
-  if (m.role === 'bot') {
-    renderMarkdownAndFeatures(content, m.text);
-  } else {
-    content.textContent = m.text;
-  }
-  wrap.appendChild(content);
-
-  if (m.role === 'user' && m.attachmentName) {
-    const attachChip = document.createElement('div');
-    attachChip.className = 'msgAttachChip';
-    attachChip.textContent = '📎 ' + m.attachmentName;
-    wrap.appendChild(attachChip);
-  }
-
-  const meta = document.createElement('div');
-  meta.className = 'msgMeta';
-
-  const time = document.createElement('span');
-  time.textContent = formatTime(m.time);
-  meta.appendChild(time);
-
-  if (m.usedModel) {
-    const modelTag = document.createElement('span');
-    modelTag.style.opacity = '0.8';
-    const shortModel = MODEL_NAMES[m.usedModel] || m.usedModel;
-    const complexityLabel = Number.isFinite(m.complexity) ? `（評分 ${m.complexity}）` : '';
-    modelTag.textContent = '• 🤖 ' + shortModel + complexityLabel;
-    meta.appendChild(modelTag);
-  }
-
-  if (m.role !== 'error') {
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = '⧉ 複製';
-    copyBtn.onclick = () => copyText(m.text, copyBtn);
-    meta.appendChild(copyBtn);
-  }
-
-  if (m.role === 'error') {
-    const retryBtn = document.createElement('button');
-    retryBtn.textContent = '↻ 重新送出';
-    retryBtn.onclick = () => {
-      wrap.remove();
-      conv.messages = conv.messages.filter(x => x !== m);
-      resendLastQuery(conv);
-    };
-    meta.appendChild(retryBtn);
-  }
-
-  wrap.appendChild(meta);
-
-  if (m.summarizerRaw) {
-    const details = document.createElement('details');
-    details.className = 'debugBlock';
-
-    const summary = document.createElement('summary');
-    summary.textContent = '🔍 查看摘要／評分過程';
-    details.appendChild(summary);
-
-    const pre = document.createElement('pre');
-    let displayText = m.summarizerRaw;
-    try {
-      displayText = JSON.stringify(JSON.parse(m.summarizerRaw), null, 2);
-    } catch (e) {}
-    pre.textContent = displayText;
-    details.appendChild(pre);
-
-    if (m.taskTag) {
-      const tagLine = document.createElement('div');
-      tagLine.className = 'debugTag';
-      tagLine.textContent = 'task_tag: ' + m.taskTag;
-      details.appendChild(tagLine);
-    }
-
-    wrap.appendChild(details);
-  }
-
-  return wrap;
-}
-
-function renderMessages() {
-  const box = document.getElementById('messages');
-  box.innerHTML = '';
-  const conv = getActiveConv();
-  if (!conv) return;
-  document.getElementById('modelSelect').value = conv.model || 'auto';
-  conv.messages.forEach(m => box.appendChild(buildMessageEl(m, conv)));
-  box.scrollTop = box.scrollHeight;
-  syncBacktestPanel();
-}
-
-async function fetchAutoTitle(conv, userQuery, aiAnswer) {
-  try {
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
-      body: JSON.stringify({ action: 'generateTitle', query: userQuery, lastAiResponse: aiAnswer })
-    });
-    if (res.status === 401) { handleUnauthorized(); return; }
-    const data = await res.json();
-    if (!res.ok) {
-      console.error('標題生成失敗 (HTTP ' + res.status + ')：', data.error || data);
-      return;
-    }
-    if (data.title) {
-      conv.title = data.title.replace(/["']/g, '');
-      saveConversations();
-      renderSidebar();
-    }
-  } catch (e) {
-    console.error('標題生成請求失敗:', e);
-  }
-}
-
-const inputBox = document.getElementById('inputBox');
-inputBox.addEventListener('input', () => {
-  inputBox.style.height = 'auto';
-  inputBox.style.height = Math.min(inputBox.scrollHeight, 160) + 'px';
-});
-
-let pendingAttachment = null;
-const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
-const MAX_EXTRACTED_CHARS = 40000;
-
-const BINARY_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.pdf'];
-const TEXT_EXTENSIONS = ['.docx', '.xlsx', '.txt'];
-
-function getExt(filename) {
-  const idx = filename.lastIndexOf('.');
-  return idx === -1 ? '' : filename.slice(idx).toLowerCase();
-}
-
-function mimeTypeForExt(ext) {
-  return {
-    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-    '.webp': 'image/webp', '.pdf': 'application/pdf'
-  }[ext] || 'application/octet-stream';
-}
-
-function capExtractedText(str) {
-  if (str.length > MAX_EXTRACTED_CHARS) {
-    return str.slice(0, MAX_EXTRACTED_CHARS) + '\n\n...(內容過長，已截斷)';
-  }
-  return str;
-}
-
-async function extractTextFromFile(file, ext) {
-  if (ext === '.txt') {
-    return await file.text();
-  }
-  if (ext === '.docx') {
-    const arrayBuffer = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer });
-    return result.value;
-  }
-  if (ext === '.xlsx') {
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    let text = '';
-    workbook.SheetNames.forEach(sheetName => {
-      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]);
-      text += '【工作表：' + sheetName + '】\n' + csv + '\n\n';
-    });
-    return text;
-  }
-  return '';
-}
-
-async function handleFileSelect(event) {
-  const file = event.target.files[0];
-  event.target.value = '';
-  if (!file) return;
-
-  const ext = getExt(file.name);
-
-  if (![...BINARY_EXTENSIONS, ...TEXT_EXTENSIONS].includes(ext)) {
-    alert('目前支援 PNG／JPEG／WEBP／PDF／Word (.docx)／Excel (.xlsx)／純文字 (.txt)。');
-    return;
-  }
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    alert('檔案過大，請上傳 15MB 以內的檔案。');
-    return;
-  }
-
-  if (TEXT_EXTENSIONS.includes(ext)) {
-    try {
-      const rawText = await extractTextFromFile(file, ext);
-      pendingAttachment = { kind: 'text', filename: file.name, extractedText: capExtractedText(rawText) };
-      renderAttachPreview();
-    } catch (err) {
-      console.error('檔案解析失敗:', err);
-      alert('讀取「' + file.name + '」內容失敗，檔案可能已損毀或格式不支援。');
-    }
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    pendingAttachment = { kind: 'binary', filename: file.name, mimeType: file.type || mimeTypeForExt(ext), dataUrl: reader.result };
-    renderAttachPreview();
-  };
-  reader.onerror = () => alert('讀取檔案失敗，請重試。');
-  reader.readAsDataURL(file);
-}
-
-function removeAttachment() {
-  pendingAttachment = null;
-  renderAttachPreview();
-}
-
-function renderAttachPreview() {
-  const box = document.getElementById('attachPreview');
-  box.innerHTML = '';
-  if (!pendingAttachment) {
-    box.style.display = 'none';
-    return;
-  }
-  box.style.display = 'block';
-
-  const chip = document.createElement('span');
-  chip.className = 'attachChip';
-
-  const icons = { '.pdf': '📄', '.docx': '📝', '.xlsx': '📊', '.txt': '📃' };
-  const ext = getExt(pendingAttachment.filename);
-  const icon = (pendingAttachment.kind === 'binary' && pendingAttachment.mimeType !== 'application/pdf') ? '🖼️' : (icons[ext] || '📎');
-
-  const nameSpan = document.createElement('span');
-  nameSpan.textContent = icon + ' ' + pendingAttachment.filename;
-  chip.appendChild(nameSpan);
-
-  const removeBtn = document.createElement('button');
-  removeBtn.textContent = '✕';
-  removeBtn.title = '移除附件';
-  removeBtn.onclick = removeAttachment;
-  chip.appendChild(removeBtn);
-
-  box.appendChild(chip);
-}
-
-async function resendLastQuery(conv) {
-  if (!conv.lastQuery) return;
-  await _doSend(conv, conv.lastQuery, conv.lastAttachment, conv.lastAiResponse, false);
-}
-
-async function sendMessage(overrideText) {
-  const text = (overrideText !== undefined ? overrideText : inputBox.value.trim());
-  if (!text) return;
-  if (!getAuth()) { showAuthDialog(); return; }
-  let conv = getActiveConv();
-  if (!conv) { newConversation(); conv = getActiveConv(); }
-
-  const isFirstMessage = conv.messages.length === 0;
-
-  const attachmentToSend = pendingAttachment;
-  pendingAttachment = null;
-  renderAttachPreview();
-
-  conv.lastQuery = text;
-  conv.lastAttachment = attachmentToSend;
-
-  conv.messages.push({
-    role: 'user',
-    text,
-    time: Date.now(),
-    attachmentName: attachmentToSend ? attachmentToSend.filename : undefined
-  });
-  if (isFirstMessage) conv.title = text.slice(0, 15) + '...';
-  if (overrideText === undefined) { inputBox.value = ''; inputBox.style.height = 'auto'; }
-  touchConversation(conv.id);
-  renderSidebar();
-  renderMessages();
-
-  let lastAiResponse = '';
-  for (let i = conv.messages.length - 1; i >= 0; i--) {
-    const msg = conv.messages[i];
-    if (msg.role === 'bot' && msg.text) {
-      lastAiResponse = msg.text;
-      break;
-    }
-  }
-  conv.lastAiResponse = lastAiResponse;
-
-  await _doSend(conv, text, attachmentToSend, lastAiResponse, isFirstMessage);
-}
-
-async function _doSend(conv, text, attachmentToSend, lastAiResponse, isFirstMessage) {
-  const botMsg = { role: 'bot', text: '', time: Date.now() };
-  conv.messages.push(botMsg);
-  renderMessages();
-  const box = document.getElementById('messages');
-  const lastMsgWrap = box.lastElementChild;
-  const lastContentEl = lastMsgWrap.querySelector('.msgContent');
-  lastContentEl.textContent = '思考中...';
-
-  const queryToSend = (attachmentToSend && attachmentToSend.kind === 'text')
-    ? text + '\n\n【附加檔案：' + attachmentToSend.filename + '】\n' + attachmentToSend.extractedText
-    : text;
-  const attachmentForRequest = (attachmentToSend && attachmentToSend.kind === 'binary') ? attachmentToSend : undefined;
-
-  isSending = true;
-  try {
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-App-Auth': getAuth()
-      },
-      body: JSON.stringify({
-        query: queryToSend,
-        historySummary: conv.historySummary || '',
-        lastAiResponse: lastAiResponse,
-        model: conv.model,
-        attachment: attachmentForRequest,
-        backtestContext: await buildBacktestContext()
-      })
-    });
-
-    if (res.status === 401) {
-      handleUnauthorized();
-      throw new Error('密碼錯誤或已失效');
-    }
-    if (!res.ok) {
-      let errText = '請求失敗';
-      try {
-        const errJson = await res.json();
-        errText = errJson.error || errText;
-      } catch (e) {}
-      throw new Error(errText);
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let accumulatedText = '';
-    let isFirstChunk = true;
-    let sseBuffer = '';
-
-    let lastRenderTime = 0;
-    const RENDER_INTERVAL = 80;
-    let pendingRender = false;
-
-    function scheduleRender() {
-      if (pendingRender) return;
-      pendingRender = true;
-      requestAnimationFrame(() => {
-        renderMarkdownAndFeatures(lastContentEl, accumulatedText);
-        box.scrollTop = box.scrollHeight;
-        pendingRender = false;
-      });
-    }
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      sseBuffer += decoder.decode(value, { stream: true });
-      const lines = sseBuffer.split('\n');
-      sseBuffer = lines.pop();
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        if (trimmed === 'data: [DONE]') continue;
-
-        try {
-          const json = JSON.parse(trimmed.slice(6));
-
-          if (json.type === 'meta') {
-            if (json.history_summary) conv.historySummary = json.history_summary;
-            botMsg.usedModel = json.used_model || conv.model;
-            botMsg.complexity = json.complexity;
-            botMsg.taskTag = json.task_tag || '';
-            botMsg.summarizerRaw = json.raw_summary || '';
-            continue;
-          }
-
-          const token = (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || (json.delta && json.delta.text) || '';
-          if (token) {
-            if (isFirstChunk) {
-              lastContentEl.textContent = '';
-              isFirstChunk = false;
-            }
-            accumulatedText += token;
-            botMsg.text = accumulatedText;
-
-            const now = Date.now();
-            if (now - lastRenderTime >= RENDER_INTERVAL) {
-              lastRenderTime = now;
-              scheduleRender();
-            }
-          }
-        } catch (e) {}
-      }
-    }
-
-    renderMarkdownAndFeatures(lastContentEl, accumulatedText);
-    renderMessages();
-    saveConversations();
-
-    if (isFirstMessage && accumulatedText) {
-      fetchAutoTitle(conv, text, accumulatedText);
-    }
-
-  } catch (err) {
-    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + err.message, time: Date.now() };
-    saveConversations();
-    renderMessages();
-  } finally {
-    isSending = false;
-  }
-}
-
-inputBox.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
 
 // ============================================================
-// 回測面板（引擎：backtest/engine.js；價格：data/*.json）
+// 資料與模組
 // ============================================================
-let isSending = false;
-
-const REBALANCE_LABELS = { annual: '每年', semiannual: '每半年', quarterly: '每季', monthly: '每月', none: '不再平衡' };
-const DEFAULT_PORTFOLIO = { name: '範例：股債 60/40', holdings: { VTI: 60, BND: 40 }, rebalance: 'annual', start: '', end: '' };
-
-const bt = {
-  meta: null,           // Promise<{ engine, mapping, manifest }>
-  series: new Map(),    // symbol -> Promise<data>
-  panelConvId: undefined,
-  current: null,        // { name, result }
-  previous: null,       // { name, result }
-  chart: null,
-  logScale: true
-};
-
-const pct = x => (x == null || !Number.isFinite(x) ? '—' : `${(x * 100).toFixed(2)}%`);
-const num2 = x => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(2));
-
-function engineReady() {
-  if (window.BacktestEngine) return Promise.resolve(window.BacktestEngine);
-  return new Promise(resolve => window.addEventListener('backtest-engine-ready', () => resolve(window.BacktestEngine), { once: true }));
+function modulesReady() {
+  if (window.RP_MODULES) return Promise.resolve(window.RP_MODULES);
+  return new Promise(resolve => window.addEventListener('rp-modules-ready', () => resolve(window.RP_MODULES), { once: true }));
 }
 
-function loadBacktestMeta() {
-  if (!bt.meta) {
-    bt.meta = Promise.all([
-      engineReady(),
+function loadMeta() {
+  if (!state.meta) {
+    state.meta = Promise.all([
+      modulesReady(),
       fetch('backtest/index-mapping.json').then(r => r.json()),
       fetch('data/manifest.json').then(r => r.json())
-    ]).then(([engine, mapping, manifest]) => ({ engine, mapping, manifest }));
-    bt.meta.catch(() => { bt.meta = null; });
+    ]).then(([mods, mapping, manifest]) => ({ ...mods, mapping, manifest }));
+    state.meta.catch(() => { state.meta = null; });
   }
-  return bt.meta;
+  return state.meta;
 }
 
 function earliestDate(meta, symbol) {
@@ -939,41 +550,717 @@ function earliestDate(meta, symbol) {
 function backtestableSymbols(meta) {
   const proxies = new Set(Object.values(meta.mapping.etfs).flatMap(e => e.proxies.map(p => p.symbol.toUpperCase())));
   const list = new Set(Object.keys(meta.mapping.etfs));
-  for (const s of Object.keys(meta.manifest.symbols)) if (!proxies.has(s)) list.add(s);
+  for (const [s, info] of Object.entries(meta.manifest.symbols)) {
+    if (!proxies.has(s) && info.instrumentType !== 'CPI') list.add(s);
+  }
   return [...list].filter(s => earliestDate(meta, s)).sort();
 }
 
 function loadSeries(meta, symbol) {
-  if (!bt.series.has(symbol)) {
+  if (!state.series.has(symbol)) {
     const p = fetch('data/' + meta.engine.symbolToFile(symbol)).then(r => {
-      if (!r.ok) throw new Error(`無法載入 ${symbol} 價格（HTTP ${r.status}）`);
+      if (!r.ok) throw new Error(`無法載入 ${symbol}（HTTP ${r.status}）`);
       return r.json();
     });
-    p.catch(() => bt.series.delete(symbol));
-    bt.series.set(symbol, p);
+    p.catch(() => state.series.delete(symbol));
+    state.series.set(symbol, p);
   }
-  return bt.series.get(symbol);
+  return state.series.get(symbol);
 }
 
-async function runPortfolioBacktest(pf) {
-  const meta = await loadBacktestMeta();
+async function runBacktestCached(pf) {
+  const key = JSON.stringify([pf.holdings, pf.rebalance, pf.start, pf.end]);
+  if (state.backtestCache.has(key)) return state.backtestCache.get(key);
+  const meta = await loadMeta();
   const symbols = Object.keys(pf.holdings);
   const missing = symbols.filter(s => !earliestDate(meta, s));
   if (missing.length) {
-    throw new Error(`data/ 沒有 ${missing.join('、')} 的價格。請在本機執行 npm run fetch -- ${missing.join(' ')}，推送後再試。`);
+    throw new Error(`沒有 ${missing.join('、')} 的價格資料。請在本機執行 npm run fetch -- ${missing.join(' ')} 後重新整理。`);
   }
   const needed = meta.engine.symbolsNeeded(symbols, meta.mapping).filter(s => meta.manifest.symbols[s]);
   const loaded = await Promise.all(needed.map(s => loadSeries(meta, s)));
-  const dataBySymbol = Object.fromEntries(needed.map((s, i) => [s, loaded[i]]));
-  return meta.engine.runBacktest({
-    holdings: pf.holdings,
-    rebalance: pf.rebalance,
-    start: pf.start || undefined,
-    end: pf.end || undefined
-  }, meta.mapping, dataBySymbol);
+  const result = meta.engine.runBacktest({
+    holdings: pf.holdings, rebalance: pf.rebalance, start: pf.start || undefined, end: pf.end || undefined
+  }, meta.mapping, Object.fromEntries(needed.map((s, i) => [s, loaded[i]])));
+  state.backtestCache.set(key, result);
+  return result;
 }
 
-// ----- AI 回覆中的 ```portfolio 區塊 -----
+async function loadCpi(meta) {
+  if (!meta.manifest.symbols.CPI_US) return null;
+  return (await loadSeries(meta, 'CPI_US')).series;
+}
+
+// ============================================================
+// 計劃表單
+// ============================================================
+function renderPlanForm() {
+  const form = $('planForm');
+  form.innerHTML = '';
+  for (const f of PLAN_FIELDS) {
+    const field = el('div', 'field' + (f.wide ? ' wide' : ''));
+    const label = el('label', '', f.label);
+    label.htmlFor = 'plan-' + f.key;
+    field.appendChild(label);
+
+    if (f.type === 'inflation') {
+      const seg = el('div', 'seg');
+      seg.id = 'plan-inflationMode';
+      [['cpi', '美國歷史 CPI'], ['fixed', '固定通膨假設']].forEach(([value, text]) => {
+        const b = el('button', '', text);
+        b.type = 'button';
+        b.dataset.value = value;
+        b.onclick = () => { state.plan.inflationMode = value; writePlanForm(); onPlanEdited(); };
+        seg.appendChild(b);
+      });
+      field.appendChild(seg);
+    } else {
+      const wrap = el('div', 'input-wrap');
+      let input;
+      if (f.type === 'currency') {
+        input = el('select');
+        CURRENCIES.forEach(c => { const o = el('option', '', c); o.value = c; input.appendChild(o); });
+      } else {
+        input = el('input');
+        input.type = 'number';
+        input.step = f.step;
+        input.min = 0;
+        input.inputMode = 'decimal';
+      }
+      input.id = 'plan-' + f.key;
+      input.addEventListener('input', onPlanEdited);
+      input.addEventListener('change', onPlanEdited);
+      wrap.appendChild(input);
+      if (f.unit !== undefined || f.money) {
+        const unit = el('span', 'unit', f.money ? '' : f.unit);
+        unit.dataset.money = f.money ? f.unit : '';
+        wrap.appendChild(unit);
+      }
+      field.appendChild(wrap);
+    }
+    form.appendChild(field);
+  }
+}
+
+function writePlanForm() {
+  const p = state.plan;
+  for (const f of PLAN_FIELDS) {
+    if (f.type === 'inflation') {
+      $('plan-inflationMode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.value === p.inflationMode));
+      continue;
+    }
+    const input = $('plan-' + f.key);
+    if (document.activeElement !== input) input.value = p[f.key];
+  }
+  document.querySelectorAll('#planForm .unit').forEach(u => {
+    if (u.dataset.money !== '') u.textContent = `${p.currency}${u.dataset.money}`;
+  });
+  renderPlanTimeline();
+}
+
+function readPlanForm() {
+  const p = { ...state.plan };
+  for (const f of PLAN_FIELDS) {
+    if (f.type === 'inflation') continue;
+    const v = $('plan-' + f.key).value;
+    p[f.key] = f.type === 'currency' ? v : (v === '' ? 0 : Number(v));
+  }
+  return p;
+}
+
+function renderPlanTimeline() {
+  const p = state.plan;
+  const total = Math.max(1, p.endAge - p.currentAge);
+  const acc = Math.max(0, p.retireAge - p.currentAge);
+  $('planTimeline').children[0].style.width = `${acc / total * 100}%`;
+  $('planTimeline').children[1].style.width = `${(total - acc) / total * 100}%`;
+  $('planTimelineLabels').innerHTML = '';
+  [`${p.currentAge} 歲`, `累積 ${acc} 年 → ${p.retireAge} 歲退休`, `提領 ${p.endAge - p.retireAge} 年 → ${p.endAge} 歲`]
+    .forEach(t => $('planTimelineLabels').appendChild(el('span', '', t)));
+  $('planChip').textContent = `${p.currentAge} 歲 · ${p.retireAge} 歲退休 · 規劃至 ${p.endAge} 歲 · 年支出 ${money(p.annualSpending)}`;
+}
+
+const recalcPlanOnly = debounce(() => recalc({ markPrevious: false }), 350);
+
+function onPlanEdited() {
+  state.plan = window.RP_MODULES ? window.RP_MODULES.retirement.normalizePlan(readPlanForm()) : readPlanForm();
+  saveJSON(STORE.plan, state.plan);
+  renderPlanTimeline();
+  document.querySelectorAll('#planForm .unit').forEach(u => {
+    if (u.dataset.money !== '') u.textContent = `${state.plan.currency}${u.dataset.money}`;
+  });
+  recalcPlanOnly();
+}
+
+// ============================================================
+// 組合編輯
+// ============================================================
+function addHoldingRow(symbol, weight) {
+  const row = el('div', 'holding');
+  const sym = el('input', 'sym');
+  sym.setAttribute('list', 'symbolList');
+  sym.placeholder = '代號，如 VTI';
+  sym.value = symbol;
+  const w = el('input', 'w');
+  w.type = 'number'; w.min = 0; w.step = 1; w.placeholder = '%';
+  w.value = weight;
+  const x = el('button', 'x-btn', '✕');
+  x.title = '移除';
+  x.onclick = () => { row.remove(); onPortfolioEdited(); };
+  const bar = el('div', 'bar');
+  bar.appendChild(el('span'));
+  row.append(sym, w, x, bar);
+  [sym, w].forEach(i => i.addEventListener('input', onPortfolioEdited));
+  $('holdings').appendChild(row);
+  updateWeightBars();
+}
+
+function writePortfolioForm(pf) {
+  $('holdings').innerHTML = '';
+  Object.entries(pf.holdings).forEach(([s, w]) => addHoldingRow(s, w));
+  $('rebalance').value = pf.rebalance || 'annual';
+  $('btStart').value = pf.start || '';
+  $('btEnd').value = pf.end || '';
+  $('portfolioName').textContent = pf.name || '';
+  updateWeightBars();
+}
+
+function readPortfolioForm() {
+  const holdings = {};
+  document.querySelectorAll('#holdings .holding').forEach(row => {
+    const s = row.querySelector('.sym').value.trim().toUpperCase();
+    const w = Number(row.querySelector('.w').value);
+    if (s && w > 0) holdings[s] = (holdings[s] || 0) + w;
+  });
+  return {
+    name: $('portfolioName').textContent || '自訂組合',
+    holdings,
+    rebalance: $('rebalance').value,
+    start: $('btStart').value,
+    end: $('btEnd').value
+  };
+}
+
+function updateWeightBars() {
+  const rows = [...document.querySelectorAll('#holdings .holding')];
+  const total = rows.reduce((a, r) => a + (Number(r.querySelector('.w').value) || 0), 0);
+  rows.forEach(r => {
+    const w = Number(r.querySelector('.w').value) || 0;
+    r.querySelector('.bar span').style.width = total > 0 ? `${w / total * 100}%` : '0';
+  });
+  const off = Math.abs(total - 100) > 0.01;
+  $('weightSum').textContent = `合計 ${Number(total.toFixed(2))}%${off ? '（自動按比例）' : ''}`;
+  $('weightSum').style.color = off ? 'var(--warn)' : '';
+}
+
+function onPortfolioEdited() {
+  $('portfolioName').textContent = '自訂組合';
+  updateWeightBars();
+  state.portfolio = readPortfolioForm();
+  saveJSON(STORE.portfolio, state.portfolio);
+}
+
+// ============================================================
+// 計算
+// ============================================================
+function setStatus(text, isError) {
+  $('status').textContent = text;
+  $('status').classList.toggle('error', Boolean(isError));
+}
+
+let recalcSeq = 0;
+async function recalc({ markPrevious = true, label } = {}) {
+  const seq = ++recalcSeq;
+  const pf = readPortfolioForm();
+  if (!Object.keys(pf.holdings).length) { setStatus('請至少輸入一檔 ETF 與權重。', true); return null; }
+  state.portfolio = pf;
+  saveJSON(STORE.portfolio, pf);
+  $('calcBtn').disabled = true;
+  setStatus('計算中…');
+  try {
+    const meta = await loadMeta();
+    const plan = meta.retirement.normalizePlan(readPlanForm());
+    state.plan = plan;
+    saveJSON(STORE.plan, plan);
+    const result = await runBacktestCached(pf);
+    const cpi = plan.inflationMode === 'cpi' ? await loadCpi(meta) : null;
+    const { returns, cpiFallbackMonths } = meta.retirement.realMonthlyReturns(result.equityMonthly, plan, cpi);
+    const sim = meta.retirement.simulateRetirement(plan, returns);
+    if (seq !== recalcSeq) return null;
+    if (markPrevious && state.current) state.previous = state.current;
+    state.current = { label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths };
+    renderDashboard();
+    setStatus(`已更新 · 歷史 ${sim.history.start} ~ ${sim.history.end} · ${intFmt.format(sim.history.starts)} 個起始月份`);
+    return state.current;
+  } catch (e) {
+    console.error(e);
+    if (seq === recalcSeq) setStatus('計算失敗：' + e.message, true);
+    return null;
+  } finally {
+    if (seq === recalcSeq) $('calcBtn').disabled = false;
+  }
+}
+
+// ============================================================
+// 儀表板
+// ============================================================
+function themeColors() {
+  const css = getComputedStyle(document.body);
+  const v = name => css.getPropertyValue(name).trim();
+  return { text: v('--text'), muted: v('--muted'), border: v('--border'), accent: v('--accent'), accent2: v('--accent-2'), good: v('--good'), bad: v('--bad'), warn: v('--warn'), faint: v('--faint') };
+}
+
+function hexToRgba(hex, a) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+function makeChart(id, config) {
+  if (state.charts[id]) state.charts[id].destroy();
+  const canvas = $(id);
+  if (!canvas || !window.Chart) return;
+  const c = themeColors();
+  Chart.defaults.color = c.muted;
+  Chart.defaults.borderColor = c.border;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  state.charts[id] = new Chart(canvas, config);
+}
+
+function successTone(rate) {
+  return rate >= 0.9 ? 'good' : rate >= 0.75 ? 'warn' : 'bad';
+}
+
+function setDelta(id, cur, prev, fmt, higherIsBetter = true) {
+  const node = $(id);
+  if (prev == null || !Number.isFinite(prev) || !Number.isFinite(cur)) { node.textContent = ''; node.className = 'delta'; return; }
+  const diff = cur - prev;
+  if (Math.abs(diff) < 1e-9) { node.textContent = '與上一版相同'; node.className = 'delta'; return; }
+  const better = higherIsBetter ? diff > 0 : diff < 0;
+  node.textContent = `${diff > 0 ? '▲' : '▼'} ${fmt(Math.abs(diff))} vs 上一版`;
+  node.className = 'delta ' + (better ? 'up' : 'down');
+}
+
+function renderDashboard() {
+  const cur = state.current;
+  if (!cur) return;
+  const { sim, plan } = cur;
+  const prev = state.previous?.sim;
+  const c = themeColors();
+
+  const tone = successTone(sim.successRate);
+  const meter = $('ringMeter');
+  meter.style.stroke = c[tone];
+  meter.setAttribute('stroke-dashoffset', String(314.16 * (1 - sim.successRate)));
+  $('ringText').textContent = pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0);
+  $('kpiSuccessSub').innerHTML = '';
+  const pill = el('span', 'pill ' + tone, tone === 'good' ? '穩健' : tone === 'warn' ? '需留意' : '風險高');
+  $('kpiSuccessSub').append(pill, document.createTextNode(` 資產撐到 ${plan.endAge} 歲的歷史比例（${intFmt.format(sim.history.starts)} 個起點）`));
+  setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
+
+  const atRetire = sim.balanceAtRetire;
+  $('kpiRetire').textContent = atRetire ? compact(atRetire.p50) : '—';
+  $('kpiRetireSub').textContent = atRetire
+    ? `P10 ${compact(atRetire.p10)} · P90 ${compact(atRetire.p90)} · 初始提領率 ${pct(sim.initialWithdrawalRate)}`
+    : '已在退休期';
+  setDelta('kpiRetireDelta', atRetire?.p50, prev?.balanceAtRetire?.p50, compact);
+
+  const s95 = sim.sustainableSpending.p95;
+  $('kpiSpend').textContent = compact(s95);
+  const gap = s95 - plan.annualSpending;
+  $('kpiSpendSub').innerHTML = '';
+  $('kpiSpendSub').append(
+    document.createTextNode(`目標 ${compact(plan.annualSpending)} · `),
+    el('span', gap >= 0 ? 'delta up' : 'delta down', gap >= 0 ? `寬裕 ${compact(gap)}` : `不足 ${compact(-gap)}`)
+  );
+  setDelta('kpiSpendDelta', s95, prev?.sustainableSpending?.p95, compact);
+
+  const worst = sim.worstRuns[0];
+  $('kpiWorst').textContent = worst ? worst.start : '—';
+  $('kpiWorstSub').textContent = worst
+    ? (worst.success ? `即使最差也撐到 ${plan.endAge} 歲，期末 ${compact(worst.endBalance)}` : `${worst.depletedAge.toFixed(1)} 歲資產耗盡`)
+    : '';
+  $('kpiWorst').style.color = worst && !worst.success ? 'var(--bad)' : '';
+
+  renderFanChart(cur, c);
+  renderActiveTab();
+}
+
+const retireLinePlugin = {
+  id: 'retireLine',
+  afterDatasetsDraw(chart, args, opts) {
+    if (opts.age == null) return;
+    const x = chart.scales.x.getPixelForValue(opts.age);
+    const { top, bottom } = chart.chartArea;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = opts.color;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = opts.color;
+    ctx.font = '600 11px sans-serif';
+    ctx.fillText(`${opts.age} 歲退休`, x + 6, top + 12);
+    ctx.restore();
+  }
+};
+
+function renderFanChart(cur, c) {
+  const { sim, plan } = cur;
+  const pts = key => sim.bands.map(b => ({ x: b.age, y: b[key] }));
+  const datasets = [
+    { label: 'P90', data: pts('p90'), borderColor: 'transparent', pointRadius: 0, fill: false },
+    { label: 'P10–P90', data: pts('p10'), borderColor: hexToRgba(c.accent, 0.35), borderWidth: 1, pointRadius: 0, fill: '-1', backgroundColor: hexToRgba(c.accent, 0.10) },
+    { label: 'P75', data: pts('p75'), borderColor: 'transparent', pointRadius: 0, fill: false },
+    { label: 'P25–P75', data: pts('p25'), borderColor: 'transparent', pointRadius: 0, fill: '-1', backgroundColor: hexToRgba(c.accent, 0.20) },
+    { label: '中位數', data: pts('p50'), borderColor: c.accent, borderWidth: 2.5, pointRadius: 0, fill: false },
+    { label: '最差（最低值）', data: pts('min'), borderColor: c.bad, borderWidth: 1.2, borderDash: [5, 4], pointRadius: 0, fill: false }
+  ];
+  makeChart('fanChart', {
+    type: 'line',
+    data: { datasets },
+    plugins: [retireLinePlugin],
+    options: {
+      animation: false, maintainAspectRatio: false, parsing: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { type: 'linear', min: plan.currentAge, max: plan.endAge, ticks: { stepSize: 5, callback: v => `${v} 歲` }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { callback: v => compact(v) } }
+      },
+      plugins: {
+        retireLine: { age: plan.retireAge > plan.currentAge ? plan.retireAge : null, color: c.warn },
+        legend: { labels: { boxWidth: 12, filter: item => !['P90', 'P75'].includes(item.text) } },
+        tooltip: {
+          filter: item => !['P90–', 'P75'].includes(item.dataset.label),
+          callbacks: {
+            title: items => `${items[0].parsed.x} 歲`,
+            label: item => {
+              const b = sim.bands.find(x => x.age === item.parsed.x);
+              const map = { 'P10–P90': ['P10', b.p10], 'P25–P75': ['P25', b.p25], '中位數': ['中位數', b.p50], '最差（最低值）': ['最差', b.min], 'P90': ['P90', b.p90], 'P75': ['P75', b.p75] };
+              const [name, value] = map[item.dataset.label] || [item.dataset.label, item.parsed.y];
+              return `${name}：${money(value)}`;
+            }
+          }
+        }
+      }
+    }
+  });
+  $('fanHint').textContent = `${plan.currency}，今日幣值`;
+  const h = sim.history;
+  const method = h.method === 'rolling' ? '完整歷史窗口' : '歷史不足計劃年限，以循環序列補足';
+  const infl = plan.inflationMode === 'cpi'
+    ? `美國 CPI${cur.cpiFallbackMonths ? `（最近 ${cur.cpiFallbackMonths} 個月缺 CPI，以 ${plan.inflationRate}% 替代）` : ''}`
+    : `固定 ${plan.inflationRate}%/年`;
+  $('fanNote').textContent = `以 ${h.start} ~ ${h.end} 每個起始月份各模擬一次（${intFmt.format(h.starts)} 次，${method}）。通膨：${infl}；費用 ${plan.feeRate}%/年。色帶為各年齡資產的 P10–P90 與 P25–P75。`;
+}
+
+// ----- Tabs -----
+document.querySelectorAll('#tabs button').forEach(b => {
+  b.onclick = () => {
+    state.tab = b.dataset.tab;
+    localStorage.setItem(STORE.tab, state.tab);
+    renderActiveTab();
+  };
+});
+
+function renderActiveTab() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
+  ['scenarios', 'performance', 'assets'].forEach(t => { $('tab-' + t).hidden = t !== state.tab; });
+  if (!state.current) return;
+  ({ scenarios: renderScenarios, performance: renderPerformance, assets: renderAssets })[state.tab]();
+}
+
+function statBox(k, v, p, neg) {
+  const box = el('div', 'stat');
+  box.append(el('div', 'k', k), el('div', 'v' + (neg ? ' neg' : ''), v));
+  if (p) box.appendChild(el('div', 'p', p));
+  return box;
+}
+
+function table(headers, rows, className = 'tbl') {
+  const wrap = el('div', 'tbl-wrap');
+  const t = el('table', className);
+  const head = t.insertRow();
+  headers.forEach(h => head.appendChild(el('th', '', h)));
+  rows.forEach(cells => {
+    const tr = t.insertRow();
+    cells.forEach(c => {
+      const td = tr.insertCell();
+      if (c && typeof c === 'object') {
+        td.textContent = c.text;
+        if (c.neg) td.classList.add('neg');
+        if (c.bg) td.style.background = c.bg;
+        if (c.title) td.title = c.title;
+      } else td.textContent = c;
+    });
+  });
+  wrap.appendChild(t);
+  return wrap;
+}
+
+function renderScenarios() {
+  const { sim, plan } = state.current;
+  const box = $('tab-scenarios');
+  box.innerHTML = '';
+  const c = themeColors();
+  const w = sim.withdrawalRates;
+
+  const grid = el('div', 'stat-grid');
+  grid.append(
+    statBox('期末資產（中位）', compact(sim.endBalance.p50), `P10 ${compact(sim.endBalance.p10)} · 最差 ${compact(sim.endBalance.min)}`),
+    statBox('100% 成功年支出', compact(sim.sustainableSpending.p100), `90% 成功：${compact(sim.sustainableSpending.p90)}`),
+    statBox(`安全提領率 SWR（${w.horizonYears} 年）`, pct(w.swr.min, 2), `最差起點 ${w.worstStart} · P10 ${pct(w.swr.p10, 2)}`),
+    statBox('永續提領率 PWR', pct(w.pwr.min, 2), `保住實質本金 · 中位 ${pct(w.pwr.p50, 2)}`)
+  );
+  box.appendChild(grid);
+
+  box.appendChild(el('div', 'section-h', '每個起始年份的結果（以 1 月起點為代表）'));
+  const chartBox = el('div', 'chart-box short');
+  const canvas = el('canvas');
+  canvas.id = 'startYearChart';
+  chartBox.appendChild(canvas);
+  box.appendChild(chartBox);
+  box.appendChild(el('div', 'legend-note', '綠柱：資產撐到計劃終點，高度為期末資產。紅柱：中途耗盡，高度為未能支付的支出缺口（負值）。'));
+
+  const data = sim.byStartYear;
+  makeChart('startYearChart', {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.year),
+      datasets: [{
+        data: data.map(d => d.success ? d.endBalance : -(plan.endAge - d.depletedAge) * plan.annualSpending),
+        backgroundColor: data.map(d => hexToRgba(d.success ? c.good : c.bad, 0.75)),
+        borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9
+      }]
+    },
+    options: {
+      animation: false, maintainAspectRatio: false,
+      scales: { x: { ticks: { maxTicksLimit: 12, autoSkip: true }, grid: { display: false } }, y: { ticks: { callback: v => compact(v) } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => `${items[0].label} 年 1 月起`,
+            label: item => {
+              const d = data[item.dataIndex];
+              return d.success ? `成功，期末 ${money(d.endBalance)}` : `${d.depletedAge.toFixed(1)} 歲耗盡`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  box.appendChild(el('div', 'section-h', '最差的 5 個起始時點'));
+  box.appendChild(table(['起始月份', '結果', '退休時資產', '期末資產'], sim.worstRuns.map(r => [
+    r.start,
+    { text: r.success ? `成功（撐到 ${plan.endAge} 歲）` : `${r.depletedAge.toFixed(1)} 歲耗盡`, neg: !r.success },
+    Number.isFinite(r.balanceAtRetire) ? money(r.balanceAtRetire) : '—',
+    money(r.endBalance)
+  ])));
+}
+
+function renderPerformance() {
+  const { result: r } = state.current;
+  const prev = state.previous?.result;
+  const box = $('tab-performance');
+  box.innerHTML = '';
+  const s = r.stats;
+  const ps = prev?.stats;
+  const growth = r.finalValue / r.portfolio.initial;
+
+  const head = el('div', 'small muted');
+  head.style.marginBottom = '10px';
+  head.textContent = `${state.current.portfolio.name} · ${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年，起點受 ${r.period.limitingAsset} 限制）· 名目報酬，未扣計劃費用`;
+  box.appendChild(head);
+
+  const grid = el('div', 'stat-grid');
+  grid.append(
+    statBox('CAGR', pct(s.cagr, 2), ps && `上一版 ${pct(ps.cagr, 2)}`, s.cagr < 0),
+    statBox('年化波動', pct(s.volatility, 2), ps && `上一版 ${pct(ps.volatility, 2)}`),
+    statBox('最大回撤', pct(s.maxDrawdown, 2), `${s.peakDate} → ${s.troughDate}`, true),
+    statBox('Sharpe (rf=0)', num2(s.sharpe), ps && `上一版 ${num2(ps.sharpe)}`),
+    statBox('Sortino', num2(s.sortino)),
+    statBox('Calmar', num2(s.calmar)),
+    statBox('累積倍數', `${growth >= 100 ? intFmt.format(growth) : growth.toFixed(1)}x`),
+    statBox('回撤回復', s.recoveryDate || '尚未回復')
+  );
+  box.appendChild(grid);
+
+  const toggle = el('div', 'toggle-line');
+  toggle.appendChild(el('b', '', '淨值曲線'));
+  toggle.appendChild(el('span', 'spacer'));
+  const lab = el('label');
+  const cb = el('input');
+  cb.type = 'checkbox';
+  cb.checked = state.logScale;
+  cb.onchange = () => { state.logScale = cb.checked; localStorage.setItem(STORE.logScale, cb.checked ? '1' : '0'); renderPerformance(); };
+  lab.append(cb, document.createTextNode('對數座標'));
+  toggle.appendChild(lab);
+  box.appendChild(toggle);
+  const cbox = el('div', 'chart-box short');
+  const canvas = el('canvas'); canvas.id = 'equityChart';
+  cbox.appendChild(canvas);
+  box.appendChild(cbox);
+
+  const c = themeColors();
+  const toPoints = res => res.equityMonthly.map(([d, v]) => ({ x: Date.parse(d), y: v / res.portfolio.initial }));
+  const datasets = [{ label: state.current.portfolio.name, data: toPoints(r), borderColor: c.accent, borderWidth: 1.6, pointRadius: 0 }];
+  if (prev) datasets.push({ label: '上一版：' + state.previous.portfolio.name, data: toPoints(prev), borderColor: c.faint, borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0 });
+  const niceLog = v => {
+    const m = v / 10 ** Math.floor(Math.log10(v));
+    return [1, 2, 5].some(n => Math.abs(m - n) < 1e-6) ? `${Number(v.toPrecision(2))}x` : '';
+  };
+  makeChart('equityChart', {
+    type: 'line',
+    data: { datasets },
+    options: {
+      animation: false, maintainAspectRatio: false, parsing: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      scales: {
+        x: { type: 'linear', min: Math.min(...datasets.map(d => d.data[0].x)), max: Math.max(...datasets.map(d => d.data.at(-1).x)), ticks: { maxTicksLimit: 10, callback: v => new Date(v).getUTCFullYear() }, grid: { display: false } },
+        y: state.logScale ? { type: 'logarithmic', ticks: { callback: niceLog } } : { ticks: { callback: v => `${v}x` } }
+      },
+      plugins: {
+        legend: { labels: { boxWidth: 12 } },
+        tooltip: { callbacks: { title: items => new Date(items[0].parsed.x).toISOString().slice(0, 7), label: item => `${item.dataset.label}：${item.parsed.y.toFixed(2)}x` } }
+      }
+    }
+  });
+
+  box.appendChild(el('div', 'section-h', '逐年報酬'));
+  const abox = el('div', 'chart-box short');
+  const acanvas = el('canvas'); acanvas.id = 'annualChart';
+  abox.appendChild(acanvas);
+  box.appendChild(abox);
+  const years = r.annualReturns;
+  makeChart('annualChart', {
+    type: 'bar',
+    data: { labels: years.map(y => y.year), datasets: [{ data: years.map(y => y.return * 100), backgroundColor: years.map(y => hexToRgba(y.return >= 0 ? c.good : c.bad, y.partial ? 0.35 : 0.8)), borderWidth: 0, barPercentage: 1, categoryPercentage: 0.85 }] },
+    options: {
+      animation: false, maintainAspectRatio: false,
+      scales: { x: { ticks: { maxTicksLimit: 14 }, grid: { display: false } }, y: { ticks: { callback: v => `${v}%` } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: item => `${item.parsed.y.toFixed(2)}%${years[item.dataIndex].partial ? '（不完整年度）' : ''}` } } }
+    }
+  });
+}
+
+function renderAssets() {
+  const { result: r } = state.current;
+  const box = $('tab-assets');
+  box.innerHTML = '';
+  box.appendChild(el('div', 'section-h', '個別資產（同一期間）'));
+  box.appendChild(table(['代號', '權重', 'CAGR', '波動', '最大回撤', '數據來源（新 ← 舊）'], r.assets.map(a => [
+    a.symbol, pct(a.weight), pct(a.cagr, 2), pct(a.volatility, 2), { text: pct(a.maxDrawdown, 2), neg: true },
+    a.dataSources.slice().reverse().map(d => `${d.symbol}（${d.from.slice(0, 4)}~）`).join(' ← ')
+  ])));
+
+  if (r.correlation.symbols.length > 1) {
+    box.appendChild(el('div', 'section-h', '相關係數（月報酬）'));
+    const c = themeColors();
+    box.appendChild(table(['', ...r.correlation.symbols], r.correlation.symbols.map((sym, i) => [
+      sym, ...r.correlation.matrix[i].map(v => ({ text: v.toFixed(2), bg: hexToRgba(v >= 0 ? c.accent : c.good, Math.min(0.6, Math.abs(v) * 0.6)) }))
+    ]), 'tbl heat'));
+  }
+
+  const warnings = [...r.warnings];
+  if (state.current.sim.history.method === 'circular') warnings.push('歷史長度不足整個計劃年限，退休模擬以循環序列（走到尾端接回開頭）補足，結果較不可靠。');
+  if (state.current.cpiFallbackMonths) warnings.push(`最近 ${state.current.cpiFallbackMonths} 個月沒有 CPI 資料，以固定通膨 ${state.current.plan.inflationRate}% 替代。`);
+  warnings.push('各資產以自身幣別計算，未做匯率換算；美國 CPI 未必反映你所在地的通膨。');
+  box.appendChild(el('div', 'section-h', '數據限制'));
+  const ul = el('ul', 'warn-list');
+  warnings.forEach(w => ul.appendChild(el('li', '', w)));
+  box.appendChild(ul);
+}
+
+// ============================================================
+// 傳給 AI 的脈絡（Worker 上限 12000 字）
+// ============================================================
+function describePlan(p) {
+  const income = p.otherIncome > 0 ? `其他收入每年 ${money(p.otherIncome, p.currency)}（${p.otherIncomeAge} 歲起）` : '無其他退休收入';
+  const infl = p.inflationMode === 'cpi' ? `美國歷史 CPI（缺月以 ${p.inflationRate}% 替代）` : `固定 ${p.inflationRate}%/年`;
+  return [
+    `幣別 ${p.currency}；目前 ${p.currentAge} 歲、${p.retireAge} 歲退休、規劃至 ${p.endAge} 歲（所有金額為今日幣值）`,
+    `現有投資資產 ${money(p.currentSavings, p.currency)}；每月投入 ${money(p.monthlyContribution, p.currency)}（至退休）；退休後每年支出 ${money(p.annualSpending, p.currency)}；${income}`,
+    `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`
+  ].join('\n');
+}
+
+function describeSim(cur) {
+  const { sim, plan } = cur;
+  const h = sim.history;
+  const w = sim.withdrawalRates;
+  const keyAges = [...new Set([plan.retireAge, plan.retireAge + 10, plan.retireAge + 20, plan.endAge])].filter(a => a >= plan.currentAge && a <= plan.endAge);
+  const lines = [
+    `方法：${h.start} ~ ${h.end} 共 ${h.months} 個月實質報酬（已扣費用與通膨），${h.starts} 個起始月份（${h.method === 'rolling' ? '完整歷史窗口' : '歷史不足，循環序列'}）${cur.cpiFallbackMonths ? `；${cur.cpiFallbackMonths} 個月缺 CPI` : ''}`,
+    `成功率 ${pct(sim.successRate, 1)}`,
+    sim.balanceAtRetire ? `退休時資產：中位 ${money(sim.balanceAtRetire.p50)}、P10 ${money(sim.balanceAtRetire.p10)}、P90 ${money(sim.balanceAtRetire.p90)}；以中位數計初始淨提領率 ${pct(sim.initialWithdrawalRate, 2)}` : '已在退休期',
+    `期末資產（${plan.endAge} 歲）：中位 ${money(sim.endBalance.p50)}、P10 ${money(sim.endBalance.p10)}、最差 ${money(sim.endBalance.min)}`,
+    `可持續年支出：100% 歷史成功 ${money(sim.sustainableSpending.p100)}、95% ${money(sim.sustainableSpending.p95)}、90% ${money(sim.sustainableSpending.p90)}、中位 ${money(sim.sustainableSpending.p50)}（目前目標 ${money(plan.annualSpending)}）`,
+    `提領期 ${w.horizonYears} 年的 SWR：最差 ${pct(w.swr.min, 2)}（${w.worstStart} 起）、P5 ${pct(w.swr.p5, 2)}、P10 ${pct(w.swr.p10, 2)}、中位 ${pct(w.swr.p50, 2)}；PWR：最差 ${pct(w.pwr.min, 2)}、P10 ${pct(w.pwr.p10, 2)}、中位 ${pct(w.pwr.p50, 2)}`,
+    '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
+    '各年齡資產分位：' + keyAges.map(a => {
+      const b = sim.bands.find(x => x.age === a);
+      return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';
+    }).filter(Boolean).join('；')
+  ];
+  const failedYears = sim.byStartYear.filter(d => !d.success).map(d => d.year);
+  if (failedYears.length) lines.push(`失敗的起始年份（1 月起點）：${failedYears.slice(0, 40).join('、')}${failedYears.length > 40 ? ' 等' : ''}`);
+  return lines.join('\n');
+}
+
+function describeBacktest(name, r, brief) {
+  const s = r.stats;
+  const lines = [
+    `組合：${name}；權重：${r.portfolio.holdings.map(h => `${h.symbol} ${(h.weight * 100).toFixed(1)}%`).join('、')}；再平衡：${r.portfolio.rebalance}`,
+    `期間：${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`,
+    `名目 CAGR ${pct(s.cagr, 2)}、年化波動 ${pct(s.volatility, 2)}、Sharpe(rf=0) ${num2(s.sharpe)}、Sortino ${num2(s.sortino)}、Calmar ${num2(s.calmar)}`,
+    `最大回撤 ${pct(s.maxDrawdown, 2)}（${s.peakDate} → ${s.troughDate}，回復：${s.recoveryDate || '尚未回復'}）`
+  ];
+  if (brief) return lines.join('\n');
+  const yearly = r.annualReturns;
+  const shown = yearly.length > 60 ? yearly.filter(y => y.return < -0.1 || y.return > 0.25 || y.year >= yearly.at(-1).year - 30) : yearly;
+  lines.push(`逐年報酬${shown.length < yearly.length ? '（只列近 30 年及 -10% 以下或 +25% 以上的年份）' : ''}：` + shown.map(y => `${y.year}${y.partial ? '*' : ''} ${pct(y.return)}`).join('、'));
+  lines.push('各資產（同期間）：');
+  for (const a of r.assets) {
+    lines.push(`- ${a.symbol}：權重 ${(a.weight * 100).toFixed(1)}%，CAGR ${pct(a.cagr, 2)}，波動 ${pct(a.volatility, 2)}，最大回撤 ${pct(a.maxDrawdown, 2)}；數據：${a.dataSources.map(d => `${d.symbol}[${d.type}] ${d.from.slice(0, 4)}~`).join(' ← ')}`);
+  }
+  const c = r.correlation;
+  if (c.symbols.length > 1) {
+    lines.push('月報酬相關係數：' + c.symbols.map((sym, i) => `${sym}[${c.symbols.map((o, j) => j > i ? `${o} ${c.matrix[i][j].toFixed(2)}` : '').filter(Boolean).join(' ')}]`).filter(x => !x.endsWith('[]')).join('；'));
+  }
+  if (r.warnings.length) lines.push('注意：' + r.warnings.join('；'));
+  return lines.join('\n');
+}
+
+async function buildBacktestContext() {
+  const parts = [];
+  try {
+    const meta = await loadMeta();
+    parts.push('【可回測代號】（括號內為含替代序列後最早年份）：' + backtestableSymbols(meta).map(s => `${s}(${earliestDate(meta, s).slice(0, 4)})`).join('、'));
+  } catch (e) {
+    parts.push('【可回測代號】載入失敗');
+  }
+  parts.push('【退休計劃】\n' + describePlan(state.plan));
+  const cur = state.current;
+  if (cur) {
+    parts.push('【退休模擬結果】\n' + describeSim(cur));
+    parts.push('【組合回測】\n' + describeBacktest(cur.portfolio.name, cur.result, false));
+  } else {
+    parts.push('（尚未完成計算）');
+  }
+  const prev = state.previous;
+  if (prev) {
+    parts.push(`【上一版，供比較】\n退休年齡 ${prev.plan.retireAge}、年支出 ${money(prev.plan.annualSpending)}、每月投入 ${money(prev.plan.monthlyContribution)}；成功率 ${pct(prev.sim.successRate, 1)}；95% 可持續年支出 ${money(prev.sim.sustainableSpending.p95)}\n` + describeBacktest(prev.portfolio.name, prev.result, true));
+  }
+  let text = parts.join('\n\n');
+  if (text.length > 11800) text = text.slice(0, 11800) + '\n…（已截斷）';
+  return text;
+}
+
+// ============================================================
+// AI 回覆中的 portfolio／plan 區塊
+// ============================================================
 function parsePortfolioBlock(text) {
   let obj;
   try { obj = JSON.parse(text); } catch (e) { return null; }
@@ -995,410 +1282,507 @@ function parsePortfolioBlock(text) {
   };
 }
 
+const PLAN_NUMERIC_KEYS = ['currentAge', 'retireAge', 'endAge', 'currentSavings', 'monthlyContribution', 'annualSpending', 'otherIncome', 'otherIncomeAge', 'inflationRate', 'feeRate'];
+
+function parsePlanBlock(text) {
+  let obj;
+  try { obj = JSON.parse(text); } catch (e) { return null; }
+  if (!obj || typeof obj !== 'object') return null;
+  const changes = {};
+  for (const k of PLAN_NUMERIC_KEYS) if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
+  if (obj.inflationMode === 'cpi' || obj.inflationMode === 'fixed') changes.inflationMode = obj.inflationMode;
+  if (typeof obj.currency === 'string' && /^[A-Z]{3}$/.test(obj.currency)) changes.currency = obj.currency;
+  if (!Object.keys(changes).length) return null;
+  return { note: typeof obj.note === 'string' ? obj.note.slice(0, 80) : '', changes };
+}
+
+function formatPlanValue(key, v) {
+  if (['currentSavings', 'monthlyContribution', 'annualSpending', 'otherIncome'].includes(key)) return intFmt.format(v);
+  if (['inflationRate', 'feeRate'].includes(key)) return `${v}%`;
+  if (key === 'inflationMode') return v === 'cpi' ? '美國 CPI' : '固定假設';
+  if (key.endsWith('Age')) return `${v} 歲`;
+  return String(v);
+}
+
 function buildPortfolioCard(pf) {
-  const card = document.createElement('div');
-  card.className = 'pfCard';
-
-  const name = document.createElement('div');
-  name.className = 'pfName';
-  name.textContent = '📊 ' + pf.name;
-  card.appendChild(name);
-
-  const chips = document.createElement('div');
-  chips.className = 'pfHoldings';
-  for (const [symbol, weight] of Object.entries(pf.holdings)) {
-    const chip = document.createElement('span');
-    chip.className = 'pfChip';
-    chip.textContent = `${symbol} ${weight}%`;
-    chips.appendChild(chip);
-  }
+  const card = el('div', 'action-card');
+  card.appendChild(el('div', 'ac-title', '📦 ' + pf.name));
+  const chips = el('div', 'chips');
+  Object.entries(pf.holdings).forEach(([s, w]) => chips.appendChild(el('span', 'chip', `${s} ${w}%`)));
   card.appendChild(chips);
-
-  const meta = document.createElement('div');
-  meta.className = 'pfMeta';
   const range = (pf.start || pf.end) ? `；期間 ${pf.start || '最早'} ~ ${pf.end || '最新'}` : '';
-  meta.textContent = `再平衡：${REBALANCE_LABELS[pf.rebalance]}${range}`;
-  card.appendChild(meta);
-
-  const actions = document.createElement('div');
-  actions.className = 'pfActions';
-  const applyBtn = document.createElement('button');
-  applyBtn.className = 'btPrimary';
-  applyBtn.textContent = '套用並回測';
-  applyBtn.onclick = () => applyPortfolioFromAi(pf);
-  const fillBtn = document.createElement('button');
-  fillBtn.className = 'btSecondary';
-  fillBtn.textContent = '只填入面板';
-  fillBtn.onclick = () => { showBacktestPanel(); writePanel(pf); };
-  actions.appendChild(applyBtn);
-  actions.appendChild(fillBtn);
+  card.appendChild(el('div', 'ac-meta', `${REBALANCE_LABELS[pf.rebalance]}${range}`));
+  const actions = el('div', 'ac-actions');
+  const apply = el('button', 'btn primary', '套用並回測');
+  apply.onclick = () => applyPortfolioFromAi(pf);
+  const fill = el('button', 'btn', '只填入組合');
+  fill.onclick = () => { writePortfolioForm(pf); state.portfolio = readPortfolioForm(); saveJSON(STORE.portfolio, state.portfolio); toggleAdvisor(false); };
+  actions.append(apply, fill);
   card.appendChild(actions);
   return card;
 }
 
+function buildPlanCard(plan) {
+  const card = el('div', 'action-card plan');
+  card.appendChild(el('div', 'ac-title', '🎯 計劃調整' + (plan.note ? `：${plan.note}` : '')));
+  const chips = el('div', 'chips');
+  for (const [k, v] of Object.entries(plan.changes)) {
+    const before = state.plan[k];
+    chips.appendChild(el('span', 'chip', `${PLAN_LABELS[k] || k}：${formatPlanValue(k, before)} → ${formatPlanValue(k, v)}`));
+  }
+  card.appendChild(chips);
+  const actions = el('div', 'ac-actions');
+  const apply = el('button', 'btn primary', '套用計劃並重算');
+  apply.onclick = () => applyPlanFromAi(plan);
+  actions.appendChild(apply);
+  card.appendChild(actions);
+  return card;
+}
+
+function summaryLine(cur, prev) {
+  const s = cur.sim;
+  const vs = prev ? `（上一版 ${pct(prev.sim.successRate, 1)}）` : '';
+  return `成功率 ${pct(s.successRate, 1)}${vs}，95% 可持續年支出 ${money(s.sustainableSpending.p95)}，最差起點 ${s.worstRuns[0]?.start}${s.worstRuns[0] && !s.worstRuns[0].success ? `（${s.worstRuns[0].depletedAge.toFixed(1)} 歲耗盡）` : ''}，組合 CAGR ${pct(cur.result.stats.cagr, 2)}、最大回撤 ${pct(cur.result.stats.maxDrawdown, 1)}`;
+}
+
+async function autoSendAfterApply(what) {
+  const cur = state.current;
+  if (!cur) return;
+  if (state.isSending) { setStatus('已重算。AI 仍在回覆中，稍後可再請它分析。'); return; }
+  sendMessage(`已套用${what}並重算：${summaryLine(cur, state.previous)}。請分析結果並繼續改良。`);
+}
+
 async function applyPortfolioFromAi(pf) {
-  showBacktestPanel();
-  writePanel(pf);
-  const result = await runBacktestFromPanel();
-  if (!result) return;
-  if (isSending) {
-    setBtStatus('回測完成。AI 仍在回覆中，稍後可按「請 AI 分析結果」。');
+  writePortfolioForm(pf);
+  const cur = await recalc({ markPrevious: true, label: pf.name });
+  if (cur) autoSendAfterApply(`組合「${pf.name}」`);
+}
+
+async function applyPlanFromAi(plan) {
+  state.plan = { ...state.plan, ...plan.changes };
+  writePlanForm();
+  const cur = await recalc({ markPrevious: true });
+  if (cur) autoSendAfterApply(`計劃調整${plan.note ? `「${plan.note}」` : ''}`);
+}
+
+// ============================================================
+// AI 對話
+// ============================================================
+let MODEL_NAMES = {};
+let conversations = loadJSON(STORE.conversations, []).filter(c => c && c.id && Array.isArray(c.messages));
+let activeId = localStorage.getItem(STORE.activeConv);
+let pendingAttachment = null;
+
+async function loadModels() {
+  const res = await fetch(`${WORKER_URL}api/models`);
+  const data = await res.json();
+  const select = $('modelSelect');
+  select.innerHTML = '';
+  MODEL_NAMES = {};
+  (data.models || []).forEach(m => {
+    const o = el('option', '', `${m.label}（${m.description}）`);
+    o.value = m.key;
+    if (m.key === data.default) o.selected = true;
+    select.appendChild(o);
+    MODEL_NAMES[m.key] = m.label;
+  });
+}
+
+function saveConversations() {
+  const toSave = conversations.map(({ lastAttachment, lastQuery, ...rest }) => rest);
+  saveJSON(STORE.conversations, toSave);
+  if (activeId) localStorage.setItem(STORE.activeConv, activeId);
+}
+
+function getActiveConv() { return conversations.find(c => c.id === activeId); }
+
+function newConversation() {
+  const conv = { id: Date.now().toString(), title: '新對話', model: $('modelSelect').value || 'auto', historySummary: '', messages: [] };
+  conversations.unshift(conv);
+  activeId = conv.id;
+  saveConversations();
+  renderConvSelect();
+  renderMessages();
+}
+
+function switchConversation(id) {
+  activeId = id;
+  saveConversations();
+  renderMessages();
+}
+
+function renderConvSelect() {
+  const select = $('convSelect');
+  select.innerHTML = '';
+  conversations.forEach(c => {
+    const o = el('option', '', c.title);
+    o.value = c.id;
+    select.appendChild(o);
+  });
+  select.value = activeId;
+}
+
+function toggleConvMenu(e) {
+  e.stopPropagation();
+  const host = $('convMenu');
+  const existing = host.querySelector('.menu');
+  if (existing) { existing.remove(); return; }
+  const menu = el('div', 'menu');
+  const rename = el('button', '', '重新命名');
+  rename.onclick = () => {
+    const conv = getActiveConv();
+    const t = conv && prompt('新的對話名稱：', conv.title);
+    if (t && t.trim()) { conv.title = t.trim(); saveConversations(); renderConvSelect(); }
+    menu.remove();
+  };
+  const del = el('button', 'danger', '刪除對話');
+  del.onclick = () => {
+    menu.remove();
+    if (!confirm('確定要刪除這個對話嗎？')) return;
+    conversations = conversations.filter(c => c.id !== activeId);
+    if (!conversations.length) { newConversation(); return; }
+    activeId = conversations[0].id;
+    saveConversations();
+    renderConvSelect();
+    renderMessages();
+  };
+  menu.append(rename, del);
+  host.appendChild(menu);
+}
+document.addEventListener('click', () => $('convMenu').querySelector('.menu')?.remove());
+
+function changeModel() {
+  const conv = getActiveConv();
+  if (!conv) return;
+  conv.model = $('modelSelect').value;
+  saveConversations();
+}
+
+function formatTime(ts) {
+  return ts ? new Date(ts).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+function renderMarkdown(container, text) {
+  container.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  container.querySelectorAll('pre code.language-portfolio').forEach(code => {
+    const pf = parsePortfolioBlock(code.textContent);
+    if (pf) code.parentElement.replaceWith(buildPortfolioCard(pf));
+  });
+  container.querySelectorAll('pre code.language-plan').forEach(code => {
+    const plan = parsePlanBlock(code.textContent);
+    if (plan) code.parentElement.replaceWith(buildPlanCard(plan));
+  });
+  container.querySelectorAll('pre code').forEach(code => {
+    const lang = (code.className.match(/language-(\w+)/) || [])[1] || 'code';
+    if (!['portfolio', 'plan'].includes(lang) && hljs.getLanguage(lang)) hljs.highlightElement(code);
+    const pre = code.parentElement;
+    const box = el('div', 'code-box');
+    const head = el('div', 'code-head');
+    head.appendChild(el('span', '', lang));
+    const copy = el('button', '', '複製');
+    copy.onclick = () => navigator.clipboard.writeText(code.innerText).then(() => { copy.textContent = '✓ 已複製'; setTimeout(() => { copy.textContent = '複製'; }, 1200); });
+    head.appendChild(copy);
+    pre.replaceWith(box);
+    box.append(head, pre);
+  });
+}
+
+function welcomeEl() {
+  const box = el('div', 'welcome');
+  box.appendChild(el('div', '', '✦'));
+  box.appendChild(el('h3', '', '你好，我是你的退休顧問'));
+  box.appendChild(el('div', 'small', '我看得到左邊的計劃參數、組合與所有模擬結果。可以直接問，或點下面的問題開始。'));
+  const quick = el('div', 'quick');
+  ['評估我目前的退休計劃', '怎樣把成功率提高到 95% 以上？', '幫我設計退休前後的下滑路徑', '最差起始年份當時發生什麼？', '我在香港，稅務與匯率要注意什麼？']
+    .forEach(q => { const b = el('button', '', q); b.onclick = () => sendMessage(q); quick.appendChild(b); });
+  box.appendChild(quick);
+  return box;
+}
+
+function buildMessageEl(m, conv) {
+  const wrap = el('div', 'msg ' + m.role);
+  const bubble = el('div', 'bubble');
+  if (m.role === 'bot') renderMarkdown(bubble, m.text || '');
+  else bubble.textContent = m.text;
+  wrap.appendChild(bubble);
+  if (m.attachmentName) wrap.appendChild(el('div', 'attach-tag', '📎 ' + m.attachmentName));
+
+  const meta = el('div', 'msg-meta');
+  meta.appendChild(el('span', '', formatTime(m.time)));
+  if (m.usedModel) meta.appendChild(el('span', '', `· ${MODEL_NAMES[m.usedModel] || m.usedModel}${Number.isFinite(m.complexity) ? `（評分 ${m.complexity}）` : ''}`));
+  if (m.role !== 'error') {
+    const copy = el('button', '', '複製');
+    copy.onclick = () => navigator.clipboard.writeText(m.text).then(() => { copy.textContent = '✓'; setTimeout(() => { copy.textContent = '複製'; }, 1200); });
+    meta.appendChild(copy);
+  } else {
+    const retry = el('button', '', '↻ 重新送出');
+    retry.onclick = () => { conv.messages = conv.messages.filter(x => x !== m); resendLastQuery(conv); };
+    meta.appendChild(retry);
+  }
+  wrap.appendChild(meta);
+
+  if (m.summarizerRaw) {
+    const d = el('details', 'debug');
+    d.appendChild(el('summary', '', '摘要／評分過程'));
+    let shown = m.summarizerRaw;
+    try { shown = JSON.stringify(JSON.parse(m.summarizerRaw), null, 2); } catch (e) {}
+    d.appendChild(el('pre', '', shown));
+    wrap.appendChild(d);
+  }
+  return wrap;
+}
+
+function renderMessages() {
+  const box = $('messages');
+  box.innerHTML = '';
+  const conv = getActiveConv();
+  if (!conv) return;
+  $('convSelect').value = conv.id;
+  if ($('modelSelect').querySelector(`option[value="${conv.model}"]`)) $('modelSelect').value = conv.model;
+  if (!conv.messages.length) box.appendChild(welcomeEl());
+  conv.messages.forEach(m => box.appendChild(buildMessageEl(m, conv)));
+  box.scrollTop = box.scrollHeight;
+}
+
+async function fetchAutoTitle(conv, userQuery, aiAnswer) {
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
+      body: JSON.stringify({ action: 'generateTitle', query: userQuery, lastAiResponse: aiAnswer })
+    });
+    if (res.status === 401) { handleUnauthorized(); return; }
+    const data = await res.json();
+    if (res.ok && data.title) {
+      conv.title = data.title.replace(/["']/g, '');
+      saveConversations();
+      renderConvSelect();
+    }
+  } catch (e) {
+    console.error('標題生成失敗:', e);
+  }
+}
+
+// ----- 附件（圖片／PDF 直接送模型；文字檔併入訊息）-----
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const MAX_EXTRACTED_CHARS = 40000;
+
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  if (file.size > MAX_ATTACHMENT_BYTES) { alert('檔案過大，請上傳 15MB 以內的檔案。'); return; }
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (['.txt', '.csv', '.md'].includes(ext)) {
+    const text = await file.text();
+    pendingAttachment = { kind: 'text', filename: file.name, extractedText: text.length > MAX_EXTRACTED_CHARS ? text.slice(0, MAX_EXTRACTED_CHARS) + '\n…（已截斷）' : text };
+    renderAttachPreview();
     return;
   }
-  const s = result.stats;
-  sendMessage(`已套用「${pf.name}」並完成回測（${result.period.start} ~ ${result.period.end}）：CAGR ${pct(s.cagr)}，最大回撤 ${pct(s.maxDrawdown)}，Sharpe ${num2(s.sharpe)}。請分析結果並繼續改良。`);
+  const mimeType = file.type || { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[ext];
+  if (!['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) { alert('支援圖片（PNG／JPEG／WEBP）、PDF 與文字檔（.txt／.csv／.md）。'); return; }
+  const reader = new FileReader();
+  reader.onload = () => { pendingAttachment = { kind: 'binary', filename: file.name, mimeType, dataUrl: reader.result }; renderAttachPreview(); };
+  reader.onerror = () => alert('讀取檔案失敗，請重試。');
+  reader.readAsDataURL(file);
 }
 
-function askAiAboutBacktest() {
-  if (!bt.current) return;
-  sendMessage(`請分析目前的回測結果（${bt.current.name}），並提出改良建議。`);
-}
-
-// ----- 傳給 AI 的回測脈絡 -----
-function describeResult(name, r, brief) {
-  const s = r.stats;
-  const lines = [
-    `組合：${name}`,
-    `權重：${r.portfolio.holdings.map(h => `${h.symbol} ${(h.weight * 100).toFixed(1)}%`).join('、')}；再平衡：${r.portfolio.rebalance}`,
-    `期間：${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`,
-    `CAGR ${pct(s.cagr)}、年化波動 ${pct(s.volatility)}、Sharpe(rf=0) ${num2(s.sharpe)}、Sortino ${num2(s.sortino)}、Calmar ${num2(s.calmar)}`,
-    `最大回撤 ${pct(s.maxDrawdown)}（${s.peakDate} → ${s.troughDate}，回復：${s.recoveryDate || '尚未回復'}）`
-  ];
-  if (brief) return lines.join('\n');
-
-  lines.push('逐年報酬（* 為不完整年度）：' + r.annualReturns.map(y => `${y.year}${y.partial ? '*' : ''} ${pct(y.return)}`).join('、'));
-  lines.push('各資產（同一期間）：');
-  for (const a of r.assets) {
-    const src = a.dataSources.map(d => `${d.symbol}[${d.type}] ${d.from.slice(0, 4)}~`).join(' ← ');
-    lines.push(`- ${a.symbol}：權重 ${(a.weight * 100).toFixed(1)}%，CAGR ${pct(a.cagr)}，波動 ${pct(a.volatility)}，最大回撤 ${pct(a.maxDrawdown)}；數據：${src}`);
-  }
-  const c = r.correlation;
-  if (c.symbols.length > 1) {
-    lines.push('月報酬相關係數：');
-    c.symbols.forEach((sym, i) => lines.push(`- ${sym}：` + c.symbols.map((other, j) => `${other} ${c.matrix[i][j].toFixed(2)}`).join('、')));
-  }
-  if (r.warnings.length) lines.push('注意：' + r.warnings.join('；'));
-  return lines.join('\n');
-}
-
-async function buildBacktestContext() {
-  const parts = [];
-  try {
-    const meta = await loadBacktestMeta();
-    parts.push('【可回測代號】（括號內為含替代序列後最早可回測年份）：' +
-      backtestableSymbols(meta).map(s => `${s}(${earliestDate(meta, s).slice(0, 4)})`).join('、'));
-  } catch (e) {
-    parts.push('【可回測代號】載入失敗');
-  }
-  if (bt.current) parts.push('【目前組合】\n' + describeResult(bt.current.name, bt.current.result, false));
-  if (bt.previous) parts.push('【上一版組合，供比較】\n' + describeResult(bt.previous.name, bt.previous.result, true));
-  return parts.join('\n\n');
-}
-
-// ----- 面板讀寫 -----
-function addHoldingRow(symbol, weight) {
-  const row = document.createElement('div');
-  row.className = 'btRow';
-  row.innerHTML = '<input class="btSym" list="btSymbolList" placeholder="代號，如 VTI"><input class="btW" type="number" min="0" step="0.5" placeholder="%"><span class="btMuted">%</span><button class="btIconBtn" title="移除">✕</button>';
-  row.querySelector('.btSym').value = symbol;
-  row.querySelector('.btW').value = weight;
-  row.querySelector('button').onclick = () => { row.remove(); onPanelEdited(); };
-  row.querySelectorAll('input').forEach(input => input.addEventListener('input', onPanelEdited));
-  document.getElementById('btHoldings').appendChild(row);
-  updateWeightSum();
-}
-
-function onPanelEdited() {
-  document.getElementById('btPfName').textContent = '（自訂組合）';
-  updateWeightSum();
-}
-
-function updateWeightSum() {
-  const total = [...document.querySelectorAll('#btHoldings .btW')].reduce((a, el) => a + (Number(el.value) || 0), 0);
-  const el = document.getElementById('btWeightSum');
-  el.textContent = `合計 ${Number(total.toFixed(2))}%` + (Math.abs(total - 100) > 0.01 ? '（將按比例正規化）' : '');
-}
-
-function writePanel(pf) {
-  document.getElementById('btHoldings').innerHTML = '';
-  for (const [symbol, weight] of Object.entries(pf.holdings)) addHoldingRow(symbol, weight);
-  document.getElementById('btRebalance').value = pf.rebalance || 'annual';
-  document.getElementById('btStart').value = pf.start || '';
-  document.getElementById('btEnd').value = pf.end || '';
-  document.getElementById('btPfName').textContent = pf.name ? `（${pf.name}）` : '';
-  updateWeightSum();
-}
-
-function readPanel() {
-  const holdings = {};
-  document.querySelectorAll('#btHoldings .btRow').forEach(row => {
-    const symbol = row.querySelector('.btSym').value.trim().toUpperCase();
-    const weight = Number(row.querySelector('.btW').value);
-    if (symbol && weight > 0) holdings[symbol] = (holdings[symbol] || 0) + weight;
-  });
-  const label = document.getElementById('btPfName').textContent.replace(/^（|）$/g, '');
-  return {
-    name: label || '自訂組合',
-    holdings,
-    rebalance: document.getElementById('btRebalance').value,
-    start: document.getElementById('btStart').value,
-    end: document.getElementById('btEnd').value
-  };
-}
-
-function setBtStatus(text, isError) {
-  const el = document.getElementById('btStatus');
-  el.textContent = text;
-  el.classList.toggle('error', Boolean(isError));
-}
-
-async function runBacktestFromPanel() {
-  const pf = readPanel();
-  if (!Object.keys(pf.holdings).length) {
-    setBtStatus('請至少輸入一個代號和權重。', true);
-    return null;
-  }
-  const convId = activeId;
-  setBtStatus('回測中…');
-  try {
-    const result = await runPortfolioBacktest(pf);
-    if (convId !== activeId) return null;
-    if (bt.current) bt.previous = bt.current;
-    bt.current = { name: pf.name, result };
-    const conv = getActiveConv();
-    if (conv) { conv.portfolio = pf; saveConversations(); }
-    renderBacktestResult();
-    setBtStatus(`完成：${result.period.start} ~ ${result.period.end}（${result.period.years.toFixed(1)} 年）`);
-    return result;
-  } catch (e) {
-    setBtStatus('回測失敗：' + e.message, true);
-    return null;
-  }
-}
-
-function syncBacktestPanel() {
-  if (bt.panelConvId === activeId) return;
-  bt.panelConvId = activeId;
-  bt.current = null;
-  bt.previous = null;
-  const conv = getActiveConv();
-  writePanel(conv?.portfolio || DEFAULT_PORTFOLIO);
-  renderBacktestResult();
-  setBtStatus('');
-  if (conv?.portfolio) runBacktestFromPanel();
-}
-
-function showBacktestPanel() {
-  document.getElementById('btPanel').classList.remove('hidden');
-  localStorage.setItem('btPanelHidden', '0');
-}
-
-function toggleBacktestPanel() {
-  const panel = document.getElementById('btPanel');
-  panel.classList.toggle('hidden');
-  localStorage.setItem('btPanelHidden', panel.classList.contains('hidden') ? '1' : '0');
-}
-
-// ----- 結果呈現 -----
-function statCell(label, value, prevValue, isNegativeBad) {
-  const cell = document.createElement('div');
-  cell.className = 'btStat';
-  cell.innerHTML = '<div class="k"></div><div class="v"></div><div class="p"></div>';
-  cell.querySelector('.k').textContent = label;
-  cell.querySelector('.v').textContent = value;
-  if (isNegativeBad) cell.querySelector('.v').classList.add('neg');
-  cell.querySelector('.p').textContent = prevValue != null ? `上一版 ${prevValue}` : '';
-  return cell;
-}
-
-function buildTable(headers, rows) {
-  const table = document.createElement('table');
-  table.className = 'btTable';
-  const head = table.insertRow();
-  headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; head.appendChild(th); });
-  rows.forEach(cells => {
-    const tr = table.insertRow();
-    cells.forEach(c => {
-      const td = tr.insertCell();
-      td.textContent = c.text ?? c;
-      if (c.title) td.title = c.title;
-      if (c.neg) td.classList.add('neg');
-    });
-  });
-  return table;
-}
-
-function renderBacktestResult() {
-  const box = document.getElementById('btResult');
-  document.getElementById('btAskBtn').disabled = !bt.current;
-  if (bt.chart) { bt.chart.destroy(); bt.chart = null; }
+function renderAttachPreview() {
+  const box = $('attachPreview');
   box.innerHTML = '';
-  if (!bt.current) { box.hidden = true; return; }
-  box.hidden = false;
-
-  const r = bt.current.result;
-  const s = r.stats;
-  const prev = bt.previous?.result.stats;
-  const growth = r.finalValue / r.portfolio.initial;
-
-  const period = document.createElement('div');
-  period.className = 'btMuted';
-  period.textContent = `${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`;
-  box.appendChild(period);
-
-  const stats = document.createElement('div');
-  stats.className = 'btStats';
-  stats.style.marginTop = '8px';
-  stats.appendChild(statCell('CAGR', pct(s.cagr), prev && pct(prev.cagr), s.cagr < 0));
-  stats.appendChild(statCell('年化波動', pct(s.volatility), prev && pct(prev.volatility)));
-  stats.appendChild(statCell('最大回撤', pct(s.maxDrawdown), prev && pct(prev.maxDrawdown), true));
-  stats.appendChild(statCell('Sharpe (rf=0)', num2(s.sharpe), prev && num2(prev.sharpe)));
-  stats.appendChild(statCell('Sortino', num2(s.sortino), prev && num2(prev.sortino)));
-  stats.appendChild(statCell('累積倍數', growth.toFixed(1) + 'x', bt.previous && (bt.previous.result.finalValue / bt.previous.result.portfolio.initial).toFixed(1) + 'x'));
-  box.appendChild(stats);
-
-  const ddNote = document.createElement('div');
-  ddNote.className = 'btMuted';
-  ddNote.style.margin = '6px 0';
-  ddNote.textContent = `最大回撤：${s.peakDate} → ${s.troughDate}，回復：${s.recoveryDate || '尚未回復'}`;
-  box.appendChild(ddNote);
-
-  const chartHeader = document.createElement('div');
-  chartHeader.className = 'btRow';
-  chartHeader.innerHTML = '<strong>淨值曲線</strong><span class="spacer"></span><label class="btMuted"><input type="checkbox" id="btLogScale"> 對數座標</label>';
-  box.appendChild(chartHeader);
-  const logBox = chartHeader.querySelector('#btLogScale');
-  logBox.checked = bt.logScale;
-  logBox.onchange = () => { bt.logScale = logBox.checked; renderBacktestResult(); };
-
-  const chartWrap = document.createElement('div');
-  chartWrap.className = 'btChartWrap';
-  const canvas = document.createElement('canvas');
-  chartWrap.appendChild(canvas);
-  box.appendChild(chartWrap);
-  renderEquityChart(canvas);
-
-  const assetsTitle = document.createElement('h4');
-  assetsTitle.style.marginTop = '12px';
-  assetsTitle.textContent = '個別資產（同一期間）';
-  box.appendChild(assetsTitle);
-  box.appendChild(buildTable(['代號', '權重', 'CAGR', '波動', '最大回撤'], r.assets.map(a => [
-    { text: a.symbol, title: '數據：' + a.dataSources.map(d => `${d.symbol}(${d.from}~)`).join(' ← ') },
-    pct(a.weight), pct(a.cagr), pct(a.volatility), { text: pct(a.maxDrawdown), neg: true }
-  ])));
-
-  const yearly = document.createElement('details');
-  yearly.innerHTML = '<summary>逐年報酬</summary>';
-  yearly.appendChild(buildTable(['年度', '報酬'], r.annualReturns.slice().reverse().map(y => [
-    `${y.year}${y.partial ? '（不完整）' : ''}`, { text: pct(y.return), neg: y.return < 0 }
-  ])));
-  box.appendChild(yearly);
-
-  if (r.correlation.symbols.length > 1) {
-    const corr = document.createElement('details');
-    corr.innerHTML = '<summary>相關係數（月報酬）</summary>';
-    corr.appendChild(buildTable(['', ...r.correlation.symbols], r.correlation.symbols.map((sym, i) => [
-      sym, ...r.correlation.matrix[i].map(v => v.toFixed(2))
-    ])));
-    box.appendChild(corr);
-  }
-
-  if (r.warnings.length) {
-    const ul = document.createElement('ul');
-    ul.className = 'btWarnings';
-    r.warnings.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); });
-    box.appendChild(ul);
-  }
+  box.hidden = !pendingAttachment;
+  if (!pendingAttachment) return;
+  box.appendChild(document.createTextNode('📎 ' + pendingAttachment.filename + ' '));
+  const x = el('button', '', '✕');
+  x.onclick = () => { pendingAttachment = null; renderAttachPreview(); };
+  box.appendChild(x);
 }
 
-function renderEquityChart(canvas) {
-  if (!window.Chart) return;
-  const toPoints = r => r.equityMonthly.map(([d, v]) => ({ x: Date.parse(d), y: v / r.portfolio.initial }));
-  const datasets = [{
-    label: bt.current.name, data: toPoints(bt.current.result),
-    borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 0
-  }];
-  if (bt.previous) {
-    datasets.push({
-      label: '上一版：' + bt.previous.name, data: toPoints(bt.previous.result),
-      borderColor: '#9ca3af', borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0
-    });
-  }
-  const niceLog = v => {
-    const mantissa = v / 10 ** Math.floor(Math.log10(v));
-    return [1, 2, 5].some(n => Math.abs(mantissa - n) < 1e-6) ? `${Number(v.toPrecision(2))}x` : '';
-  };
-  bt.chart = new Chart(canvas, {
-    type: 'line',
-    data: { datasets },
-    options: {
-      animation: false,
-      maintainAspectRatio: false,
-      parsing: false,
-      interaction: { mode: 'nearest', axis: 'x', intersect: false },
-      scales: {
-        x: {
-          type: 'linear',
-          min: Math.min(...datasets.map(d => d.data[0].x)),
-          max: Math.max(...datasets.map(d => d.data.at(-1).x)),
-          ticks: { maxTicksLimit: 8, callback: v => new Date(v).getUTCFullYear() }
-        },
-        y: bt.logScale
-          ? { type: 'logarithmic', ticks: { callback: niceLog } }
-          : { type: 'linear', ticks: { callback: v => `${v}x` } }
-      },
-      plugins: {
-        legend: { labels: { boxWidth: 12, font: { size: 11 } } },
-        tooltip: {
-          callbacks: {
-            title: items => new Date(items[0].parsed.x).toISOString().slice(0, 7),
-            label: item => `${item.dataset.label}：${item.parsed.y.toFixed(2)}x`
-          }
-        }
-      }
-    }
-  });
-}
-
-function initBacktestPanel() {
-  const select = document.getElementById('btRebalance');
-  for (const [value, label] of Object.entries(REBALANCE_LABELS)) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = label;
-    select.appendChild(option);
-  }
-  ['btRebalance', 'btStart', 'btEnd'].forEach(id => document.getElementById(id).addEventListener('change', onPanelEdited));
-  if (localStorage.getItem('btPanelHidden') === '1') document.getElementById('btPanel').classList.add('hidden');
-
-  loadBacktestMeta().then(meta => {
-    const list = document.getElementById('btSymbolList');
-    backtestableSymbols(meta).forEach(symbol => {
-      const option = document.createElement('option');
-      option.value = symbol;
-      option.label = `${meta.manifest.symbols[symbol]?.name || meta.mapping.etfs[symbol]?.name || ''}（${earliestDate(meta, symbol).slice(0, 4)} 起）`;
-      list.appendChild(option);
-    });
-  }).catch(err => setBtStatus('載入回測資料失敗：' + err.message, true));
-}
-
-initBacktestPanel();
-if (!getAuth()) showAuthDialog();
-
-loadModels().catch(err => console.error('載入模型清單失敗:', err)).finally(() => {
-  if (conversations.length === 0) {
-    newConversation();
-  } else {
-    activeId = conversations[0].id;
-    if (!activeId) {
-      newConversation();
-    } else {
-      renderSidebar();
-      renderMessages();
-    }
-  }
+// ----- 送出與串流 -----
+const inputBox = $('inputBox');
+inputBox.addEventListener('input', () => {
+  inputBox.style.height = 'auto';
+  inputBox.style.height = Math.min(inputBox.scrollHeight, 160) + 'px';
+});
+inputBox.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
 });
 
+async function resendLastQuery(conv) {
+  if (!conv.lastQuery) { renderMessages(); return; }
+  await doSend(conv, conv.lastQuery, conv.lastAttachment, lastBotText(conv), false);
+}
+
+function lastBotText(conv) {
+  for (let i = conv.messages.length - 1; i >= 0; i--) {
+    if (conv.messages[i].role === 'bot' && conv.messages[i].text) return conv.messages[i].text;
+  }
+  return '';
+}
+
+async function sendMessage(overrideText) {
+  const text = overrideText !== undefined ? overrideText : inputBox.value.trim();
+  if (!text || state.isSending) return;
+  if (!getAuth()) { showAuthDialog(); return; }
+  let conv = getActiveConv();
+  if (!conv) { newConversation(); conv = getActiveConv(); }
+  const isFirst = conv.messages.length === 0;
+  const attachment = pendingAttachment;
+  pendingAttachment = null;
+  renderAttachPreview();
+  const lastAi = lastBotText(conv);
+  conv.lastQuery = text;
+  conv.lastAttachment = attachment;
+  conv.messages.push({ role: 'user', text, time: Date.now(), attachmentName: attachment?.filename });
+  if (isFirst) conv.title = text.slice(0, 16);
+  if (overrideText === undefined) { inputBox.value = ''; inputBox.style.height = 'auto'; }
+  conversations = [conv, ...conversations.filter(c => c !== conv)];
+  renderConvSelect();
+  toggleAdvisor(true);
+  await doSend(conv, text, attachment, lastAi, isFirst);
+}
+
+async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
+  const botMsg = { role: 'bot', text: '', time: Date.now() };
+  conv.messages.push(botMsg);
+  renderMessages();
+  const box = $('messages');
+  const bubble = box.lastElementChild.querySelector('.bubble');
+  bubble.textContent = '思考中…';
+
+  const query = attachment?.kind === 'text' ? `${text}\n\n【附加檔案：${attachment.filename}】\n${attachment.extractedText}` : text;
+  state.isSending = true;
+  $('sendBtn').disabled = true;
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
+      body: JSON.stringify({
+        query,
+        historySummary: conv.historySummary || '',
+        lastAiResponse,
+        model: conv.model,
+        attachment: attachment?.kind === 'binary' ? attachment : undefined,
+        backtestContext: await buildBacktestContext()
+      })
+    });
+    if (res.status === 401) {
+      handleUnauthorized();
+      throw new Error('密碼錯誤或已失效');
+    }
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { msg = (await res.json()).error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let acc = '';
+    let pending = false;
+    let lastRender = 0;
+    const scheduleRender = () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { renderMarkdown(bubble, acc); box.scrollTop = box.scrollHeight; pending = false; });
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
+        try {
+          const json = JSON.parse(t.slice(6));
+          if (json.type === 'meta') {
+            if (json.history_summary) conv.historySummary = json.history_summary;
+            botMsg.usedModel = json.used_model || conv.model;
+            botMsg.complexity = json.complexity;
+            botMsg.taskTag = json.task_tag || '';
+            botMsg.summarizerRaw = json.raw_summary || '';
+            continue;
+          }
+          const token = json.choices?.[0]?.delta?.content || '';
+          if (token) {
+            acc += token;
+            botMsg.text = acc;
+            const now = Date.now();
+            if (now - lastRender >= 80) { lastRender = now; scheduleRender(); }
+          }
+        } catch (e) {}
+      }
+    }
+    if (!acc) throw new Error('模型沒有回傳內容');
+    saveConversations();
+    renderMessages();
+    if (isFirst) fetchAutoTitle(conv, text, acc);
+  } catch (err) {
+    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + err.message, time: Date.now() };
+    saveConversations();
+    renderMessages();
+  } finally {
+    state.isSending = false;
+    $('sendBtn').disabled = false;
+  }
+}
+
+// ============================================================
+// 啟動
+// ============================================================
+function initRebalanceSelect() {
+  const select = $('rebalance');
+  Object.entries(REBALANCE_LABELS).forEach(([value, label]) => {
+    const o = el('option', '', label);
+    o.value = value;
+    select.appendChild(o);
+  });
+  ['rebalance', 'btStart', 'btEnd'].forEach(id => $(id).addEventListener('change', onPortfolioEdited));
+}
+
+async function init() {
+  renderPlanForm();
+  initRebalanceSelect();
+  const mq = window.matchMedia('(max-width: 1100px)');
+  const syncClose = () => { $('advisorClose').style.display = mq.matches ? '' : 'none'; };
+  mq.addEventListener('change', syncClose);
+  syncClose();
+
+  const meta = await loadMeta().catch(err => { setStatus('載入資料失敗：' + err.message, true); return null; });
+  state.plan = meta ? meta.retirement.normalizePlan(loadJSON(STORE.plan, {})) : loadJSON(STORE.plan, {});
+  writePlanForm();
+  writePortfolioForm(state.portfolio);
+
+  if (meta) {
+    backtestableSymbols(meta).forEach(s => {
+      const o = el('option');
+      o.value = s;
+      o.label = `${meta.manifest.symbols[s]?.name || meta.mapping.etfs[s]?.name || ''}（${earliestDate(meta, s).slice(0, 4)} 起）`;
+      $('symbolList').appendChild(o);
+    });
+    recalc({ markPrevious: false });
+  }
+
+  await loadModels().catch(err => {
+    console.error('載入模型清單失敗:', err);
+    const o = el('option', '', '自動（Worker 未連線）');
+    o.value = 'auto';
+    $('modelSelect').appendChild(o);
+  });
+  if (!conversations.length || !getActiveConv()) {
+    if (!conversations.length) newConversation();
+    else activeId = conversations[0].id;
+  }
+  renderConvSelect();
+  renderMessages();
+  if (!getAuth()) showAuthDialog();
+}
+
+init();
 </script>
 </body>
 </html>

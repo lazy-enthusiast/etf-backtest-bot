@@ -1,6 +1,9 @@
 // 用法：node backtest/cli.js "SPY:60,TLT:40" [--rebalance annual] [--start 1990-01-01] [--end 2020-12-31] [--initial 10000] [--json]
+// 退休提領測試：加 --withdraw 4 --years 30 [--inflation cpi|2.5] [--fee 0]
+//   以 100 萬起始、每年提領 4%（實質固定金額）跑歷史每個起始月份
 
 import { runBacktest, symbolsNeeded } from './engine.js';
+import { realMonthlyReturns, simulateRetirement } from './retirement.js';
 import { ensureData, loadMapping } from './data-fetcher.js';
 
 function parseArgs(argv) {
@@ -72,6 +75,31 @@ async function main() {
 
   if (opts.json) console.log(JSON.stringify(result, null, 2));
   else printReport(result);
+
+  if (opts.withdraw) await printWithdrawalTest(result, opts);
+}
+
+async function printWithdrawalTest(result, opts) {
+  const years = Number(opts.years || 30);
+  const fixed = opts.inflation && opts.inflation !== 'cpi';
+  const plan = {
+    currentAge: 65, retireAge: 65, endAge: 65 + years,
+    currentSavings: 1000000, monthlyContribution: 0,
+    annualSpending: 1000000 * Number(opts.withdraw) / 100,
+    inflationMode: fixed ? 'fixed' : 'cpi',
+    inflationRate: fixed ? Number(opts.inflation) : 2.5,
+    feeRate: Number(opts.fee || 0)
+  };
+  const cpi = fixed ? null : (await ensureData(['CPI_US'])).CPI_US?.series;
+  const { returns, cpiFallbackMonths } = realMonthlyReturns(result.equityMonthly, plan, cpi);
+  const sim = simulateRetirement(plan, returns);
+  const w = sim.withdrawalRates;
+  console.log(`\n提領測試：每年 ${opts.withdraw}%（實質），${years} 年，通膨 ${fixed ? `固定 ${opts.inflation}%` : '美國 CPI'}，費用 ${plan.feeRate}%`);
+  console.log(`歷史：${sim.history.start} ~ ${sim.history.end}，${sim.history.starts} 個起始月份（${sim.history.method === 'rolling' ? '完整歷史窗口' : '循環序列'}）${cpiFallbackMonths ? `，${cpiFallbackMonths} 個月缺 CPI 改用 2.5%` : ''}`);
+  console.log(`成功率 ${pct(sim.successRate)}；期末實質資產 中位 ${sim.endBalance.p50.toFixed(0)}、P10 ${sim.endBalance.p10.toFixed(0)}、最差 ${sim.endBalance.min.toFixed(0)}`);
+  console.log(`SWR（${w.horizonYears} 年）：最差 ${pct(w.swr.min)}（${w.worstStart} 起）、P5 ${pct(w.swr.p5)}、P10 ${pct(w.swr.p10)}、中位 ${pct(w.swr.p50)}`);
+  console.log(`PWR：最差 ${pct(w.pwr.min)}、P10 ${pct(w.pwr.p10)}、中位 ${pct(w.pwr.p50)}`);
+  console.log('最差起始：' + sim.worstRuns.map(x => `${x.start}${x.success ? '' : `（${x.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'));
 }
 
 main().catch(err => {

@@ -1,104 +1,405 @@
 {
-  "_doc": "ETF → 歷史延伸用的替代序列（依優先順序）。回測時先用 ETF 自身價格，ETF 上市前的期間依序用 proxies 的日報酬往前拼接。type：mutual_fund = 追蹤同指數的共同基金（含息、已扣費用，最佳）；etf = 另一檔 ETF；total_return_index = 含息指數；price_index = 價格指數（不含股息，報酬會被低估）；futures = 期貨連續合約。",
+  "_doc": "ETF → 歷史延伸用的替代序列（依優先順序）。回測時先用 ETF 自身價格，ETF 上市前的期間依序用 proxies 的日報酬往前拼接。type：mutual_fund = 追蹤同指數的共同基金（含息、已扣費用，最佳）；etf = 另一檔 ETF；total_return_index = 含息指數；price_index = 價格指數（不含股息，報酬會被低估）；synthetic = 合成月度序列（US_STOCK_TR、US_10Y_TR，來自 Shiller 資料集）；futures = 期貨連續合約。",
   "etfs": {
-    "SPY":  { "name": "SPDR S&P 500 ETF", "index": "S&P 500", "proxies": [
-      { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor，Yahoo 資料 1980 起" },
-      { "symbol": "^GSPC", "type": "price_index", "note": "S&P 500 價格指數，1927 起，不含股息" }
-    ]},
-    "VOO":  { "name": "Vanguard S&P 500 ETF", "index": "S&P 500", "proxies": [
-      { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
-      { "symbol": "^GSPC", "type": "price_index", "note": "不含股息" }
-    ]},
-    "IVV":  { "name": "iShares Core S&P 500 ETF", "index": "S&P 500", "proxies": [
-      { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
-      { "symbol": "^GSPC", "type": "price_index", "note": "不含股息" }
-    ]},
-    "VTI":  { "name": "Vanguard Total Stock Market ETF", "index": "CRSP US Total Market", "proxies": [
-      { "symbol": "VTSMX", "type": "mutual_fund", "note": "Vanguard Total Stock Market Index Investor，1992 起" },
-      { "symbol": "VFINX", "type": "mutual_fund", "note": "以 S&P 500 近似全市場" },
-      { "symbol": "^GSPC", "type": "price_index", "note": "不含股息" }
-    ]},
-    "QQQ":  { "name": "Invesco QQQ Trust", "index": "Nasdaq-100", "proxies": [
-      { "symbol": "^NDX", "type": "price_index", "note": "Nasdaq-100 價格指數，1985 起，不含股息（殖利率低，影響較小）" }
-    ]},
-    "QQQM": { "name": "Invesco Nasdaq 100 ETF", "index": "Nasdaq-100", "proxies": [
-      { "symbol": "QQQ", "type": "etf", "note": "同指數" },
-      { "symbol": "^NDX", "type": "price_index", "note": "不含股息" }
-    ]},
-    "IWM":  { "name": "iShares Russell 2000 ETF", "index": "Russell 2000", "proxies": [
-      { "symbol": "NAESX", "type": "mutual_fund", "note": "Vanguard Small-Cap Index Investor（指數曾多次更換，近似）" },
-      { "symbol": "^RUT", "type": "price_index", "note": "不含股息" }
-    ]},
-    "VB":   { "name": "Vanguard Small-Cap ETF", "index": "CRSP US Small Cap", "proxies": [
-      { "symbol": "NAESX", "type": "mutual_fund", "note": "Vanguard Small-Cap Index Investor" }
-    ]},
-    "VBR":  { "name": "Vanguard Small-Cap Value ETF", "index": "CRSP US Small Cap Value", "proxies": [
-      { "symbol": "VISVX", "type": "mutual_fund", "note": "Vanguard Small-Cap Value Index Investor，1998 起" }
-    ]},
-    "VTV":  { "name": "Vanguard Value ETF", "index": "CRSP US Large Cap Value", "proxies": [
-      { "symbol": "VIVAX", "type": "mutual_fund", "note": "Vanguard Value Index Investor，1992 起" }
-    ]},
-    "VUG":  { "name": "Vanguard Growth ETF", "index": "CRSP US Large Cap Growth", "proxies": [
-      { "symbol": "VIGRX", "type": "mutual_fund", "note": "Vanguard Growth Index Investor，1992 起" }
-    ]},
-    "SCHD": { "name": "Schwab US Dividend Equity ETF", "index": "Dow Jones US Dividend 100", "proxies": [
-      { "symbol": "VYM", "type": "etf", "note": "Vanguard High Dividend Yield ETF，2006 起，不同指數，僅近似" }
-    ]},
-    "VXUS": { "name": "Vanguard Total International Stock ETF", "index": "FTSE Global All Cap ex US", "proxies": [
-      { "symbol": "VGTSX", "type": "mutual_fund", "note": "Vanguard Total International Stock Index Investor，1996 起" }
-    ]},
-    "VEA":  { "name": "Vanguard FTSE Developed Markets ETF", "index": "FTSE Developed All Cap ex US", "proxies": [
-      { "symbol": "EFA", "type": "etf", "note": "MSCI EAFE，近似" },
-      { "symbol": "VGTSX", "type": "mutual_fund", "note": "含新興市場，近似" }
-    ]},
-    "EFA":  { "name": "iShares MSCI EAFE ETF", "index": "MSCI EAFE", "proxies": [
-      { "symbol": "VGTSX", "type": "mutual_fund", "note": "含新興市場，近似" }
-    ]},
-    "VWO":  { "name": "Vanguard FTSE Emerging Markets ETF", "index": "FTSE Emerging Markets", "proxies": [
-      { "symbol": "VEIEX", "type": "mutual_fund", "note": "Vanguard Emerging Markets Stock Index Investor，1994 起" }
-    ]},
-    "EEM":  { "name": "iShares MSCI Emerging Markets ETF", "index": "MSCI Emerging Markets", "proxies": [
-      { "symbol": "VEIEX", "type": "mutual_fund", "note": "近似" }
-    ]},
-    "BND":  { "name": "Vanguard Total Bond Market ETF", "index": "Bloomberg US Aggregate Float Adjusted", "proxies": [
-      { "symbol": "VBMFX", "type": "mutual_fund", "note": "Vanguard Total Bond Market Index Investor，1986 起" }
-    ]},
-    "AGG":  { "name": "iShares Core US Aggregate Bond ETF", "index": "Bloomberg US Aggregate", "proxies": [
-      { "symbol": "VBMFX", "type": "mutual_fund", "note": "近似" }
-    ]},
-    "TLT":  { "name": "iShares 20+ Year Treasury Bond ETF", "index": "ICE US Treasury 20+ Year", "proxies": [
-      { "symbol": "VUSTX", "type": "mutual_fund", "note": "Vanguard Long-Term Treasury Investor，1986 起，存續期略短" }
-    ]},
-    "VGLT": { "name": "Vanguard Long-Term Treasury ETF", "index": "Bloomberg US Long Treasury", "proxies": [
-      { "symbol": "VUSTX", "type": "mutual_fund", "note": "Vanguard Long-Term Treasury Investor" }
-    ]},
-    "IEF":  { "name": "iShares 7-10 Year Treasury Bond ETF", "index": "ICE US Treasury 7-10 Year", "proxies": [
-      { "symbol": "VFITX", "type": "mutual_fund", "note": "Vanguard Intermediate-Term Treasury Investor，1991 起" }
-    ]},
-    "SHY":  { "name": "iShares 1-3 Year Treasury Bond ETF", "index": "ICE US Treasury 1-3 Year", "proxies": [
-      { "symbol": "VFISX", "type": "mutual_fund", "note": "Vanguard Short-Term Treasury Investor，1991 起" }
-    ]},
-    "TIP":  { "name": "iShares TIPS Bond ETF", "index": "Bloomberg US TIPS", "proxies": [
-      { "symbol": "VIPSX", "type": "mutual_fund", "note": "Vanguard Inflation-Protected Securities Investor，2000 起" }
-    ]},
-    "VNQ":  { "name": "Vanguard Real Estate ETF", "index": "MSCI US IMI Real Estate 25/50", "proxies": [
-      { "symbol": "VGSIX", "type": "mutual_fund", "note": "Vanguard REIT Index Investor，1996 起" }
-    ]},
-    "GLD":  { "name": "SPDR Gold Shares", "index": "LBMA Gold Price", "proxies": [
-      { "symbol": "GC=F", "type": "futures", "note": "COMEX 黃金期貨連續合約，2000 起" }
-    ]},
-    "IAU":  { "name": "iShares Gold Trust", "index": "LBMA Gold Price", "proxies": [
-      { "symbol": "GLD", "type": "etf", "note": "同標的" },
-      { "symbol": "GC=F", "type": "futures", "note": "COMEX 黃金期貨連續合約" }
-    ]},
-    "2800.HK": { "name": "盈富基金", "index": "恒生指數", "proxies": [
-      { "symbol": "^HSI", "type": "price_index", "note": "恒生指數價格指數，不含股息（港股殖利率高，低估明顯）；HKD 計價" }
-    ]},
-    "2828.HK": { "name": "恒生中國企業 ETF", "index": "恒生中國企業指數", "proxies": [
-      { "symbol": "^HSCE", "type": "price_index", "note": "不含股息；HKD 計價" }
-    ]},
-    "0050.TW": { "name": "元大台灣50", "index": "台灣 50 指數", "proxies": [
-      { "symbol": "^TWII", "type": "price_index", "note": "以加權指數近似，不含股息；TWD 計價" }
-    ]}
+    "SPY": {
+      "name": "SPDR S&P 500 ETF",
+      "index": "S&P 500",
+      "proxies": [
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "Vanguard 500 Index Investor，Yahoo 資料 1980 起"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "Shiller S&P Composite 含息總報酬，1871 起，月度（月均價，波動被平滑）"
+        }
+      ]
+    },
+    "VOO": {
+      "name": "Vanguard S&P 500 ETF",
+      "index": "S&P 500",
+      "proxies": [
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "Vanguard 500 Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "Shiller S&P Composite 含息總報酬，1871 起，月度（月均價，波動被平滑）"
+        }
+      ]
+    },
+    "IVV": {
+      "name": "iShares Core S&P 500 ETF",
+      "index": "S&P 500",
+      "proxies": [
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "Vanguard 500 Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "Shiller S&P Composite 含息總報酬，1871 起，月度（月均價，波動被平滑）"
+        }
+      ]
+    },
+    "VTI": {
+      "name": "Vanguard Total Stock Market ETF",
+      "index": "CRSP US Total Market",
+      "proxies": [
+        {
+          "symbol": "VTSMX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total Stock Market Index Investor，1992 起"
+        },
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "以 S&P 500 近似全市場"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "Shiller S&P Composite 含息總報酬，1871 起，月度（月均價，波動被平滑）"
+        }
+      ]
+    },
+    "QQQ": {
+      "name": "Invesco QQQ Trust",
+      "index": "Nasdaq-100",
+      "proxies": [
+        {
+          "symbol": "^NDX",
+          "type": "price_index",
+          "note": "Nasdaq-100 價格指數，1985 起，不含股息（殖利率低，影響較小）"
+        }
+      ]
+    },
+    "QQQM": {
+      "name": "Invesco Nasdaq 100 ETF",
+      "index": "Nasdaq-100",
+      "proxies": [
+        {
+          "symbol": "QQQ",
+          "type": "etf",
+          "note": "同指數"
+        },
+        {
+          "symbol": "^NDX",
+          "type": "price_index",
+          "note": "不含股息"
+        }
+      ]
+    },
+    "IWM": {
+      "name": "iShares Russell 2000 ETF",
+      "index": "Russell 2000",
+      "proxies": [
+        {
+          "symbol": "NAESX",
+          "type": "mutual_fund",
+          "note": "Vanguard Small-Cap Index Investor（指數曾多次更換，近似）"
+        },
+        {
+          "symbol": "^RUT",
+          "type": "price_index",
+          "note": "不含股息"
+        }
+      ]
+    },
+    "VB": {
+      "name": "Vanguard Small-Cap ETF",
+      "index": "CRSP US Small Cap",
+      "proxies": [
+        {
+          "symbol": "NAESX",
+          "type": "mutual_fund",
+          "note": "Vanguard Small-Cap Index Investor"
+        }
+      ]
+    },
+    "VBR": {
+      "name": "Vanguard Small-Cap Value ETF",
+      "index": "CRSP US Small Cap Value",
+      "proxies": [
+        {
+          "symbol": "VISVX",
+          "type": "mutual_fund",
+          "note": "Vanguard Small-Cap Value Index Investor，1998 起"
+        }
+      ]
+    },
+    "VTV": {
+      "name": "Vanguard Value ETF",
+      "index": "CRSP US Large Cap Value",
+      "proxies": [
+        {
+          "symbol": "VIVAX",
+          "type": "mutual_fund",
+          "note": "Vanguard Value Index Investor，1992 起"
+        }
+      ]
+    },
+    "VUG": {
+      "name": "Vanguard Growth ETF",
+      "index": "CRSP US Large Cap Growth",
+      "proxies": [
+        {
+          "symbol": "VIGRX",
+          "type": "mutual_fund",
+          "note": "Vanguard Growth Index Investor，1992 起"
+        }
+      ]
+    },
+    "SCHD": {
+      "name": "Schwab US Dividend Equity ETF",
+      "index": "Dow Jones US Dividend 100",
+      "proxies": [
+        {
+          "symbol": "VYM",
+          "type": "etf",
+          "note": "Vanguard High Dividend Yield ETF，2006 起，不同指數，僅近似"
+        }
+      ]
+    },
+    "VXUS": {
+      "name": "Vanguard Total International Stock ETF",
+      "index": "FTSE Global All Cap ex US",
+      "proxies": [
+        {
+          "symbol": "VGTSX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total International Stock Index Investor，1996 起"
+        }
+      ]
+    },
+    "VEA": {
+      "name": "Vanguard FTSE Developed Markets ETF",
+      "index": "FTSE Developed All Cap ex US",
+      "proxies": [
+        {
+          "symbol": "EFA",
+          "type": "etf",
+          "note": "MSCI EAFE，近似"
+        },
+        {
+          "symbol": "VGTSX",
+          "type": "mutual_fund",
+          "note": "含新興市場，近似"
+        }
+      ]
+    },
+    "EFA": {
+      "name": "iShares MSCI EAFE ETF",
+      "index": "MSCI EAFE",
+      "proxies": [
+        {
+          "symbol": "VGTSX",
+          "type": "mutual_fund",
+          "note": "含新興市場，近似"
+        }
+      ]
+    },
+    "VWO": {
+      "name": "Vanguard FTSE Emerging Markets ETF",
+      "index": "FTSE Emerging Markets",
+      "proxies": [
+        {
+          "symbol": "VEIEX",
+          "type": "mutual_fund",
+          "note": "Vanguard Emerging Markets Stock Index Investor，1994 起"
+        }
+      ]
+    },
+    "EEM": {
+      "name": "iShares MSCI Emerging Markets ETF",
+      "index": "MSCI Emerging Markets",
+      "proxies": [
+        {
+          "symbol": "VEIEX",
+          "type": "mutual_fund",
+          "note": "近似"
+        }
+      ]
+    },
+    "BND": {
+      "name": "Vanguard Total Bond Market ETF",
+      "index": "Bloomberg US Aggregate Float Adjusted",
+      "proxies": [
+        {
+          "symbol": "VBMFX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total Bond Market Index Investor，1986 起"
+        },
+        {
+          "symbol": "US_10Y_TR",
+          "type": "synthetic",
+          "note": "10 年期國債合成序列，近似總體債市（無信用債）"
+        }
+      ]
+    },
+    "AGG": {
+      "name": "iShares Core US Aggregate Bond ETF",
+      "index": "Bloomberg US Aggregate",
+      "proxies": [
+        {
+          "symbol": "VBMFX",
+          "type": "mutual_fund",
+          "note": "近似"
+        },
+        {
+          "symbol": "US_10Y_TR",
+          "type": "synthetic",
+          "note": "10 年期國債合成序列，近似總體債市（無信用債）"
+        }
+      ]
+    },
+    "TLT": {
+      "name": "iShares 20+ Year Treasury Bond ETF",
+      "index": "ICE US Treasury 20+ Year",
+      "proxies": [
+        {
+          "symbol": "VUSTX",
+          "type": "mutual_fund",
+          "note": "Vanguard Long-Term Treasury Investor，1986 起，存續期略短"
+        },
+        {
+          "symbol": "US_10Y_TR",
+          "type": "synthetic",
+          "note": "10 年期國債合成序列，存續期短於長債，波動被低估"
+        }
+      ]
+    },
+    "VGLT": {
+      "name": "Vanguard Long-Term Treasury ETF",
+      "index": "Bloomberg US Long Treasury",
+      "proxies": [
+        {
+          "symbol": "VUSTX",
+          "type": "mutual_fund",
+          "note": "Vanguard Long-Term Treasury Investor"
+        },
+        {
+          "symbol": "US_10Y_TR",
+          "type": "synthetic",
+          "note": "10 年期國債合成序列，存續期短於長債，波動被低估"
+        }
+      ]
+    },
+    "IEF": {
+      "name": "iShares 7-10 Year Treasury Bond ETF",
+      "index": "ICE US Treasury 7-10 Year",
+      "proxies": [
+        {
+          "symbol": "VFITX",
+          "type": "mutual_fund",
+          "note": "Vanguard Intermediate-Term Treasury Investor，1991 起"
+        },
+        {
+          "symbol": "US_10Y_TR",
+          "type": "synthetic",
+          "note": "以 10 年期殖利率合成的國債總報酬，1871 起，月度"
+        }
+      ]
+    },
+    "SHY": {
+      "name": "iShares 1-3 Year Treasury Bond ETF",
+      "index": "ICE US Treasury 1-3 Year",
+      "proxies": [
+        {
+          "symbol": "VFISX",
+          "type": "mutual_fund",
+          "note": "Vanguard Short-Term Treasury Investor，1991 起"
+        }
+      ]
+    },
+    "TIP": {
+      "name": "iShares TIPS Bond ETF",
+      "index": "Bloomberg US TIPS",
+      "proxies": [
+        {
+          "symbol": "VIPSX",
+          "type": "mutual_fund",
+          "note": "Vanguard Inflation-Protected Securities Investor，2000 起"
+        }
+      ]
+    },
+    "VNQ": {
+      "name": "Vanguard Real Estate ETF",
+      "index": "MSCI US IMI Real Estate 25/50",
+      "proxies": [
+        {
+          "symbol": "VGSIX",
+          "type": "mutual_fund",
+          "note": "Vanguard REIT Index Investor，1996 起"
+        }
+      ]
+    },
+    "GLD": {
+      "name": "SPDR Gold Shares",
+      "index": "LBMA Gold Price",
+      "proxies": [
+        {
+          "symbol": "GC=F",
+          "type": "futures",
+          "note": "COMEX 黃金期貨連續合約，2000 起"
+        }
+      ]
+    },
+    "IAU": {
+      "name": "iShares Gold Trust",
+      "index": "LBMA Gold Price",
+      "proxies": [
+        {
+          "symbol": "GLD",
+          "type": "etf",
+          "note": "同標的"
+        },
+        {
+          "symbol": "GC=F",
+          "type": "futures",
+          "note": "COMEX 黃金期貨連續合約"
+        }
+      ]
+    },
+    "2800.HK": {
+      "name": "盈富基金",
+      "index": "恒生指數",
+      "proxies": [
+        {
+          "symbol": "^HSI",
+          "type": "price_index",
+          "note": "恒生指數價格指數，不含股息（港股殖利率高，低估明顯）；HKD 計價"
+        }
+      ]
+    },
+    "2828.HK": {
+      "name": "恒生中國企業 ETF",
+      "index": "恒生中國企業指數",
+      "proxies": [
+        {
+          "symbol": "^HSCE",
+          "type": "price_index",
+          "note": "不含股息；HKD 計價"
+        }
+      ]
+    },
+    "0050.TW": {
+      "name": "元大台灣50",
+      "index": "台灣 50 指數",
+      "proxies": [
+        {
+          "symbol": "^TWII",
+          "type": "price_index",
+          "note": "以加權指數近似，不含股息；TWD 計價"
+        }
+      ]
+    }
   }
 }

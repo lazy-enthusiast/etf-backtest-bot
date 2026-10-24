@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 PROXY_URL = "https://deep-water-proxy.vercel.app/api/chat"
-ALLOWED_ORIGIN = "https://lazy-enthusiast.github.io"
+ALLOWED_ORIGIN = "https://lazy-enthusiast.github.io,http://127.0.0.1:5173,http://localhost:5173"
 
 # 如果你有 R2 綁定，取消註解並填入
 # [[r2_buckets]]

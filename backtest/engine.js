@@ -1,7 +1,10 @@
 // 純計算模組：不做任何 I/O，Node 與瀏覽器都可直接 import。
 // 價格資料格式：{ symbol, series: [['YYYY-MM-DD', adjClose], ...] }（日期遞增）
 
-const PRICE_ONLY_TYPES = new Set(['price_index']);
+const SEGMENT_WARNINGS = {
+  price_index: '價格指數，不含股息，報酬被低估',
+  synthetic: '月度合成數據（Shiller 月均價／殖利率推算），波動與回撤被低估'
+};
 
 export function symbolToFile(symbol) {
   return symbol.toUpperCase().replace(/\^/g, 'IDX_').replace(/[^A-Z0-9._-]/g, '_') + '.json';
@@ -132,16 +135,17 @@ function computeDrawdown(curve) {
   return { maxDrawdown: maxDD, peakDate: worst.peakDate, troughDate: worst.troughDate, recoveryDate: worst.recoveryDate };
 }
 
+// 波動、Sharpe、Sortino 一律用月報酬計算（資料可能混合日線與月度合成序列）；回撤用完整序列
 function computeStats(curve, riskFreeRate = 0) {
   const start = curve[0][0];
   const end = curve.at(-1)[0];
   const years = yearsBetween(start, end);
-  const rets = toReturns(curve.map(p => p[1]));
-  const periodsPerYear = rets.length / years;
+  const rets = toReturns(lastPerMonth(curve).map(p => p[1]));
   const cagr = (curve.at(-1)[1] / curve[0][1]) ** (1 / years) - 1;
-  const vol = std(rets) * Math.sqrt(periodsPerYear);
-  const annMean = mean(rets) * periodsPerYear;
-  const downside = Math.sqrt(mean(rets.map(r => Math.min(r, 0) ** 2))) * Math.sqrt(periodsPerYear);
+  const enough = rets.length >= 3;
+  const vol = enough ? std(rets) * Math.sqrt(12) : NaN;
+  const annMean = enough ? mean(rets) * 12 : NaN;
+  const downside = enough ? Math.sqrt(mean(rets.map(r => Math.min(r, 0) ** 2))) * Math.sqrt(12) : NaN;
   const dd = computeDrawdown(curve);
   return {
     cagr,
@@ -163,6 +167,27 @@ function annualReturns(curve) {
                     (i === years.length - 1 && !byYear.get(y).date.startsWith(`${y}-12`));
     return { year: Number(y), return: byYear.get(y).value / prevValue - 1, partial };
   });
+}
+
+// 日期取所有資產日期的聯集；每個資產取「該日或之前最後一個價格」。
+// 這讓日線與月度序列、不同交易所的交易日可以混用，累積報酬不變。
+function alignAsOf(spliced, from, to) {
+  const dateSet = new Set();
+  for (const s of spliced) {
+    for (const [d] of s.series) if (d >= from && d <= to) dateSet.add(d);
+  }
+  const dates = [...dateSet].sort();
+  const levels = spliced.map(s => {
+    const out = new Array(dates.length);
+    let j = 0;
+    let last = null;
+    for (let i = 0; i < dates.length; i++) {
+      while (j < s.series.length && s.series[j][0] <= dates[i]) last = s.series[j++][1];
+      out[i] = last;
+    }
+    return out;
+  });
+  return { dates, levels };
 }
 
 function correlationMatrix(symbols, monthlyReturns) {
@@ -202,7 +227,6 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
   const initial = portfolio.initial ?? 10000;
 
   const spliced = holdings.map(h => buildSplicedSeries(h.symbol, mapping, dataBySymbol));
-  const maps = spliced.map(s => new Map(s.series));
 
   const firstDates = spliced.map(s => s.series[0][0]);
   const commonStart = firstDates.reduce((a, b) => (a > b ? a : b));
@@ -211,12 +235,8 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
   const commonEnd = lastDates.reduce((a, b) => (a < b ? a : b));
   const to = portfolio.end && portfolio.end < commonEnd ? portfolio.end : commonEnd;
 
-  const dates = spliced[0].series
-    .map(([d]) => d)
-    .filter(d => d >= from && d <= to && maps.every(m => m.has(d)));
+  const { dates, levels } = alignAsOf(spliced, from, to);
   if (dates.length < 2) throw new Error(`共同可用區間不足（${from} ~ ${to}）`);
-
-  const levels = maps.map(m => dates.map(d => m.get(d)));
   const weights = holdings.map(h => h.weight);
   let values = weights.map(w => w * initial);
   const curve = [[dates[0], initial]];
@@ -257,9 +277,9 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
   const warnings = spliced.flatMap(s => s.warnings);
   for (const s of spliced) {
     for (const seg of s.segments) {
-      if (PRICE_ONLY_TYPES.has(seg.type) && seg.from < dates.at(-1) && seg.to > dates[0]) {
-        const from = seg.from > dates[0] ? seg.from : dates[0];
-        warnings.push(`${s.symbol}：${from} ~ ${seg.to} 使用 ${seg.symbol} 價格指數，不含股息，報酬被低估`);
+      if (SEGMENT_WARNINGS[seg.type] && seg.from < dates.at(-1) && seg.to > dates[0]) {
+        const segFrom = seg.from > dates[0] ? seg.from : dates[0];
+        warnings.push(`${s.symbol}：${segFrom} ~ ${seg.to} 使用 ${seg.symbol}（${SEGMENT_WARNINGS[seg.type]}）`);
       }
     }
   }
