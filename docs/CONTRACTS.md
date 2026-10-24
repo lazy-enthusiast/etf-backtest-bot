@@ -4,7 +4,7 @@
 
 前端是靜態 HTML（GitHub Pages），回測與退休模擬在瀏覽器執行，價格／CPI 資料是 repo 內的靜態 JSON。AI 對話經 Cloudflare Worker → Vercel Proxy → OpenRouter。本 repo 由 deep-water 幕僚 chatbot 改造而來。
 
-三層（前端／Worker／Proxy）各有存在理由，不要合併。改請求／回應 shape 時，同步檢查 `index.html`、Worker、Proxy。所有金鑰走環境變數，不要硬編碼。
+三層（前端／Worker／Proxy）各有存在理由，不要合併。改請求／回應 shape 時，同步檢查 `js/`（尤其 chat／context／ai-controls）、Worker、Proxy。所有金鑰走環境變數，不要硬編碼。
 
 ---
 
@@ -12,14 +12,16 @@
 
 ```
 瀏覽器 (GitHub Pages)
-  index.html  ── import ──►  backtest/engine.js、backtest/retirement.js
+  index.html + styles/app.css + js/app.js
+      │  import
+      ├──────────────────►  backtest/engine.js、backtest/retirement.js
       │  fetch（同源靜態檔）
       ├──────────────────►  backtest/index-mapping.json、data/manifest.json、data/*.json
       │
       │  X-App-Auth（使用者輸入的密碼，存在 localStorage）
       v
 Cloudflare Worker（etf-backtest-worker）
-  worker/src/index.js  ←  import  worker/src/brain.js
+  worker/src/index.js  ←  cors / auth / mem0 / openrouter / brain
       │  X-Proxy-Secret
       v
 Vercel Proxy
@@ -29,7 +31,7 @@ Vercel Proxy
 OpenRouter  →  Claude / 其他模型
 
 本機（開發者電腦）
-  backtest/data-fetcher.js ──► Yahoo Finance／合成序列 ──► data/*.json（commit 後隨 GitHub Pages 發布）
+  backtest/data-fetcher.js（facade）+ fetch/* ──► Yahoo／合成序列 ──► data/*.json
   npm run dev ──► 靜態前端 :5173 + wrangler dev :8787
 ```
 
@@ -49,18 +51,22 @@ OpenRouter  →  Claude / 其他模型
 
 | 路徑 | 用途 |
 |---|---|
-| `index.html` | 前端：計劃表單、組合、儀表板、登入框、AI 顧問、portfolio／plan 卡片；部署於 GitHub Pages |
+| `index.html` | 前端標記（GitHub Pages）；連結 CSS／JS modules |
+| `styles/app.css` | 前端樣式 |
+| `js/` | 前端 ES modules（config、auth、storage、data、forms、recalc、dashboard、context、ai-controls、chat、app） |
 | `.nojekyll` | 讓 GitHub Pages 原樣提供檔案 |
 | `backtest/engine.js` | 組合回測核心。純計算、無 I/O |
 | `backtest/retirement.js` | 退休模擬（實質報酬、歷史起始月、SWR／PWR）。純計算、無 I/O |
-| `backtest/data-fetcher.js` | Node 專用：抓價格／合成序列寫入 `data/`，更新 `manifest.json` |
+| `backtest/data-fetcher.js` | 薄 facade：`ensureData` + CLI（`npm run fetch`） |
+| `backtest/fetch/` | `yahoo.js`、`synthetic.js`、`cache.js` |
 | `backtest/index-mapping.json` | ETF → 延伸歷史用的替代序列 |
 | `backtest/cli.js` | 終端機回測；`--withdraw` 做提領測試 |
 | `data/` | 價格／CPI 快取與 `manifest.json`；需提交進 git |
-| `scripts/dev.js` | 本機一鍵啟動前端 + Worker |
-| `worker/src/index.js` | 路由、驗證、Mem0、SSE、組請求 |
+| `scripts/dev.js` | 本機一鍵啟動前端 + Worker（服務 index／styles／js／backtest／data） |
+| `worker/src/index.js` | 薄路由、SSE、組請求 |
+| `worker/src/cors.js`／`auth.js`／`mem0.js`／`openrouter.js` | CORS、驗證、Mem0、Proxy 呼叫 |
 | `worker/src/brain.js` | 退休規劃師 prompt、摘要 prompt、模型清單、`pickModelKey` |
-| `worker/wrangler.toml` | Worker 名稱（`etf-backtest-worker`）、公開 vars |
+| `worker/wrangler.toml` | Worker 名稱（`etf-backtest-worker`）、公開 vars（含 `PROXY_URL`…`/api/chat`） |
 | `proxy/api/chat.js` | Vercel Edge Function：驗證後原樣轉發 OpenRouter |
 | `package.json` | `npm run dev`／`fetch`／`fetch:all`／`backtest` |
 
@@ -146,20 +152,21 @@ OpenRouter  →  Claude / 其他模型
 
 ## 各層職責
 
-### `index.html`
+### 前端（`index.html` + `js/`）
 
-- `WORKER_URL`：本機（`localhost`／`127.0.0.1`）→ `http://127.0.0.1:8787/`；否則 → `https://etf-backtest-worker.davchan-clp.workers.dev/`。
+- `WORKER_URL`（`js/config.js`）：本機（`localhost`／`127.0.0.1`）→ `http://127.0.0.1:8787/`；否則 → `https://etf-backtest-worker.davchan-clp.workers.dev/`。
 - 存取密碼：不寫在原始碼。首次使用或 401 時顯示登入框，`GET /api/auth-check` 後存 `localStorage appAuth`。
 - 每則訊息附 `backtestContext`（計劃、退休模擬、組合績效、上一版精簡結果）。
-- ` ```portfolio ` → `parsePortfolioBlock()`；` ```plan ` → `parsePlanBlock()`。單組建議自動寫入左側可編輯表單並重算；多組則顯示卡片供挑選。左側參數仍可手動調整後按「重新計算」。
+- ` ```portfolio ` → `js/ai-controls.js` `parsePortfolioBlock()`；` ```plan ` → `parsePlanBlock()`。單組建議自動寫入左側並重算；多組則顯示卡片供挑選。
 - 模型選單來自 `GET /api/models`：自動／Sonnet 5／Opus 5（無 Haiku）。
+- 直接 `import` `backtest/engine.js`、`retirement.js`（無 `window.RP_MODULES`）。
 
-### `worker/src/index.js`
+### `worker/src/index.js`（+ cors／auth／mem0／openrouter）
 
 - CORS：`ALLOWED_ORIGIN` 可為逗號分隔清單；請求 `Origin` 在清單內才回傳該來源。
 - `GET /api/models` 公開；`GET /api/auth-check` 驗證密碼。
 - `backtestContext` 截斷至 12000 字，不送給摘要模型。
-- 不持有 `OPENROUTER_API_KEY`；打 Proxy 時帶 `X-Proxy-Secret`。
+- 不持有 `OPENROUTER_API_KEY`；打 Proxy 時帶 `X-Proxy-Secret`。`PROXY_URL` 須含 `/api/chat`。
 
 ### `worker/src/brain.js`
 

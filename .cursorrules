@@ -2,21 +2,27 @@
 
 ## 這是什麼
 一個人用的 ETF 退休規劃工具：設定退休計劃參數與 ETF 組合，在瀏覽器以歷史價格回測並模擬「每個起始月份」的累積／提領結果；AI 對話讀取結果，提出改良組合或計劃調整。
-前端是純靜態 HTML，跑在 GitHub Pages；回測與退休模擬在瀏覽器跑，價格／CPI 資料是 repo 內的靜態 JSON。
+前端是純靜態 HTML + ES modules，跑在 GitHub Pages；回測與退休模擬在瀏覽器跑，價格／CPI 資料是 repo 內的靜態 JSON。
 AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換出口 IP、隔離 API key）。
 本 repo 由 deep-water 幕僚 chatbot 改造而來；Worker 名稱已改為 etf-backtest-worker，不要再部署成 deep-water-worker。
 
 ## 架構（各有存在理由，不要合併）
-- index.html → 前端 UI（GitHub Pages）。退休計劃表單、組合編輯、成功率／軌跡儀表板、AI 顧問；localStorage 存對話、historySummary、計劃、組合、存取密碼
+- index.html → 前端標記（GitHub Pages）。連結 styles/app.css 與 js/app.js
+- styles/app.css → 前端樣式
+- js/ → 前端 ES modules（config、auth、storage、data、plan-form、portfolio-form、recalc、dashboard、context、ai-controls、chat、app）；直接 import backtest/engine.js 與 retirement.js
 - backtest/ → 回測與退休模擬（純計算）及資料工具
   - engine.js：組合回測，純計算、無 I/O，Node 與瀏覽器共用
   - retirement.js：實質月報酬、歷史起始月退休模擬、SWR／PWR；純計算、無 I/O
-  - data-fetcher.js：Node 專用，從 Yahoo Finance（及合成序列）寫入 data/，更新 data/manifest.json
+  - data-fetcher.js：薄 facade（ensureData + CLI）；實作在 fetch/
+  - fetch/yahoo.js、synthetic.js、cache.js：Yahoo／合成序列／快取與 manifest
   - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數／合成），依優先順序
   - cli.js：終端機回測（可加 --withdraw 做提領測試）
 - data/ → 價格／CPI 快取（提交進 git，由 GitHub Pages 提供給前端）
-- scripts/dev.js → 本機一鍵：靜態前端（127.0.0.1:5173）+ wrangler dev
-- worker/ → Cloudflare Worker（邏輯層）。驗證、摘要、記憶、模型選擇、SSE 串流
+- scripts/dev.js → 本機一鍵：靜態前端（127.0.0.1:5173）+ wrangler dev；允許 index.html、styles/、js/、backtest/、data/
+- worker/ → Cloudflare Worker（邏輯層）
+  - src/index.js：薄路由
+  - src/cors.js、auth.js、mem0.js、openrouter.js：CORS、驗證、Mem0、Proxy 呼叫
+  - src/brain.js：prompt、MODEL_CONFIG、pickModelKey
 - proxy/ → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方
 
 ## 資料流
@@ -27,18 +33,18 @@ AI：前端 → Worker（X-App-Auth 驗證）→ Proxy（X-Proxy-Secret 驗證�
 ## 環境變數（全部走 env，絕不硬編碼）
 Worker 持有：
 - NAME = 前端存取密碼（⚠️ 名字取差了，它其實是密鑰）。前端不硬編碼，使用者首次使用時輸入，存在 localStorage
-- PROXY_URL = Vercel proxy 的 URL
+- PROXY_URL = Vercel proxy 的 URL（須含 `/api/chat`；與 wrangler.toml 一致）
 - PROXY_SECRET = 打 proxy 用的密鑰
 - MEM0_API_KEY = Mem0 的 key
 - MEM0_USER_ID = 與 deep-water 分開（避免記憶混用）
 - ALLOWED_ORIGIN = CORS 允許的來源（可逗號分隔多個，例如 Pages + localhost）
-- MY_BUCKET = R2 bucket（/upload 端點用，可不綁）
+- MY_BUCKET = R2 bucket（/upload 端點用，可不綁；前端目前未用）
 
 Proxy 持有：
 - PROXY_SECRET = 驗證 worker 來的請求
 - OPENROUTER_API_KEY = 唯一持有 OpenRouter key 的地方
 
-## 核心邏輯（worker/src/index.js）
+## 核心邏輯（worker/src/index.js + 模組）
 1. 驗證 X-App-Auth（GET /api/auth-check 供前端登入時驗證）
 2. 平行跑：摘要（deepseek-v4-flash）+ Mem0 檢索
 3. 摘要回傳 JSON：{ history_summary, complexity, task_tag }
@@ -54,7 +60,7 @@ Proxy 持有：
 - 請求 body 的 backtestContext（字串，Worker 截斷至 12000 字；含計劃參數、退休模擬、組合績效）
 - AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }
 - AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency）+ 可選 note
-  格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 index.html 的 parsePortfolioBlock()／parsePlanBlock()
+  格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 js/ai-controls.js 的 parsePortfolioBlock()／parsePlanBlock()
 - 單組 portfolio／plan 會自動寫入左側可編輯表單並重算；左側參數仍可手動改後按「重新計算」
 - engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）
 
@@ -63,10 +69,11 @@ Proxy 持有：
 - Opus-5 = anthropic/claude-opus-5 （複雜）
 - 摘要用 = deepseek/deepseek-v4-flash （便宜）
 - 標題用 = meta-llama/llama-3.1-8b-instruct（便宜快）
+- （無 Haiku）
 
 ## 編輯規則
-- 改 worker 的請求／回應 shape 時，同步檢查 index.html 和 proxy
-- 不要在 worker 或 index.html 硬編碼任何 key 或密碼
+- 改 worker 的請求／回應 shape 時，同步檢查 js/（尤其 chat.js、context.js）和 proxy
+- 不要在 worker 或前端硬編碼任何 key 或密碼
 - engine.js／retirement.js 保持無 I/O（不得 import node:fs 等），否則瀏覽器會壞
 - SHARED_CORE_SYSTEM 很長，改動要謹慎（有 prompt caching 成本）
 - 動任何跟 token 預算、摘要觸發、模型選擇有關的邏輯前，先問我

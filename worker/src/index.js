@@ -1,46 +1,8 @@
 import { SHARED_CORE_SYSTEM, SUMMARIZER_SYSTEM, MODEL_CONFIG, pickModelKey, DEFAULT_MODEL_KEY } from './brain.js';
-
-// ===== 工具函式 =====
-function timingSafeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const enc = new TextEncoder();
-  const aBytes = enc.encode(a);
-  const bBytes = enc.encode(b);
-  if (aBytes.length !== bBytes.length) return false;
-  let diff = 0;
-  for (let i = 0; i < aBytes.length; i++) {
-    diff |= aBytes[i] ^ bBytes[i];
-  }
-  return diff === 0;
-}
-
-// ALLOWED_ORIGIN 可為逗號分隔清單；請求來源在清單內才回傳該來源
-function resolveAllowedOrigin(env, request) {
-  const allowed = (env.ALLOWED_ORIGIN || '*').split(',').map(s => s.trim()).filter(Boolean);
-  if (allowed.includes('*')) return '*';
-  const origin = request.headers.get('Origin');
-  return allowed.includes(origin) ? origin : allowed[0];
-}
-
-function getCorsHeaders(env, request) {
-  return {
-    'Access-Control-Allow-Origin': resolveAllowedOrigin(env, request),
-    'Vary': 'Origin',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-App-Auth',
-    'Access-Control-Expose-Headers': 'X-Used-Model, X-Complexity, X-Task-Tag'
-  };
-}
-
-async function fetchWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { getCorsHeaders } from './cors.js';
+import { isAuthorized } from './auth.js';
+import { mem0Search, mem0Add } from './mem0.js';
+import { callOpenRouterSync, callOpenRouterStream } from './openrouter.js';
 
 function parseSummaryResponse(raw, fallbackSummary) {
   try {
@@ -78,110 +40,6 @@ function buildAttachmentBlock(attachment) {
   return null;
 }
 
-// ===== Mem0 =====
-async function mem0Search(env, query) {
-  if (!env.MEM0_API_KEY || !env.MEM0_USER_ID) return '';
-  try {
-    const r = await fetchWithTimeout('https://api.mem0.ai/v1/memories/search/', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${env.MEM0_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ query, user_id: env.MEM0_USER_ID, limit: 5 })
-    }, 8000);
-
-    const data = await r.json();
-    const list = Array.isArray(data) ? data : (data?.results || data?.result || []);
-    const memories = list.map(x => x.memory || x.text).filter(Boolean);
-
-    if (memories.length > 0) return memories.join('\n');
-    return await mem0GetAll(env);
-  } catch (err) {
-    return '';
-  }
-}
-
-async function mem0GetAll(env) {
-  if (!env.MEM0_API_KEY || !env.MEM0_USER_ID) return '';
-  try {
-    const r = await fetchWithTimeout(`https://api.mem0.ai/v1/memories/?user_id=${env.MEM0_USER_ID}&page_size=10`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Token ${env.MEM0_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    }, 8000);
-    const data = await r.json();
-    const list = Array.isArray(data) ? data : (data?.results || []);
-    return list.map(x => x.memory || x.text).filter(Boolean).join('\n');
-  } catch (err) {
-    return '';
-  }
-}
-
-function mem0Add(env, userText, aiText) {
-  if (!env.MEM0_API_KEY || !env.MEM0_USER_ID) return Promise.resolve();
-  const trimmedAiText = aiText.length > 2000 ? aiText.slice(0, 2000) + '...[內容過長，已截斷]' : aiText;
-  return fetchWithTimeout('https://api.mem0.ai/v1/memories/', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Token ${env.MEM0_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      user_id: env.MEM0_USER_ID,
-      messages: [
-        { role: 'user', content: userText },
-        { role: 'assistant', content: trimmedAiText }
-      ]
-    })
-  }, 10000).catch(err => console.error('Mem0 Add Error:', err));
-}
-
-// ===== OpenRouter 呼叫（經 Vercel proxy）=====
-// ⚠️ OpenRouter API Key 已移至 Vercel 環境變數，此處不再持有
-function buildProxyHeaders(env) {
-  const headers = {
-    'Content-Type': 'application/json'
-  };
-  if (env.PROXY_SECRET) {
-    headers['X-Proxy-Secret'] = env.PROXY_SECRET;
-  }
-  return headers;
-}
-
-async function callOpenRouterSync(env, body, timeoutMs = 55000) {
-  const r = await fetchWithTimeout(env.PROXY_URL || 'https://deep-water-proxy.vercel.app', {
-    method: 'POST',
-    headers: buildProxyHeaders(env),
-    body: JSON.stringify(body)
-  }, timeoutMs);
-
-  if (!r.ok) {
-    const errText = await r.text();
-    throw new Error(`OpenRouter Sync Error (${r.status}): ${errText}`);
-  }
-  return r.json();
-}
-
-async function callOpenRouterStream(env, body) {
-  const response = await fetch(env.PROXY_URL || 'https://deep-water-proxy.vercel.app', {
-    method: 'POST',
-    headers: buildProxyHeaders(env),
-    body: JSON.stringify({ ...body, stream: true })
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenRouter Stream Error (${response.status}): ${errText}`);
-  }
-  return response.body;
-}
-
-// ============================================================
-// 主 Worker
-// ============================================================
 export default {
   async fetch(request, env, ctx) {
     const corsHeaders = getCorsHeaders(env, request);
@@ -206,17 +64,16 @@ export default {
 
     // ===== GET /api/auth-check（前端登入時驗證密碼，不呼叫任何模型）=====
     if (url.pathname === '/api/auth-check' && request.method === 'GET') {
-      const ok = timingSafeEqual(request.headers.get('X-App-Auth'), env.NAME);
+      const ok = isAuthorized(request, env);
       return new Response(JSON.stringify({ ok }), {
         status: ok ? 200 : 401,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
 
-    // ===== /upload 端點（加暗號驗證）=====
+    // ===== /upload（R2；前端目前未使用，保留給日後附件落地）=====
     if (url.pathname === '/upload' && request.method === 'POST') {
-      const clientSecret = request.headers.get('X-App-Auth');
-      if (!timingSafeEqual(clientSecret, env.NAME)) {
+      if (!isAuthorized(request, env)) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
           status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
@@ -248,9 +105,7 @@ export default {
       return new Response('Method not allowed', { status: 405, headers: corsHeaders });
     }
 
-    // ===== 暗號驗證 =====
-    const clientSecret = request.headers.get('X-App-Auth');
-    if (!timingSafeEqual(clientSecret, env.NAME)) {
+    if (!isAuthorized(request, env)) {
       return new Response(JSON.stringify({ error: 'Unauthorized: 暗號不匹配或拒絕存取' }), {
         status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
@@ -259,7 +114,6 @@ export default {
     try {
       const { query, historySummary, lastAiResponse, model, action, attachment, backtestContext } = await request.json();
 
-      // ===== 附件大小檢查 =====
       const MAX_BASE64_LENGTH = 22 * 1024 * 1024;
       if (attachment?.dataUrl && attachment.dataUrl.length > MAX_BASE64_LENGTH) {
         return new Response(JSON.stringify({ error: '附件過大，請上傳 15MB 以內的檔案' }), {
@@ -267,7 +121,6 @@ export default {
         });
       }
 
-      // ===== 生成對話標題（用 Llama 3.1 8B，非 reasoning，便宜快）=====
       if (action === 'generateTitle') {
         if (!query || typeof query !== 'string') {
           return new Response(JSON.stringify({ error: 'Missing query' }), {
@@ -293,7 +146,6 @@ export default {
 
       const attachmentNote = attachment ? `\n【本次訊息附加了檔案：${attachment.filename || '未命名檔案'}，內容將交由正式回答模型處理】` : '';
 
-      // ===== 平行：摘要 + Mem0 檢索 =====
       const [summaryRes, longTermMemory] = await Promise.all([
         callOpenRouterSync(env, {
           model: 'deepseek/deepseek-v4-flash',
@@ -311,14 +163,12 @@ export default {
       const rawSummaryContent = summaryRes?.choices?.[0]?.message?.content || '';
       const { history_summary: newSummary, complexity, task_tag } = parseSummaryResponse(rawSummaryContent, historySummary);
 
-      // ===== 選擇模型（auto 依複雜度，或手動指定）=====
       let selectedModelKey = model;
       if (!selectedModelKey || selectedModelKey === 'auto') {
         selectedModelKey = pickModelKey(complexity);
       }
       const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG['Sonnet-5'];
 
-      // ===== 組裝 System Block =====
       const backtestText = typeof backtestContext === 'string' ? backtestContext.slice(0, MAX_BACKTEST_CONTEXT_CHARS) : '';
       const dynamicContextText = `【長期記憶】：\n${longTermMemory || '（無）'}\n\n【對話背景】：\n${newSummary || '（無）'}\n\n【上一輪回覆】：\n${lastAiResponse || '（無）'}\n\n【目前回測結果】：\n${backtestText || '（尚未回測）'}`;
 
@@ -359,7 +209,6 @@ export default {
 
       const stream = await callOpenRouterStream(env, answerBody);
 
-      // ===== 用 buffer 正確解析跨 chunk 的 SSE =====
       let fullAnswerText = '';
       let sseBuffer = '';
 
@@ -387,7 +236,6 @@ export default {
         }
       });
 
-      // ===== 摘要元資料放在 SSE 第一個 event =====
       const metaEvent = `data: ${JSON.stringify({
         type: 'meta',
         history_summary: newSummary,
