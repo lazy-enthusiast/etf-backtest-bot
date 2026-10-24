@@ -516,6 +516,259 @@
           "note": "以加權指數近似，不含股息；TWD 計價"
         }
       ]
+    },
+    "NTSX": {
+      "name": "WisdomTree U.S. Efficient Core Fund",
+      "index": "90/60 U.S. equity–treasury overlay（近似）",
+      "proxies": [
+        {
+          "symbol": "VTI",
+          "type": "etf",
+          "note": "以全市場股票近似核心曝險（忽略槓桿債券疊加）"
+        },
+        {
+          "symbol": "VTSMX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total Stock Market Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成，1871 起"
+        }
+      ]
+    },
+    "NTSI": {
+      "name": "WisdomTree International Efficient Core Fund",
+      "index": "國際股票＋債券疊加（近似）",
+      "proxies": [
+        {
+          "symbol": "VXUS",
+          "type": "etf",
+          "note": "Vanguard Total International Stock，近似國際股曝險"
+        },
+        {
+          "symbol": "VEURX",
+          "type": "mutual_fund",
+          "note": "Vanguard European Stock Index，較長歷史備援"
+        },
+        {
+          "symbol": "VWIGX",
+          "type": "mutual_fund",
+          "note": "Vanguard International Growth，1981 起"
+        }
+      ]
+    },
+    "NTSE": {
+      "name": "WisdomTree Emerging Markets Efficient Core Fund",
+      "index": "新興市場＋債券疊加（近似）",
+      "proxies": [
+        {
+          "symbol": "VWO",
+          "type": "etf",
+          "note": "Vanguard FTSE Emerging Markets"
+        },
+        {
+          "symbol": "VEIEX",
+          "type": "mutual_fund",
+          "note": "Vanguard Emerging Markets Stock Index Investor"
+        }
+      ]
+    },
+    "SPMO": {
+      "name": "Invesco S&P 500 Momentum ETF",
+      "index": "S&P 500 Momentum",
+      "proxies": [
+        {
+          "symbol": "MTUM",
+          "type": "etf",
+          "note": "iShares MSCI USA Momentum Factor，同風格較長"
+        },
+        {
+          "symbol": "SPY",
+          "type": "etf",
+          "note": "以 S&P 500 近似（忽略動能溢價）"
+        },
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "Vanguard 500 Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成，1871 起"
+        }
+      ]
+    },
+    "AVGV": {
+      "name": "Avantis All Equity Markets Value ETF",
+      "index": "全球價值股（近似）",
+      "proxies": [
+        {
+          "symbol": "VTI",
+          "type": "etf",
+          "note": "以美股全市場近似（價值／國際曝險偏差）"
+        },
+        {
+          "symbol": "VTSMX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total Stock Market Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成，1871 起"
+        }
+      ]
+    },
+    "GLDM": {
+      "name": "SPDR Gold MiniShares Trust",
+      "index": "LBMA Gold Price",
+      "proxies": [
+        {
+          "symbol": "GLD",
+          "type": "etf",
+          "note": "同標的較大份額黃金 ETF"
+        },
+        {
+          "symbol": "GC=F",
+          "type": "futures",
+          "note": "COMEX 黃金期貨連續合約"
+        },
+        {
+          "symbol": "GOLD_SPOT",
+          "type": "synthetic",
+          "note": "歷史現貨金價月度，1833 起"
+        }
+      ]
+    },
+    "MTUM": {
+      "name": "iShares MSCI USA Momentum Factor ETF",
+      "index": "MSCI USA Momentum SR Variant",
+      "proxies": [
+        {
+          "symbol": "SPY",
+          "type": "etf",
+          "note": "以 S&P 500 近似（忽略動能溢價）"
+        },
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "Vanguard 500 Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成，1871 起"
+        }
+      ]
+    },
+    "QUAL": {
+      "name": "iShares MSCI USA Quality Factor ETF",
+      "index": "MSCI USA Sector Neutral Quality",
+      "proxies": [
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似（忽略品質溢價）" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "VLUE": {
+      "name": "iShares MSCI USA Value Factor ETF",
+      "index": "MSCI USA Enhanced Value",
+      "proxies": [
+        { "symbol": "VBR", "type": "etf", "note": "小型價值近似" },
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "SIZE": {
+      "name": "iShares MSCI USA Size Factor ETF",
+      "index": "MSCI USA Low Size",
+      "proxies": [
+        { "symbol": "VB", "type": "etf", "note": "小型股近似" },
+        { "symbol": "IWM", "type": "etf", "note": "羅素 2000 近似" },
+        { "symbol": "NAESX", "type": "mutual_fund", "note": "Vanguard Small-Cap Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成（規模偏差）" }
+      ]
+    },
+    "USMV": {
+      "name": "iShares MSCI USA Min Vol Factor ETF",
+      "index": "MSCI USA Minimum Volatility",
+      "proxies": [
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似（忽略低波溢價）" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "SPHQ": {
+      "name": "Invesco S&P 500 Quality ETF",
+      "index": "S&P 500 Quality",
+      "proxies": [
+        { "symbol": "QUAL", "type": "etf", "note": "品質因子近似" },
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "DGRO": {
+      "name": "iShares Core Dividend Growth ETF",
+      "index": "Morningstar US Dividend Growth",
+      "proxies": [
+        { "symbol": "VIG", "type": "etf", "note": "股利成長近似" },
+        { "symbol": "SCHD", "type": "etf", "note": "高股息近似" },
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "VIG": {
+      "name": "Vanguard Dividend Appreciation ETF",
+      "index": "S&P U.S. Dividend Growers",
+      "proxies": [
+        { "symbol": "SCHD", "type": "etf", "note": "高股息近似" },
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "VT": {
+      "name": "Vanguard Total World Stock ETF",
+      "index": "FTSE Global All Cap",
+      "proxies": [
+        { "symbol": "VTI", "type": "etf", "note": "以美股全市場近似（缺國際）" },
+        { "symbol": "VTSMX", "type": "mutual_fund", "note": "Vanguard Total Stock Market Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成（全球偏差）" }
+      ]
+    },
+    "AVUV": {
+      "name": "Avantis U.S. Small Cap Value ETF",
+      "index": "美股小型價值",
+      "proxies": [
+        { "symbol": "VBR", "type": "etf", "note": "Vanguard Small-Cap Value" },
+        { "symbol": "VB", "type": "etf", "note": "小型股近似" },
+        { "symbol": "NAESX", "type": "mutual_fund", "note": "Vanguard Small-Cap Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成（規模／價值偏差）" }
+      ]
+    },
+    "AVLV": {
+      "name": "Avantis U.S. Large Cap Value ETF",
+      "index": "美股大型價值",
+      "proxies": [
+        { "symbol": "VLUE", "type": "etf", "note": "價值因子近似" },
+        { "symbol": "SPY", "type": "etf", "note": "以 S&P 500 近似" },
+        { "symbol": "VFINX", "type": "mutual_fund", "note": "Vanguard 500 Index Investor" },
+        { "symbol": "US_STOCK_TR", "type": "synthetic", "note": "美股總報酬合成，1871 起" }
+      ]
+    },
+    "AVES": {
+      "name": "Avantis Emerging Markets Value ETF",
+      "index": "新興市場價值",
+      "proxies": [
+        { "symbol": "VWO", "type": "etf", "note": "新興市場寬基近似" },
+        { "symbol": "VEIEX", "type": "mutual_fund", "note": "Vanguard Emerging Markets Stock Index Investor" }
+      ]
     }
   }
 }
