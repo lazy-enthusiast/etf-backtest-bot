@@ -128,24 +128,27 @@
     </section>
   </main>
 
-  <!-- ===== 右 ~1/3：AI 退休顧問 ===== -->
+  <!-- ===== 右 ~1/3：AI 對話 ===== -->
   <section class="advisor">
     <div class="adv-head">
-      <div class="adv-title">
-        <div class="avatar">✦</div>
-        <div><b>AI 退休顧問</b><span class="muted">看得到你的計劃與回測結果</span></div>
-        <span class="spacer"></span>
+      <div class="adv-toolbar">
+        <button type="button" class="adv-settings-toggle" id="advSettingsToggle" aria-expanded="false" aria-controls="advSettingsPanel" title="對話與模型">
+          <span id="advSettingsSummary">對話 · 模型</span>
+          <span class="adv-chevron" aria-hidden="true">▾</span>
+        </button>
         <button class="icon-btn" id="advisorClose" title="關閉" style="display: none;">✕</button>
       </div>
-      <div class="adv-controls">
-        <select id="convSelect" title="對話"></select>
-        <button class="icon-btn" title="新對話">＋</button>
-        <div id="convMenu">
-          <button class="icon-btn" title="更多">⋯</button>
+      <div class="adv-settings" id="advSettingsPanel" hidden>
+        <div class="adv-controls">
+          <select id="convSelect" title="對話"></select>
+          <button class="icon-btn" title="新對話">＋</button>
+          <div id="convMenu">
+            <button class="icon-btn" title="更多">⋯</button>
+          </div>
         </div>
-      </div>
-      <div class="adv-controls">
-        <select id="modelSelect" title="AI 模型"></select>
+        <div class="adv-controls">
+          <select id="modelSelect" title="AI 模型"></select>
+        </div>
       </div>
     </div>
     <div id="messages"></div>

@@ -11,7 +11,7 @@ import { renderDashboard, renderActiveTab } from './dashboard.js';
 import {
   loadModels, newConversation, getActiveConv, renderConvSelect, renderMessages,
   switchConversation, toggleConvMenu, changeModel, sendMessage, handleFileSelect,
-  conversations
+  conversations, toggleAdvSettings, updateAdvSettingsSummary
 } from './chat.js';
 import * as chat from './chat.js';
 
@@ -54,7 +54,11 @@ function bindUi() {
   $('authSubmitBtn')?.addEventListener('click', () => submitAuth());
   $('authInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); });
 
-  $('convSelect')?.addEventListener('change', e => switchConversation(e.target.value));
+  $('advSettingsToggle')?.addEventListener('click', () => toggleAdvSettings());
+  $('convSelect')?.addEventListener('change', e => {
+    switchConversation(e.target.value);
+    updateAdvSettingsSummary();
+  });
   document.querySelectorAll('.adv-controls .icon-btn').forEach(btn => {
     if (btn.title === '新對話') btn.addEventListener('click', () => newConversation());
     if (btn.title === '更多') btn.addEventListener('click', e => toggleConvMenu(e));
@@ -119,6 +123,7 @@ async function init() {
   }
   renderConvSelect();
   renderMessages();
+  updateAdvSettingsSummary();
   if (!getAuth()) showAuthDialog();
   else unlockApp();
 }

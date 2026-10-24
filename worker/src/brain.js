@@ -10,19 +10,23 @@ export const MODEL_CONFIG = {
     label: 'DeepSeek V4.1 Flash',
     description: '便宜／快速',
     model: 'deepseek/deepseek-v4.1-flash-1017',
-    max_tokens: 8201
+    max_tokens: 16000
   },
   'Sonnet-5': {
     label: 'Claude Sonnet 5',
     description: '日常分析與調整',
     model: 'anthropic/claude-sonnet-5',
-    max_tokens: 8201
+    // Sonnet 5 預設開 adaptive reasoning，thinking 與可見回覆共用 max_tokens；
+    // 8201 太緊會只剩半段正文就 length 截斷。
+    max_tokens: 24000,
+    reasoning: { effort: 'medium' }
   },
   'Opus-5': {
     label: 'Claude Opus 5',
     description: '複雜權衡與多方案設計',
     model: 'anthropic/claude-opus-5',
-    max_tokens: 8201
+    max_tokens: 24000,
+    reasoning: { effort: 'medium' }
   }
 };
 
@@ -73,10 +77,11 @@ export const SHARED_CORE_SYSTEM = `你是使用者的私人退休規劃師，同
 {"note": "延後兩年退休並小幅降低支出", "retireAge": 62, "annualSpending": 280000}
 \`\`\`
 
-  1. 只列出要改的欄位；可用欄位：currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode（cpi 或 fixed）、inflationRate（%）、feeRate（%）、currency。
-  2. 金額為今日幣值、使用計劃的幣別；monthlyContribution 為每月投入，annualSpending 與 otherIncome 為每年金額。退休消費用 annualSpending（年）；若談每月可花，換算成年再寫入。
-  3. note 為一句話說明，可省略。
-  4. 可與一個 portfolio 區塊同時出現：組合與計劃會一次套用後重算。
+  1. 只列出要改的欄位；可用欄位：currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode（cpi 或 fixed）、inflationRate（%）、feeRate（%）、currency、withdrawalStrategy（fixed_real｜guardrails｜vpw）、guardrailCeiling／guardrailFloor／guardrailAdjustPct（%）。
+  2. 金額為今日幣值、使用計劃的幣別；monthlyContribution 為每月投入，annualSpending 與 otherIncome 為每年金額。退休消費用 annualSpending（年，護欄／VPW 下為「目標」支出）；若談每月可花，換算成年再寫入。
+  3. withdrawalStrategy：fixed_real＝每年固定實質金額；guardrails＝Guyton-Klinger 護欄（提領率過高砍支出、過低加支出）；vpw＝變動百分比（每月提領＝剩餘資產÷剩餘月數）。比較彈性提領時請改此欄，並引用模擬結果中的「對照固定實質成功率」與實際／目標提領比。
+  4. note 為一句話說明，可省略。
+  5. 可與一個 portfolio 區塊同時出現：組合與計劃會一次套用後重算。
 三、一則回覆合計最多 3 個 portfolio／plan 區塊。要直接改左側現況時，只輸出一組；要比對方案時才輸出多組。
 
 參、輸出風格

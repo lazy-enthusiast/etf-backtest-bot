@@ -124,7 +124,9 @@ OpenRouter  →  Claude / 其他模型
 | `currentAge`／`retireAge`／`endAge` | 歲 |
 | `currentSavings` | 現有投資資產（今日幣值） |
 | `monthlyContribution` | 退休前每月投入 |
-| `annualSpending` | 退休後每年支出（今日幣值） |
+| `annualSpending` | 退休後目標年支出（今日幣值；固定實質＝實際提領，護欄／VPW＝基準） |
+| `withdrawalStrategy` | `fixed_real`｜`guardrails`｜`vpw` |
+| `guardrailCeiling`／`guardrailFloor`／`guardrailAdjustPct` | 護欄法參數（%）；僅 `guardrails` 使用 |
 | `otherIncome`／`otherIncomeAge` | 其他收入與起始年齡 |
 | `inflationMode` | `cpi`（美國 CPI）或 `fixed` |
 | `inflationRate` | 固定通膨 %／年；cpi 缺月時後備 |
@@ -135,7 +137,8 @@ OpenRouter  →  Claude / 其他模型
 
 - 以歷史**每個起始月份**模擬整段計劃（累積期 + 提領期）；歷史不足時用循環序列並標示 `method: "circular"`。
 - 全部以今日幣值（實質）計算：名目月報酬扣費用後再除通膨。
-- 輸出含：`successRate`、`endBalance`、`balanceAtRetire`、`initialWithdrawalRate`、`sustainableSpending`、`withdrawalRates`（SWR／PWR）、`worstRuns`、`bands`、`byStartYear`、`history`。
+- 提領規則：`fixed_real` 每年固定；`guardrails` 每年依提領率相對上下限調整支出；`vpw` 每月提領＝剩餘資產÷剩餘月數。
+- 輸出含：`successRate`、`successRateFixedReal`（彈性規則時對照）、`spendingFlexibility`（實際／目標提領比與達標月份占比）、`endBalance`、`balanceAtRetire`、`initialWithdrawalRate`、`sustainableSpending`（始終為固定實質口徑）、`withdrawalRates`（SWR／PWR）、`worstRuns`、`bands`、`byStartYear`、`history`。
 
 ---
 
@@ -245,10 +248,11 @@ OpenRouter  →  Claude / 其他模型
 ## ` ```plan ` 區塊
 
 ```plan
-{"note": "延後兩年退休並小幅降低支出", "retireAge": 62, "annualSpending": 280000}
+{"note": "改用護欄提領並略降目標支出", "retireAge": 62, "annualSpending": 280000, "withdrawalStrategy": "guardrails"}
 ```
 
 - 只列要改的欄位；金額為今日幣值。
+- 可選 `withdrawalStrategy`：`fixed_real`｜`guardrails`｜`vpw`。
 - 定義在 `brain.js`，解析在 `parsePlanBlock()`。
 - 一則回覆合計最多 3 個 portfolio／plan 區塊。
 

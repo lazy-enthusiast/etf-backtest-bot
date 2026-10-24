@@ -203,6 +203,7 @@ export default {
       };
 
       if (cfg.temperature !== undefined) answerBody.temperature = cfg.temperature;
+      if (cfg.reasoning) answerBody.reasoning = cfg.reasoning;
       if (attachment && attachment.mimeType === 'application/pdf') {
         answerBody.plugins = [{ id: 'file-parser', pdf: { engine: 'native' } }];
       }

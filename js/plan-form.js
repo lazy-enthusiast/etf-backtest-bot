@@ -1,4 +1,4 @@
-import { PLAN_FIELDS, CURRENCIES, STORE } from './config.js';
+import { PLAN_FIELDS, CURRENCIES, STORE, WITHDRAWAL_OPTIONS } from './config.js';
 import { state } from './state.js';
 import { $, el, money, debounce } from './dom.js';
 import { saveJSON } from './storage.js';
@@ -22,6 +22,18 @@ export function renderPlanForm() {
         b.type = 'button';
         b.dataset.value = value;
         b.onclick = () => { state.plan.inflationMode = value; writePlanForm(); onPlanEdited(); };
+        seg.appendChild(b);
+      });
+      field.appendChild(seg);
+    } else if (f.type === 'withdrawal') {
+      const seg = el('div', 'seg');
+      seg.id = 'plan-withdrawalStrategy';
+      WITHDRAWAL_OPTIONS.forEach(({ value, label: text }) => {
+        const b = el('button', '', text);
+        b.type = 'button';
+        b.dataset.value = value;
+        b.title = retirement.WITHDRAWAL_STRATEGIES[value] || text;
+        b.onclick = () => { state.plan.withdrawalStrategy = value; writePlanForm(); onPlanEdited(); };
         seg.appendChild(b);
       });
       field.appendChild(seg);
@@ -60,6 +72,10 @@ export function writePlanForm() {
       $('plan-inflationMode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.value === p.inflationMode));
       continue;
     }
+    if (f.type === 'withdrawal') {
+      $('plan-withdrawalStrategy').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.value === p.withdrawalStrategy));
+      continue;
+    }
     const input = $('plan-' + f.key);
     if (document.activeElement !== input) input.value = p[f.key];
   }
@@ -72,7 +88,7 @@ export function writePlanForm() {
 export function readPlanForm() {
   const p = { ...state.plan };
   for (const f of PLAN_FIELDS) {
-    if (f.type === 'inflation') continue;
+    if (f.type === 'inflation' || f.type === 'withdrawal') continue;
     const v = $('plan-' + f.key).value;
     p[f.key] = f.type === 'currency' ? v : (v === '' ? 0 : Number(v));
   }
@@ -88,7 +104,8 @@ export function renderPlanTimeline() {
   $('planTimelineLabels').innerHTML = '';
   [`${p.currentAge} 歲`, `累積 ${acc} 年 → ${p.retireAge} 歲退休`, `提領 ${p.endAge - p.retireAge} 年 → ${p.endAge} 歲`]
     .forEach(t => $('planTimelineLabels').appendChild(el('span', '', t)));
-  $('planChip').textContent = `${p.currentAge} 歲 · ${p.retireAge} 歲退休 · 規劃至 ${p.endAge} 歲 · 年支出 ${money(p.annualSpending)}`;
+  const strat = ({ fixed_real: '固定', guardrails: '護欄', vpw: 'VPW' })[p.withdrawalStrategy] || '固定';
+  $('planChip').textContent = `${p.currentAge} 歲 · ${p.retireAge} 歲退休 · 至 ${p.endAge} 歲 · ${strat} · 年支出 ${money(p.annualSpending)}`;
 }
 
 const recalcPlanOnly = debounce(() => recalc({ markPrevious: false }), 350);

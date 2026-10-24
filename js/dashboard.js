@@ -53,7 +53,12 @@ export function renderDashboard() {
   $('ringText').textContent = pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0);
   $('kpiSuccessSub').innerHTML = '';
   const pill = el('span', 'pill ' + tone, tone === 'good' ? '穩健' : tone === 'warn' ? '需留意' : '風險高');
-  $('kpiSuccessSub').append(pill, document.createTextNode(` 資產撐到 ${plan.endAge} 歲的歷史比例（${intFmt.format(sim.history.starts)} 個起點）`));
+  const stratLabel = ({ fixed_real: '固定實質', guardrails: '護欄法', vpw: 'VPW' })[plan.withdrawalStrategy] || '固定實質';
+  let successNote = ` ${stratLabel} · 撐到 ${plan.endAge} 歲（${intFmt.format(sim.history.starts)} 起點）`;
+  if (plan.withdrawalStrategy !== 'fixed_real' && Number.isFinite(sim.successRateFixedReal)) {
+    successNote += ` · 固定實質對照 ${pct(sim.successRateFixedReal, 0)}`;
+  }
+  $('kpiSuccessSub').append(pill, document.createTextNode(successNote));
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
 
   const atRetire = sim.balanceAtRetire;
@@ -71,8 +76,9 @@ export function renderDashboard() {
   $('kpiSpend').append(document.createTextNode(compact(monthly)), el('span', 'unit', '/月'));
   $('kpiSpendAnnual').textContent = compact(s95);
   $('kpiSpendSub').innerHTML = '';
+  const spendBasis = plan.withdrawalStrategy !== 'fixed_real' ? '固定實質口徑 · ' : '';
   $('kpiSpendSub').append(
-    document.createTextNode(`95% 成功可持續 · 年 ${compact(s95)} · 目標 ${compact(targetMonthly)}/月 · `),
+    document.createTextNode(`${spendBasis}95% 成功可持續 · 年 ${compact(s95)} · 目標 ${compact(targetMonthly)}/月 · `),
     el('span', gapMonthly >= 0 ? 'delta up' : 'delta down', gapMonthly >= 0 ? `寬裕 ${compact(gapMonthly)}/月` : `不足 ${compact(-gapMonthly)}/月`)
   );
   setDelta('kpiSpendDelta', monthly, prev?.sustainableSpending?.p95 != null ? prev.sustainableSpending.p95 / 12 : null, compact);

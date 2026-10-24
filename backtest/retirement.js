@@ -2,6 +2,12 @@
 // 全部以「今日幣值」（實質金額）計算：名目月報酬先扣費用、再以通膨折算成實質報酬。
 // 投入與支出在每月月初發生，之後套用當月報酬。
 
+export const WITHDRAWAL_STRATEGIES = {
+  fixed_real: '固定實質提領',
+  guardrails: '護欄法（Guyton-Klinger）',
+  vpw: '變動百分比（VPW）'
+};
+
 export const DEFAULT_PLAN = {
   currency: 'HKD',
   currentAge: 40,
@@ -14,7 +20,12 @@ export const DEFAULT_PLAN = {
   otherIncomeAge: 65,
   inflationMode: 'cpi',   // 'cpi' = 美國歷史 CPI；'fixed' = 固定通膨假設
   inflationRate: 2.5,     // %／年；fixed 模式使用，cpi 模式在 CPI 缺月時作後備
-  feeRate: 0.2            // %／年，基金費用與交易成本
+  feeRate: 0.2,           // %／年，基金費用與交易成本
+  withdrawalStrategy: 'fixed_real',
+  // 護欄法：提領率高於上限砍支出、低於下限加支出（每年檢視一次）
+  guardrailCeiling: 6,    // % of portfolio
+  guardrailFloor: 3,
+  guardrailAdjustPct: 10
 };
 
 const PERCENTILES = [10, 25, 50, 75, 90];
@@ -34,6 +45,10 @@ export function normalizePlan(plan) {
   p.inflationRate = Number(p.inflationRate) || 0;
   p.feeRate = Math.max(0, Number(p.feeRate) || 0);
   p.inflationMode = p.inflationMode === 'fixed' ? 'fixed' : 'cpi';
+  p.withdrawalStrategy = WITHDRAWAL_STRATEGIES[p.withdrawalStrategy] ? p.withdrawalStrategy : 'fixed_real';
+  p.guardrailCeiling = Math.min(20, Math.max(1, Number(p.guardrailCeiling) || DEFAULT_PLAN.guardrailCeiling));
+  p.guardrailFloor = Math.min(p.guardrailCeiling - 0.1, Math.max(0.5, Number(p.guardrailFloor) || DEFAULT_PLAN.guardrailFloor));
+  p.guardrailAdjustPct = Math.min(50, Math.max(1, Number(p.guardrailAdjustPct) || DEFAULT_PLAN.guardrailAdjustPct));
   return p;
 }
 
@@ -91,53 +106,81 @@ function withdrawalRates(rs) {
   return { swr: 12 * growth / sumGrowth, pwr: 12 * (growth - 1) / sumGrowth };
 }
 
-/**
- * 以歷史每個起始月份模擬整個人生計劃（累積期 + 提領期）。
- * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
- * @param returns realMonthlyReturns().returns
- */
-export function simulateRetirement(plan, returns) {
-  const p = normalizePlan(plan);
-  const L = returns.length;
-  if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
+/** 當月從投資組合提領的金額（不含其他收入；其他收入另以 inflow 加入）。 */
+function monthWithdrawal(strategy, p, state, balance, k, retireMonth, totalMonths) {
+  if (strategy === 'vpw') {
+    const remaining = totalMonths - k;
+    if (remaining <= 0) return Math.max(0, balance);
+    return Math.max(0, balance / remaining);
+  }
+  if (strategy === 'guardrails') {
+    if ((k - retireMonth) % 12 === 0 && balance > 1e-6) {
+      const wr = state.annualSpend / balance;
+      if (wr > p.guardrailCeiling / 100) state.annualSpend *= 1 - p.guardrailAdjustPct / 100;
+      else if (wr < p.guardrailFloor / 100) state.annualSpend *= 1 + p.guardrailAdjustPct / 100;
+    }
+    return Math.max(0, state.annualSpend / 12);
+  }
+  return p.annualSpending / 12;
+}
 
+/**
+ * 單一提領規則下，對所有歷史起點跑完整人生路徑。
+ * fixed_real 時同時用線性分解算 maxSpending（期末歸零的最大固定年支出）。
+ */
+function runLifePaths(p, returns, strategy) {
+  const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
   const incomeMonth = (p.otherIncomeAge - p.currentAge) * 12;
   const r = Float64Array.from(returns, x => x.r);
-
   const circular = L < totalMonths;
   const starts = circular ? L : L - totalMonths + 1;
   const years = totalMonths / 12;
   const contribution = p.monthlyContribution;
-  const spending = p.annualSpending / 12;
   const income = p.otherIncome / 12;
+  const targetMonthly = p.annualSpending / 12;
+  const trackLinear = strategy === 'fixed_real';
 
   const yearly = Array.from({ length: years + 1 }, () => new Float64Array(starts));
   const runs = new Array(starts);
 
   for (let s = 0; s < starts; s++) {
     let balance = p.currentSavings;
-    let base = p.currentSavings;   // 支出 = 0 時的餘額
-    let perSpend = 0;              // 每 1 單位年支出對期末餘額的影響（線性）
+    let base = p.currentSavings;
+    let perSpend = 0;
     let depletedAt = null;
     let balanceAtRetire = retireMonth === 0 ? balance : NaN;
+    let totalSpent = 0;
+    let targetSpent = 0;
+    let coverageMonths = 0;
+    let retireMonths = 0;
+    const spendState = { annualSpend: p.annualSpending };
     yearly[0][s] = balance;
 
     for (let k = 0; k < totalMonths; k++) {
       const growth = 1 + r[(s + k) % L];
       const inflow = (k < retireMonth ? contribution : 0) + (k >= incomeMonth ? income : 0);
-      base += inflow;
+      if (trackLinear) base += inflow;
       balance += inflow;
+
       if (k >= retireMonth) {
-        perSpend -= 1 / 12;
-        balance -= spending;
+        const withdraw = monthWithdrawal(strategy, p, spendState, balance, k, retireMonth, totalMonths);
+        if (trackLinear) perSpend -= 1 / 12;
+        balance -= withdraw;
+        totalSpent += withdraw;
+        targetSpent += targetMonthly;
+        retireMonths++;
+        if (withdraw + 1e-9 >= targetMonthly * 0.9) coverageMonths++;
         if (balance < -1e-6 && depletedAt === null) depletedAt = k;
         if (balance < 0) balance = 0;
       }
+
       balance *= growth;
-      base *= growth;
-      perSpend *= growth;
+      if (trackLinear) {
+        base *= growth;
+        perSpend *= growth;
+      }
       if (k + 1 === retireMonth) balanceAtRetire = balance;
       if ((k + 1) % 12 === 0) yearly[(k + 1) / 12][s] = balance;
     }
@@ -148,19 +191,42 @@ export function simulateRetirement(plan, returns) {
       depletedAge: depletedAt === null ? null : p.currentAge + depletedAt / 12,
       endBalance: balance,
       balanceAtRetire,
-      // 期末剛好歸零的年支出上限（淨提領始終 >= 0 時精確）
-      maxSpending: perSpend < 0 ? Math.max(0, base / -perSpend) : Infinity
+      maxSpending: trackLinear && perSpend < 0 ? Math.max(0, base / -perSpend) : NaN,
+      spendRatio: targetSpent > 0 ? totalSpent / targetSpent : 1,
+      coverageRate: retireMonths > 0 ? coverageMonths / retireMonths : 1
     };
   }
 
+  return { runs, yearly, starts, circular, years };
+}
+
+/**
+ * 以歷史每個起始月份模擬整個人生計劃（累積期 + 提領期）。
+ * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
+ * @param returns realMonthlyReturns().returns
+ */
+export function simulateRetirement(plan, returns) {
+  const p = normalizePlan(plan);
+  const L = returns.length;
+  if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
+
+  const primary = runLifePaths(p, returns, p.withdrawalStrategy);
+  const needFixedCompare = p.withdrawalStrategy !== 'fixed_real';
+  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real') : primary;
+  const { runs, yearly, starts, circular } = primary;
+
   const successCount = runs.filter(x => x.success).length;
+  const fixedSuccessCount = fixed.runs.filter(x => x.success).length;
   const sortedRuns = runs.slice().sort((a, b) =>
     (a.success - b.success) || ((a.depletedAge ?? Infinity) - (b.depletedAge ?? Infinity)) || (a.endBalance - b.endBalance));
 
   const bands = yearly.map((vals, y) => ({ age: p.currentAge + y, ...summarize(vals) }));
-  const spendQs = summarize(runs.map(x => x.maxSpending), [5, 10, 50]);
+  const spendQs = summarize(fixed.runs.map(x => x.maxSpending).filter(Number.isFinite), [5, 10, 50]);
+  const spendRatioQs = summarize(runs.map(x => x.spendRatio), [10, 50, 90]);
+  const coverageQs = summarize(runs.map(x => x.coverageRate), [10, 50, 90]);
 
-  // 經典提領率分析：只看提領期（退休那一刻的資產為 100%）
+  // 經典提領率分析：只看提領期（退休那一刻的資產為 100%）；與提領規則無關
+  const r = Float64Array.from(returns, x => x.r);
   const horizon = (p.endAge - p.retireAge) * 12;
   const wCircular = L < horizon;
   const wStarts = wCircular ? L : L - horizon + 1;
@@ -191,11 +257,20 @@ export function simulateRetirement(plan, returns) {
       method: circular ? 'circular' : 'rolling',
       starts
     },
+    withdrawalStrategy: p.withdrawalStrategy,
     successRate: successCount / starts,
+    successRateFixedReal: fixedSuccessCount / starts,
     endBalance: summarize(runs.map(x => x.endBalance)),
     balanceAtRetire: retireStats,
     initialWithdrawalRate: retireStats && retireStats.p50 > 0 ? netSpendAtRetire / retireStats.p50 : null,
+    // 可持續支出始終以「固定實質提領」線性解為準，方便跨策略比較目標是否過高
     sustainableSpending: { p100: spendQs.min, p95: spendQs.p5, p90: spendQs.p10, p50: spendQs.p50 },
+    spendingFlexibility: {
+      // 實際累積提領 ÷ 目標累積提領；護欄／VPW 會低於 1 換取較高成功率
+      spendRatio: { p10: spendRatioQs.p10, p50: spendRatioQs.p50, p90: spendRatioQs.p90 },
+      // 單月提領 ≥ 目標 90% 的月份占比
+      coverageRate: { p10: coverageQs.p10, p50: coverageQs.p50, p90: coverageQs.p90 }
+    },
     withdrawalRates: {
       horizonYears: p.endAge - p.retireAge,
       method: wCircular ? 'circular' : 'rolling',
@@ -207,7 +282,11 @@ export function simulateRetirement(plan, returns) {
     worstRuns: sortedRuns.slice(0, 5),
     bands,
     byStartYear: runs.filter(x => x.start.endsWith('-01')).map(x => ({
-      year: Number(x.start.slice(0, 4)), success: x.success, depletedAge: x.depletedAge, endBalance: x.endBalance
+      year: Number(x.start.slice(0, 4)),
+      success: x.success,
+      depletedAge: x.depletedAge,
+      endBalance: x.endBalance,
+      spendRatio: x.spendRatio
     }))
   };
 }

@@ -59,7 +59,7 @@ Proxy 持有：
 - SSE meta event 格式
 - 請求 body 的 backtestContext（字串，Worker 截斷至 12000 字；含計劃參數、退休模擬、組合績效）
 - AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }
-- AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency）+ 可選 note
+- AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency、withdrawalStrategy、guardrailCeiling／Floor／AdjustPct）+ 可選 note
   格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 js/ai-controls.js 的 parsePortfolioBlock()／parsePlanBlock()
 - 單組 portfolio／plan 會自動寫入左側可編輯表單並重算；左側參數仍可手動改後按「重新計算」
 - engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）

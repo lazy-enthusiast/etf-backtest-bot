@@ -73,6 +73,30 @@ export function renderConvSelect() {
     select.appendChild(o);
   });
   select.value = activeId;
+  updateAdvSettingsSummary();
+}
+
+export function updateAdvSettingsSummary() {
+  const node = $('advSettingsSummary');
+  if (!node) return;
+  const conv = getActiveConv();
+  const title = conv?.title || '對話';
+  const modelSel = $('modelSelect');
+  const modelLabel = modelSel?.selectedOptions?.[0]?.textContent?.trim()
+    || modelSel?.value
+    || conv?.model
+    || '模型';
+  node.textContent = `${title} · ${modelLabel}`;
+}
+
+export function toggleAdvSettings() {
+  const panel = $('advSettingsPanel');
+  const btn = $('advSettingsToggle');
+  if (!panel || !btn) return;
+  const open = panel.hasAttribute('hidden');
+  if (open) panel.removeAttribute('hidden');
+  else panel.setAttribute('hidden', '');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 export function toggleConvMenu(e) {
@@ -107,6 +131,7 @@ export function changeModel() {
   if (!conv) return;
   conv.model = $('modelSelect').value;
   saveConversations();
+  updateAdvSettingsSummary();
 }
 
 export function formatTime(ts) {
@@ -190,6 +215,7 @@ export function renderMessages() {
   if (!conv) return;
   $('convSelect').value = conv.id;
   if ($('modelSelect').querySelector(`option[value="${conv.model}"]`)) $('modelSelect').value = conv.model;
+  updateAdvSettingsSummary();
   if (!conv.messages.length) box.appendChild(welcomeEl());
   conv.messages.forEach(m => box.appendChild(buildMessageEl(m, conv)));
   box.scrollTop = box.scrollHeight;

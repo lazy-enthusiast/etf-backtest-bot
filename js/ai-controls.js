@@ -43,14 +43,23 @@ export function parsePlanBlock(text) {
   for (const k of PLAN_NUMERIC_KEYS) if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   if (obj.inflationMode === 'cpi' || obj.inflationMode === 'fixed') changes.inflationMode = obj.inflationMode;
   if (typeof obj.currency === 'string' && /^[A-Z]{3}$/.test(obj.currency)) changes.currency = obj.currency;
+  if (obj.withdrawalStrategy === 'fixed_real' || obj.withdrawalStrategy === 'guardrails' || obj.withdrawalStrategy === 'vpw') {
+    changes.withdrawalStrategy = obj.withdrawalStrategy;
+  }
+  for (const k of ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct']) {
+    if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
+  }
   if (!Object.keys(changes).length) return null;
   return { note: typeof obj.note === 'string' ? obj.note.slice(0, 80) : '', changes };
 }
 
 export function formatPlanValue(key, v) {
   if (['currentSavings', 'monthlyContribution', 'annualSpending', 'otherIncome'].includes(key)) return intFmt.format(v);
-  if (['inflationRate', 'feeRate'].includes(key)) return `${v}%`;
+  if (['inflationRate', 'feeRate', 'guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct'].includes(key)) return `${v}%`;
   if (key === 'inflationMode') return v === 'cpi' ? '美國 CPI' : '固定假設';
+  if (key === 'withdrawalStrategy') {
+    return ({ fixed_real: '固定實質', guardrails: '護欄法', vpw: 'VPW' })[v] || v;
+  }
   if (key.endsWith('Age')) return `${v} 歲`;
   return String(v);
 }
