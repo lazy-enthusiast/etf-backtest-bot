@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-10-24T11:29:41.205Z",
+ "updatedAt": "2026-10-24T15:19:24.605Z",
  "symbols": {
   "0050.TW": {
    "name": "Yuanta/P-shares Taiwan Top 50 ETF",
@@ -42,12 +42,12 @@
    "lastDate": "2026-10-23"
   },
   "CPI_US": {
-   "name": "US CPI (Shiller dataset)",
+   "name": "US CPI-U, not seasonally adjusted (FRED CPIAUCNS; Shiller before 1913)",
    "currency": "USD",
    "instrumentType": "CPI",
    "frequency": "monthly",
    "firstDate": "1871-01-01",
-   "lastDate": "2023-09-01"
+   "lastDate": "2026-09-01"
   },
   "DBC": {
    "name": "Invesco DB Commodity Index Tracking Fund",
@@ -87,6 +87,22 @@
    "instrumentType": "ETF",
    "frequency": "daily",
    "firstDate": "2004-11-18",
+   "lastDate": "2026-10-23"
+  },
+  "GOLD_SPOT": {
+   "name": "LBMA / historical gold spot USD/oz (monthly)",
+   "currency": "USD",
+   "instrumentType": "SYNTHETIC",
+   "frequency": "monthly",
+   "firstDate": "1833-01-01",
+   "lastDate": "2026-09-01"
+  },
+  "GSG": {
+   "name": "iShares S&P GSCI Commodity-Indexed Trust",
+   "currency": "USD",
+   "instrumentType": "ETF",
+   "frequency": "daily",
+   "firstDate": "2006-07-21",
    "lastDate": "2026-10-23"
   },
   "IAU": {
@@ -137,6 +153,14 @@
    "firstDate": "1987-09-10",
    "lastDate": "2026-10-23"
   },
+  "^SPGSCI": {
+   "name": "S&P GSCI",
+   "currency": "USD",
+   "instrumentType": "INDEX",
+   "frequency": "daily",
+   "firstDate": "1984-01-03",
+   "lastDate": "2026-10-23"
+  },
   "^TWII": {
    "name": "TSEC CAPITALIZATION WEIGHTED ST",
    "currency": "TWD",
@@ -167,6 +191,14 @@
    "instrumentType": "ETF",
    "frequency": "daily",
    "firstDate": "2000-05-26",
+   "lastDate": "2026-10-23"
+  },
+  "IYR": {
+   "name": "iShares U.S. Real Estate ETF",
+   "currency": "USD",
+   "instrumentType": "ETF",
+   "frequency": "daily",
+   "firstDate": "2000-06-19",
    "lastDate": "2026-10-23"
   },
   "NAESX": {
@@ -234,20 +266,28 @@
    "lastDate": "2026-10-23"
   },
   "US_10Y_TR": {
-   "name": "US 10-year Treasury total return (synthetic from Shiller long rate)",
+   "name": "US 10-year Treasury total return (synthetic from Shiller/FRED long rate)",
    "currency": "USD",
    "instrumentType": "SYNTHETIC",
    "frequency": "monthly",
    "firstDate": "1871-01-01",
-   "lastDate": "2023-09-01"
+   "lastDate": "2026-10-01"
+  },
+  "US_BILL_TR": {
+   "name": "US 3-month T-bill total return (synthetic from FRED TB3MS)",
+   "currency": "USD",
+   "instrumentType": "SYNTHETIC",
+   "frequency": "monthly",
+   "firstDate": "1934-01-01",
+   "lastDate": "2026-09-01"
   },
   "US_STOCK_TR": {
-   "name": "US stocks total return (Shiller S&P Composite, dividends reinvested)",
+   "name": "US stocks total return (Shiller S&P Composite TR; VFINX after Shiller cutoff)",
    "currency": "USD",
    "instrumentType": "SYNTHETIC",
    "frequency": "monthly",
    "firstDate": "1871-01-01",
-   "lastDate": "2023-06-01"
+   "lastDate": "2026-10-01"
   },
   "VB": {
    "name": "Vanguard Morningstar Small-Cap ETF",
@@ -423,6 +463,14 @@
    "instrumentType": "MUTUALFUND",
    "frequency": "daily",
    "firstDate": "1986-05-19",
+   "lastDate": "2026-10-23"
+  },
+  "VWIGX": {
+   "name": "Vanguard International Growth Inv",
+   "currency": "USD",
+   "instrumentType": "MUTUALFUND",
+   "frequency": "daily",
+   "firstDate": "1981-09-30",
    "lastDate": "2026-10-23"
   },
   "VWO": {

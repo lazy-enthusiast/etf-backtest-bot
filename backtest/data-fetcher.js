@@ -18,7 +18,10 @@ const MAPPING_PATH = path.join(ROOT, 'backtest', 'index-mapping.json');
 
 const YAHOO_CHART = 'https://query2.finance.yahoo.com/v8/finance/chart/';
 const EARLIEST = -2208988800; // 1900-01-01
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+// Yahoo 要較完整 UA；FRED 對長 Chrome UA 會掛住不回應，改用簡短字串
+const YAHOO_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+const FRED_UA = 'etf-backtest-bot/0.1 (+https://github.com/neuy/etf-backtest-bot)';
+const USER_AGENT = YAHOO_UA;
 
 export async function loadMapping() {
   return JSON.parse(await readFile(MAPPING_PATH, 'utf8'));
@@ -90,21 +93,35 @@ const FRED_CPI_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCN
 const FRED_DGS10_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10';
 const FRED_TB3MS_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=TB3MS';
 
-async function fetchWithRetry(url, attempts = 3) {
+// 一次抓完 header+body；避免「header 已回、body 卡住」時 AbortSignal 不再生效
+async function fetchText(url, { timeoutMs = 45000, ua = USER_AGENT } = {}) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': ua }, signal: ac.signal });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, text };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchWithRetry(url, attempts = 3, opts = {}) {
   for (let i = 1; ; i++) {
     try {
-      return await fetch(url, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(60000) });
+      return await fetchText(url, opts);
     } catch (err) {
       if (i >= attempts) throw new Error(`${new URL(url).host}：${err.cause?.code || err.message}`);
-      await new Promise(r => setTimeout(r, 2000 * i));
+      await new Promise(r => setTimeout(r, 1500 * i));
     }
   }
 }
 
 async function fetchFredCsv(url) {
-  const res = await fetchWithRetry(url);
+  // FRED 對長 Chrome UA 會掛住不回 body
+  const res = await fetchWithRetry(url, 3, { ua: FRED_UA, timeoutMs: 30000 });
   if (!res.ok) throw new Error(`FRED：HTTP ${res.status}`);
-  return (await res.text()).trim().split('\n').slice(1)
+  return res.text.trim().split('\n').slice(1)
     .map(line => line.split(','))
     .filter(([, v]) => v && v !== '.' && Number(v) > 0)
     .map(([d, v]) => [d, Number(v)]);
@@ -157,7 +174,7 @@ async function loadShillerRows() {
     shillerRows = (async () => {
       const res = await fetchWithRetry(SHILLER_CSV);
       if (!res.ok) throw new Error(`Shiller CSV：HTTP ${res.status}`);
-      return (await res.text()).trim().split('\n').slice(1).map(line => {
+      return res.text.trim().split('\n').slice(1).map(line => {
         const [date, price, dividend, , cpi, rate] = line.split(',');
         return { date, price: Number(price), dividend: Number(dividend), cpi: Number(cpi), rate: Number(rate) };
       });
@@ -214,12 +231,14 @@ function rollBondTr(rates) {
 }
 
 async function buildUs10yTR(log = console.log) {
+  log('  US_10Y_TR 載入 Shiller…');
   const shillerRates = (await loadShillerRows())
     .filter(r => r.rate > 0)
     .map(r => [r.date, r.rate]);
   let rates = shillerRates;
   let source = 'shiller';
   try {
+    log('  US_10Y_TR 載入 FRED DGS10…');
     const fredDaily = await fetchFredCsv(FRED_DGS10_CSV);
     const fredMonthly = toMonthEnd(fredDaily);
     const lastKey = monthKey(shillerRates.at(-1)[0]);
@@ -251,7 +270,7 @@ async function buildUsBillTR() {
 async function buildGoldSpot(log = console.log) {
   const res = await fetchWithRetry(GOLD_MONTHLY_CSV);
   if (!res.ok) throw new Error(`Gold CSV：HTTP ${res.status}`);
-  let series = (await res.text()).trim().split('\n').slice(1)
+  let series = res.text.trim().split('\n').slice(1)
     .map(line => {
       const [ym, price] = line.split(',');
       const p = Number(price);
@@ -330,9 +349,11 @@ export async function ensureData(symbols, { refresh = false, log = console.log }
     const cached = refresh ? null : await readCached(symbol);
     if (cached) {
       out[symbol] = cached;
+      log(`· ${symbol.padEnd(9)} cache ${cached.firstDate} ~ ${cached.lastDate}`);
       continue;
     }
     try {
+      log(`… ${symbol.padEnd(9)} fetching`);
       const data = SYNTHETIC_BUILDERS[symbol] ? await SYNTHETIC_BUILDERS[symbol](log) : await fetchFromYahoo(symbol);
       await writeCache(data);
       out[symbol] = data;
@@ -365,7 +386,8 @@ async function main(argv) {
   await writeManifest();
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+const isCli = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isCli) {
   main(process.argv.slice(2)).catch(err => {
     console.error(err);
     process.exit(1);
