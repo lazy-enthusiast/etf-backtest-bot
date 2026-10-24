@@ -6,6 +6,12 @@
 
 三層（前端／Worker／Proxy）各有存在理由，不要合併。改請求／回應 shape 時，同步檢查 `js/`（尤其 chat／context／ai-controls）、Worker、Proxy。所有金鑰走環境變數，不要硬編碼。
 
+**文件**
+| 檔案 | 用途 |
+|---|---|
+| [CONTRACTS.md](./CONTRACTS.md)（本檔） | 現行架構、API／資料契約、操作 |
+| [WORK_LOG.md](./WORK_LOG.md) | 精簡開發時間線（為何變成現在這樣） |
+
 ---
 
 ## 系統架構總覽
@@ -64,6 +70,8 @@ OpenRouter  →  Claude / 其他模型
 | `backtest/index-mapping.json` | ETF → 延伸歷史用的替代序列 |
 | `backtest/cli.js` | 終端機回測；`--withdraw` 做提領測試 |
 | `data/` | 僅 SYNTHETIC／CPI 與瘦身 `manifest.json`；一般 ETF 不提交 |
+| `docs/CONTRACTS.md` | 系統契約（本檔） |
+| `docs/WORK_LOG.md` | 開發過程精簡紀錄 |
 | `scripts/dev.js` | 本機一鍵啟動前端 + Worker（服務 index／styles／js／backtest／data） |
 | `worker/src/index.js` | 薄路由（含 `/api/series`）、SSE、組請求 |
 | `worker/src/yahoo.js` | Yahoo 代抓，回傳與 `data/*.json` 同 shape |
@@ -278,3 +286,7 @@ npm run backtest -- "VTI:60,IEF:40" --withdraw 4 --years 30
 ## 如何新增模型
 
 只改 `worker/src/brain.js` 的 `MODEL_CONFIG`（必要時一併改 `DEFAULT_MODEL_KEY`、`pickModelKey`）。前端下次載入會從 `GET /api/models` 同步選單。
+
+## 相關文件
+
+- 開發過程精簡時間線：[WORK_LOG.md](./WORK_LOG.md)
