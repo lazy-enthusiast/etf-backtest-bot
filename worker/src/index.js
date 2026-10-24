@@ -4,6 +4,12 @@ import { isAuthorized } from './auth.js';
 import { mem0Search, mem0Add } from './mem0.js';
 import { callOpenRouterSync, callOpenRouterStream } from './openrouter.js';
 import { fetchFromYahoo, normalizeSymbol, SYMBOL_RE } from './yahoo.js';
+import {
+  skeletonizeLastReply,
+  shouldSkipSummarizer,
+  estimateComplexity,
+  shouldSearchMem0
+} from './context-budget.js';
 
 const SERIES_CACHE_TTL = 86400; // 24h；日線歷史夠用
 
@@ -167,7 +173,18 @@ export default {
     }
 
     try {
-      const { query, historySummary, lastAiResponse, model, action, attachment, backtestContext } = await request.json();
+      const body = await request.json();
+      const {
+        query,
+        historySummary,
+        lastAiResponse,
+        model,
+        action,
+        attachment,
+        backtestContext,
+        backtestUnchanged,
+        lastComplexity
+      } = body;
 
       const MAX_BASE64_LENGTH = 22 * 1024 * 1024;
       if (attachment?.dataUrl && attachment.dataUrl.length > MAX_BASE64_LENGTH) {
@@ -199,24 +216,64 @@ export default {
         });
       }
 
-      const attachmentNote = attachment ? `\n【本次訊息附加了檔案：${attachment.filename || '未命名檔案'}，內容將交由正式回答模型處理】` : '';
+      const lastSkeleton = skeletonizeLastReply(lastAiResponse);
+      const skipSummarizer = shouldSkipSummarizer({
+        query,
+        historySummary,
+        backtestUnchanged: !!backtestUnchanged,
+        hasAttachment: !!attachment
+      });
+      const searchMem0 = shouldSearchMem0(query, {
+        backtestUnchanged: !!backtestUnchanged,
+        skipSummarizer
+      });
 
-      const [summaryRes, longTermMemory] = await Promise.all([
-        callOpenRouterSync(env, {
-          model: 'deepseek/deepseek-v4-flash',
-          temperature: 0.1,
-          top_p: 0.6,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: SUMMARIZER_SYSTEM },
-            { role: 'user', content: `【既有背景】：\n${historySummary || ''}\n【上一輪回覆】：\n${lastAiResponse || ''}\n【用戶本次發言】：\n${query}${attachmentNote}` }
-          ]
-        }),
-        mem0Search(env, query)
-      ]);
+      const attachmentNote = attachment ? `\n【附件】：${attachment.filename || '未命名'}（交由回答模型處理）` : '';
+      const backtestHint = backtestUnchanged
+        ? '【回測】與上輪相同，未重送全文。'
+        : (typeof backtestContext === 'string' && backtestContext
+          ? '【回測】本輪有更新（詳見回答模型脈絡中的回測結果，此處不重複貼全文）。'
+          : '【回測】尚未回測。');
 
-      const rawSummaryContent = summaryRes?.choices?.[0]?.message?.content || '';
-      const { history_summary: newSummary, complexity, task_tag } = parseSummaryResponse(rawSummaryContent, historySummary);
+      let newSummary = historySummary || '';
+      let complexity = estimateComplexity(query, Number.isFinite(lastComplexity) ? lastComplexity : 5);
+      let task_tag = skipSummarizer ? 'continue' : '';
+      let rawSummaryContent = skipSummarizer ? '{"skipped":true}' : '';
+      let longTermMemory = '';
+
+      const mem0Promise = mem0Search(env, query, { skip: !searchMem0 });
+
+      if (!skipSummarizer) {
+        const [summaryRes, mem0Text] = await Promise.all([
+          callOpenRouterSync(env, {
+            model: 'deepseek/deepseek-v4-flash',
+            temperature: 0.1,
+            top_p: 0.6,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: SUMMARIZER_SYSTEM },
+              {
+                role: 'user',
+                content:
+                  `【既有背景】：\n${historySummary || '（無）'}\n\n` +
+                  `【本輪增量】\n` +
+                  `- 用戶意圖：${String(query || '').slice(0, 500)}${attachmentNote}\n` +
+                  `- ${backtestHint}\n` +
+                  `- 上一輪回覆骨架：\n${lastSkeleton}`
+              }
+            ]
+          }),
+          mem0Promise
+        ]);
+        rawSummaryContent = summaryRes?.choices?.[0]?.message?.content || '';
+        const parsed = parseSummaryResponse(rawSummaryContent, historySummary);
+        newSummary = parsed.history_summary;
+        complexity = parsed.complexity;
+        task_tag = parsed.task_tag;
+        longTermMemory = mem0Text;
+      } else {
+        longTermMemory = await mem0Promise;
+      }
 
       let selectedModelKey = model;
       if (!selectedModelKey || selectedModelKey === 'auto') {
@@ -224,8 +281,17 @@ export default {
       }
       const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG['Sonnet-5'];
 
-      const backtestText = typeof backtestContext === 'string' ? backtestContext.slice(0, MAX_BACKTEST_CONTEXT_CHARS) : '';
-      const dynamicContextText = `【長期記憶】：\n${longTermMemory || '（無）'}\n\n【對話背景】：\n${newSummary || '（無）'}\n\n【上一輪回覆】：\n${lastAiResponse || '（無）'}\n\n【目前回測結果】：\n${backtestText || '（尚未回測）'}`;
+      let backtestText;
+      if (backtestUnchanged) {
+        backtestText = '（與上輪相同，未重送。請依對話背景與上一輪骨架中的數字繼續；若需精確數字請使用者重算。）';
+      } else {
+        backtestText = typeof backtestContext === 'string' ? backtestContext.slice(0, MAX_BACKTEST_CONTEXT_CHARS) : '';
+      }
+      const dynamicContextText =
+        `【長期記憶】：\n${longTermMemory || '（無）'}\n\n` +
+        `【對話背景】：\n${newSummary || '（無）'}\n\n` +
+        `【上一輪回覆（骨架）】：\n${lastSkeleton}\n\n` +
+        `【目前回測結果】：\n${backtestText || '（尚未回測）'}`;
 
       const attachmentBlock = buildAttachmentBlock(attachment);
       const userMessageContent = attachmentBlock

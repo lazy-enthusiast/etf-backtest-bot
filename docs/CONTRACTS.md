@@ -47,10 +47,10 @@ OpenRouter  →  Claude / 其他模型
 
 1. 前端啟動時 `GET /api/models`（不帶密碼）填模型選單；若 localStorage 沒有密碼，顯示登入框，以 `GET /api/auth-check` 驗證後存入。
 2. 使用者編輯計劃／組合後重算：`runBacktest` → `realMonthlyReturns` → `simulateRetirement`，結果顯示於儀表板。
-3. 送出時 `POST /`，帶 `X-App-Auth` 與 JSON（query、historySummary、lastAiResponse、model、可選 attachment、backtestContext）。
-4. Worker 驗證後平行跑摘要（deepseek-v4-flash）與 Mem0 檢索。
-5. 依 `complexity` 或使用者指定的 key 選模型，組 system（退休規劃師 prompt + 動態脈絡，含計劃與模擬結果），經 Proxy 向 OpenRouter 串流。
-6. SSE 第一個 event 是 `type: "meta"`；其後是 OpenRouter token。前端把 `history_summary` 寫回 localStorage。
+3. 送出時 `POST /`，帶 `X-App-Auth` 與 JSON（query、historySummary、lastAiResponse、model、可選 attachment、backtestContext／backtestUnchanged、lastComplexity）。
+4. Worker：上一輪回覆先骨架化；回測未變可跳過重送；短續問可跳過摘要；否則差分摘要。Mem0 僅在相關時搜尋（Cache API 約 10 分鐘）。
+5. 依 `complexity` 或使用者指定的 key 選模型，組 system（退休規劃師 prompt + 精簡動態脈絡），經 Proxy 向 OpenRouter 串流。
+6. SSE 第一個 event 是 `type: "meta"`；其後是 OpenRouter token。前端把 `history_summary`、`lastComplexity`、回測 hash 寫回 localStorage。
 7. 前端把回覆中的 ` ```portfolio `／` ```plan ` 區塊渲染成卡片；套用後重算，並可自動送出摘要訊息讓 AI 繼續分析。
 
 ---
@@ -74,6 +74,7 @@ OpenRouter  →  Claude / 其他模型
 | `docs/WORK_LOG.md` | 開發過程精簡紀錄 |
 | `scripts/dev.js` | 本機一鍵啟動前端 + Worker（服務 index／styles／js／backtest／data） |
 | `worker/src/index.js` | 薄路由（含 `/api/series`）、SSE、組請求 |
+| `worker/src/context-budget.js` | 上一輪骨架化、摘要跳過、Mem0 是否搜尋 |
 | `worker/src/yahoo.js` | Yahoo 代抓，回傳與 `data/*.json` 同 shape |
 | `worker/src/cors.js`／`auth.js`／`mem0.js`／`openrouter.js` | CORS、驗證、Mem0、Proxy 呼叫 |
 | `worker/src/brain.js` | 退休規劃師 prompt、摘要 prompt、模型清單、`pickModelKey` |
@@ -170,7 +171,7 @@ OpenRouter  →  Claude / 其他模型
 
 - `WORKER_URL`（`js/config.js`）：本機（`localhost`／`127.0.0.1`）→ `http://127.0.0.1:8787/`；否則 → `https://etf-backtest-worker.davchan-clp.workers.dev/`。
 - 存取密碼：不寫在原始碼。首次使用或 401 時顯示登入框，`GET /api/auth-check` 後存 `localStorage appAuth`。
-- 每則訊息附 `backtestContext`（計劃、退休模擬、組合績效、上一版精簡結果）。
+- 每則訊息附 `backtestContext`（計劃、退休模擬、組合績效、上一版精簡結果）；前端以 SHA-256 指紋偵測未變時改送 `backtestUnchanged: true` 且省略全文。
 - ` ```portfolio ` → `js/ai-controls.js` `parsePortfolioBlock()`；` ```plan ` → `parsePlanBlock()`。單組建議自動寫入左側並重算；多組則顯示卡片供挑選。
 - 模型選單來自 `GET /api/models`：自動／DeepSeek V4.1 Flash／Sonnet 5／Opus 5。自動分流：complexity ≤4 → DeepSeek，≤7 → Sonnet，其餘 → Opus。
 - 直接 `import` `backtest/engine.js`、`retirement.js`（無 `window.RP_MODULES`）。
@@ -179,7 +180,8 @@ OpenRouter  →  Claude / 其他模型
 
 - CORS：`ALLOWED_ORIGIN` 可為逗號分隔清單；請求 `Origin` 在清單內才回傳該來源。
 - `GET /api/models` 公開；`GET /api/auth-check` 驗證密碼。
-- `backtestContext` 截斷至 12000 字，不送給摘要模型。
+- `backtestContext` 截斷至 12000 字；`backtestUnchanged` 時不重送全文。摘要只收增量＋上一輪骨架（見 `context-budget.js`）。
+- 短續問且回測未變可跳過摘要；Mem0 可跳過或走 Cache API。
 - 不持有 `OPENROUTER_API_KEY`；打 Proxy 時帶 `X-Proxy-Secret`。`PROXY_URL` 須含 `/api/chat`。
 
 ### `worker/src/brain.js`
@@ -237,7 +239,7 @@ OpenRouter  →  Claude / 其他模型
 
 需 `X-App-Auth`、`Content-Type: application/json`。
 
-**一般對話** body：`query`、`historySummary`、`lastAiResponse`、`model`、可選 `attachment`、可選 `backtestContext`。回應 `text/event-stream`：
+**一般對話** body：`query`、`historySummary`、`lastAiResponse`、`model`、可選 `attachment`、可選 `backtestContext`、`backtestUnchanged`、`lastComplexity`。回應 `text/event-stream`：
 
 1. `data: {"type":"meta","history_summary","complexity","task_tag","raw_summary","used_model"}`
 2. 其後 OpenRouter SSE

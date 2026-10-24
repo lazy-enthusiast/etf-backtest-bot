@@ -23,6 +23,7 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
 - worker/ → Cloudflare Worker（邏輯層）
   - src/index.js：薄路由（含 GET /api/series）
   - src/yahoo.js：Yahoo chart 代抓（與 data/*.json 同 shape）
+  - src/context-budget.js：上一輪骨架化、摘要跳過、Mem0 條件
   - src/cors.js、auth.js、mem0.js、openrouter.js：CORS、驗證、Mem0、Proxy 呼叫
   - src/brain.js：prompt、MODEL_CONFIG、pickModelKey
 - proxy/ → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方
@@ -83,9 +84,6 @@ Proxy 持有：
 - 回測／模擬數據限制（價格指數不含股息、月度合成平滑波動、幣別未換算、Sharpe 用 rf=0、循環序列、CPI 缺月）要在結果 warnings 或 UI 中揭露，不要悄悄忽略
 
 ## 已知待優化（不要主動改，先問）
-- 摘要每輪都跑，即使內容增量很小
-- historySummary 每輪重送給摘要模型
-- Mem0 search 每輪都打 API，沒快取
-- backtestContext 每輪都送（約 1–3k tokens），未做「結果沒變就不送」
 - 不做匯率換算；Sharpe 未使用真實無風險利率
 - 系統以固定權重回測；下滑路徑僅能當概念建議
+- （已做）摘要跳過／差分、上一輪骨架化、backtest 指紋略過、Mem0 條件搜＋Cache

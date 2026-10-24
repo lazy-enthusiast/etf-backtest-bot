@@ -23,9 +23,10 @@
 
 ## 模型與體驗
 - 動態 `GET /api/models`；自動路由依摘要 complexity。
-- 池：Sonnet／Opus／Haiku、DeepSeek Flash（摘要與可選回答）、標題用小模型。
+- 池：Sonnet／Opus、DeepSeek Flash（摘要與可選回答）、標題用小模型。
 - 對話欄標題精簡；對話／模型選擇預設收起。
-- Sonnet 長回覆：提高 `max_tokens`、可傳 `reasoning`。
+- Sonnet／Opus：`max_tokens` 64k（thinking 與正文共用）；可傳 `reasoning`。
+- 脈絡預算：上一輪骨架化、回測指紋略過未變全文、短續問跳過摘要、摘要差分更新、Mem0 條件搜＋短快取。
 
 ## 退休模擬演進
 - 固定實質提領 → 加 **護欄法（Guyton-Klinger）**、**VPW**；輸出含固定實質對照成功率與實際／目標提領比。

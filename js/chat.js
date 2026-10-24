@@ -49,8 +49,21 @@ export function saveConversations() {
 
 export function getActiveConv() { return conversations.find(c => c.id === activeId); }
 
+async function hashText(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text || ''));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export function newConversation() {
-  const conv = { id: Date.now().toString(), title: '新對話', model: $('modelSelect').value || 'auto', historySummary: '', messages: [] };
+  const conv = {
+    id: Date.now().toString(),
+    title: '新對話',
+    model: $('modelSelect').value || 'auto',
+    historySummary: '',
+    lastBacktestHash: '',
+    lastComplexity: null,
+    messages: []
+  };
   conversations.unshift(conv);
   activeId = conv.id;
   saveConversations();
@@ -321,6 +334,9 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
   state.isSending = true;
   $('sendBtn').disabled = true;
   try {
+    const backtestContext = await buildBacktestContext();
+    const backtestHash = await hashText(backtestContext);
+    const backtestUnchanged = !!(conv.lastBacktestHash && conv.lastBacktestHash === backtestHash);
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
@@ -330,7 +346,9 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
         lastAiResponse,
         model: conv.model,
         attachment: attachment?.kind === 'binary' ? attachment : undefined,
-        backtestContext: await buildBacktestContext()
+        backtestContext: backtestUnchanged ? undefined : backtestContext,
+        backtestUnchanged,
+        lastComplexity: Number.isFinite(conv.lastComplexity) ? conv.lastComplexity : undefined
       })
     });
     if (res.status === 401) {
@@ -368,6 +386,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
           const json = JSON.parse(t.slice(6));
           if (json.type === 'meta') {
             if (json.history_summary) conv.historySummary = json.history_summary;
+            if (Number.isFinite(json.complexity)) conv.lastComplexity = json.complexity;
             botMsg.usedModel = json.used_model || conv.model;
             botMsg.complexity = json.complexity;
             botMsg.taskTag = json.task_tag || '';
@@ -386,6 +405,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     }
     if (!acc) throw new Error('模型沒有回傳內容');
     botMsg.text = acc;
+    conv.lastBacktestHash = backtestHash;
     saveConversations();
     renderMessages();
     await maybeAutoApplyControls(botMsg);
