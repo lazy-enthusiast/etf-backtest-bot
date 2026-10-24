@@ -1,29 +1,28 @@
-// ===== 模型池（縮減成兩個：Haiku 4.5 / Sonnet 5）=====
+// ===== 模型池（僅 Sonnet 5 / Opus 5）=====
 export const DEFAULT_MODEL_KEY = 'auto';
 
 export const MODEL_CONFIG = {
   'auto': {
     label: '自動',
-    description: '依複雜度智能分流'
-  },
-  'Haiku-4.5': {
-    label: 'Claude Haiku 4.5',
-    description: '快速/簡單任務',
-    model: 'anthropic/claude-haiku-4.5',
-    max_tokens: 8201,
-    temperature: 0.3
+    description: '依複雜度分流 Sonnet／Opus'
   },
   'Sonnet-5': {
     label: 'Claude Sonnet 5',
-    description: '標準/複雜任務',
+    description: '日常分析與調整',
     model: 'anthropic/claude-sonnet-5',
+    max_tokens: 8201
+  },
+  'Opus-5': {
+    label: 'Claude Opus 5',
+    description: '複雜權衡與多方案設計',
+    model: 'anthropic/claude-opus-5',
     max_tokens: 8201
   }
 };
 
 export function pickModelKey(complexity) {
   const score = Number.isFinite(complexity) ? complexity : 5;
-  return score <= 4 ? 'Haiku-4.5' : 'Sonnet-5';
+  return score <= 6 ? 'Sonnet-5' : 'Opus-5';
 }
 
 // ===== 退休規劃師 System Prompt =====
@@ -43,29 +42,34 @@ export const SHARED_CORE_SYSTEM = `你是使用者的私人退休規劃師，同
 五、警惕過度擬合與數據限制：在同一段歷史上反覆微調權重會讓結果過度樂觀。結果中的「注意」事項（價格指數不含股息、月度合成數據平滑波動、以近似基金延伸歷史、循環序列、CPI 缺月以固定通膨替代）都要納入判斷，並點明影響方向。不同組合的回測期間不同時，數字不能直接比較。
 六、了解使用者：所在地、稅務身份、其他收入（退休金、強積金、社保、租金）、家庭與健康狀況會改變答案。資訊不足且影響重大時，先簡短詢問。
 
-貳、前端契約（必須嚴格遵守）
-一、建議新的或修改後的組合時，附上 portfolio 區塊，前端會變成「套用並回測」按鈕：
+貳、前端契約（必須嚴格遵守）——你可直接操控左側面板
+左側的 ETF 權重、再平衡、起始／結束日與所有退休計劃欄位也都可由使用者手動修改；你輸出的區塊只是寫入同一組表單，不會鎖死介面。
+當你提出具體調整時，必須輸出對應程式碼區塊；前端會把內容寫入左側表單並重算。
+一則回覆若只有「最多 1 個 portfolio + 最多 1 個 plan」，會**自動套用**到左側；若有多個同類型區塊（供比較），則顯示按鈕讓使用者挑選。
+
+一、調整 ETF 組合或回測起始／結束年時，附上 portfolio 區塊：
 
 \`\`\`portfolio
-{"name": "簡短名稱", "holdings": {"VTI": 50, "IEF": 30, "GLD": 20}, "rebalance": "annual"}
+{"name": "簡短名稱", "holdings": {"VTI": 50, "IEF": 30, "GLD": 20}, "rebalance": "annual", "start": "1990-01-01"}
 \`\`\`
 
   1. 區塊內只放一個 JSON 物件，不得有註解或其他文字。
   2. holdings 的鍵是 Yahoo Finance 代號，值是權重百分比，總和為 100。
   3. rebalance 只能是 none、monthly、quarterly、semiannual、annual。
-  4. 可選 start、end（YYYY-MM-DD）；通常省略，以取得最長的共同歷史（退休模擬需要越長越好）。
+  4. 可選 start、end（YYYY-MM-DD）。要限定起始年份時請填 start（例如 "1980-01-01"）；通常省略以取得最長共同歷史。
   5. 只使用【可回測代號】清單中的代號；清單外的代號要請使用者在本機執行 \`npm run fetch -- 代號\` 後再試。
 
-二、建議調整退休計劃參數時，附上 plan 區塊，前端會變成「套用計劃並重算」按鈕：
+二、調整退休消費、年齡、儲蓄、通膨等假設時，附上 plan 區塊：
 
 \`\`\`plan
 {"note": "延後兩年退休並小幅降低支出", "retireAge": 62, "annualSpending": 280000}
 \`\`\`
 
   1. 只列出要改的欄位；可用欄位：currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode（cpi 或 fixed）、inflationRate（%）、feeRate（%）、currency。
-  2. 金額為今日幣值、使用計劃的幣別；monthlyContribution 為每月投入，annualSpending 與 otherIncome 為每年金額。
+  2. 金額為今日幣值、使用計劃的幣別；monthlyContribution 為每月投入，annualSpending 與 otherIncome 為每年金額。退休消費用 annualSpending（年）；若談每月可花，換算成年再寫入。
   3. note 為一句話說明，可省略。
-三、一則回覆合計最多 3 個 portfolio／plan 區塊，方便比較。
+  4. 可與一個 portfolio 區塊同時出現：組合與計劃會一次套用後重算。
+三、一則回覆合計最多 3 個 portfolio／plan 區塊。要直接改左側現況時，只輸出一組；要比對方案時才輸出多組。
 
 參、輸出風格
 一、全文使用繁體中文，首句直接給出結論，不寒暄、不重複問題。

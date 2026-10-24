@@ -151,7 +151,8 @@ OpenRouter  →  Claude / 其他模型
 - `WORKER_URL`：本機（`localhost`／`127.0.0.1`）→ `http://127.0.0.1:8787/`；否則 → `https://etf-backtest-worker.davchan-clp.workers.dev/`。
 - 存取密碼：不寫在原始碼。首次使用或 401 時顯示登入框，`GET /api/auth-check` 後存 `localStorage appAuth`。
 - 每則訊息附 `backtestContext`（計劃、退休模擬、組合績效、上一版精簡結果）。
-- ` ```portfolio ` → `parsePortfolioBlock()`；` ```plan ` → `parsePlanBlock()`。
+- ` ```portfolio ` → `parsePortfolioBlock()`；` ```plan ` → `parsePlanBlock()`。單組建議自動寫入左側可編輯表單並重算；多組則顯示卡片供挑選。左側參數仍可手動調整後按「重新計算」。
+- 模型選單來自 `GET /api/models`：自動／Sonnet 5／Opus 5（無 Haiku）。
 
 ### `worker/src/index.js`
 

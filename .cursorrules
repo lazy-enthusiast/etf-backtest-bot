@@ -42,7 +42,7 @@ Proxy 持有：
 1. 驗證 X-App-Auth（GET /api/auth-check 供前端登入時驗證）
 2. 平行跑：摘要（deepseek-v4-flash）+ Mem0 檢索
 3. 摘要回傳 JSON：{ history_summary, complexity, task_tag }
-4. 依 complexity 挑模型：<=4 用 Haiku-4.5，>4 用 Sonnet-5
+4. 依 complexity 挑模型：<=6 用 Sonnet-5，>6 用 Opus-5
 5. 組 system block：
  - SHARED_CORE_SYSTEM（退休規劃師 prompt，有 cache_control）
  - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆 + 目前回測／退休模擬結果）
@@ -55,11 +55,12 @@ Proxy 持有：
 - AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }
 - AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency）+ 可選 note
   格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 index.html 的 parsePortfolioBlock()／parsePlanBlock()
+- 單組 portfolio／plan 會自動寫入左側可編輯表單並重算；左側參數仍可手動改後按「重新計算」
 - engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）
 
 ## 模型池
-- Haiku-4.5 = anthropic/claude-haiku-4.5 （輕量任務）
-- Sonnet-5 = anthropic/claude-sonnet-5 （複雜任務）
+- Sonnet-5 = anthropic/claude-sonnet-5 （日常）
+- Opus-5 = anthropic/claude-opus-5 （複雜）
 - 摘要用 = deepseek/deepseek-v4-flash （便宜）
 - 標題用 = meta-llama/llama-3.1-8b-instruct（便宜快）
 

@@ -1475,6 +1475,24 @@ function formatPlanValue(key, v) {
   return String(v);
 }
 
+function extractControlsFromText(text) {
+  const portfolios = [];
+  const plans = [];
+  if (!text) return { portfolios, plans };
+  const re = /```(portfolio|plan)\s*\n([\s\S]*?)```/gi;
+  let m;
+  while ((m = re.exec(text))) {
+    if (m[1].toLowerCase() === 'portfolio') {
+      const pf = parsePortfolioBlock(m[2].trim());
+      if (pf) portfolios.push(pf);
+    } else {
+      const plan = parsePlanBlock(m[2].trim());
+      if (plan) plans.push(plan);
+    }
+  }
+  return { portfolios, plans };
+}
+
 function buildPortfolioCard(pf) {
   const card = el('div', 'action-card');
   card.appendChild(el('div', 'ac-title', '📦 ' + pf.name));
@@ -1485,7 +1503,7 @@ function buildPortfolioCard(pf) {
   card.appendChild(el('div', 'ac-meta', `${REBALANCE_LABELS[pf.rebalance]}${range}`));
   const actions = el('div', 'ac-actions');
   const apply = el('button', 'btn primary', '套用並回測');
-  apply.onclick = () => applyPortfolioFromAi(pf);
+  apply.onclick = () => applyAiControls({ portfolio: pf, notifyAi: true });
   const fill = el('button', 'btn', '只填入組合');
   fill.onclick = () => { writePortfolioForm(pf); state.portfolio = readPortfolioForm(); saveJSON(STORE.portfolio, state.portfolio); toggleAdvisor(false); };
   actions.append(apply, fill);
@@ -1504,7 +1522,7 @@ function buildPlanCard(plan) {
   card.appendChild(chips);
   const actions = el('div', 'ac-actions');
   const apply = el('button', 'btn primary', '套用計劃並重算');
-  apply.onclick = () => applyPlanFromAi(plan);
+  apply.onclick = () => applyAiControls({ plan, notifyAi: true });
   actions.appendChild(apply);
   card.appendChild(actions);
   return card;
@@ -1523,17 +1541,37 @@ async function autoSendAfterApply(what) {
   sendMessage(`已套用${what}並重算：${summaryLine(cur, state.previous)}。請分析結果並繼續改良。`);
 }
 
-async function applyPortfolioFromAi(pf) {
-  writePortfolioForm(pf);
-  const cur = await recalc({ markPrevious: true, label: pf.name });
-  if (cur) autoSendAfterApply(`組合「${pf.name}」`);
+function describeControlApply(portfolio, plan) {
+  const parts = [];
+  if (portfolio) parts.push(`組合「${portfolio.name}」`);
+  if (plan) parts.push(`計劃調整${plan.note ? `「${plan.note}」` : ''}`);
+  return parts.join('與') || 'AI 建議';
 }
 
-async function applyPlanFromAi(plan) {
-  state.plan = { ...state.plan, ...plan.changes };
-  writePlanForm();
-  const cur = await recalc({ markPrevious: true });
-  if (cur) autoSendAfterApply(`計劃調整${plan.note ? `「${plan.note}」` : ''}`);
+async function applyAiControls({ portfolio, plan, notifyAi = false } = {}) {
+  if (!portfolio && !plan) return null;
+  if (plan) {
+    state.plan = { ...state.plan, ...plan.changes };
+    writePlanForm();
+  }
+  if (portfolio) writePortfolioForm(portfolio);
+  const cur = await recalc({ markPrevious: true, label: portfolio?.name });
+  if (!cur) return null;
+  const what = describeControlApply(portfolio, plan);
+  if (notifyAi) autoSendAfterApply(what);
+  else setStatus(`已套用${what}並重算。`);
+  return cur;
+}
+
+/** 單組建議自動寫入左側；多組比較則保留卡片供手動挑選 */
+async function maybeAutoApplyControls(botMsg) {
+  if (!botMsg || botMsg.controlsApplied) return;
+  const { portfolios, plans } = extractControlsFromText(botMsg.text);
+  if (!portfolios.length && !plans.length) return;
+  if (portfolios.length > 1 || plans.length > 1) return;
+  botMsg.controlsApplied = true;
+  saveConversations();
+  await applyAiControls({ portfolio: portfolios[0], plan: plans[0], notifyAi: false });
 }
 
 // ============================================================
@@ -1550,13 +1588,21 @@ async function loadModels() {
   const select = $('modelSelect');
   select.innerHTML = '';
   MODEL_NAMES = {};
+  const keys = new Set();
   (data.models || []).forEach(m => {
     const o = el('option', '', `${m.label}（${m.description}）`);
     o.value = m.key;
     if (m.key === data.default) o.selected = true;
     select.appendChild(o);
     MODEL_NAMES[m.key] = m.label;
+    keys.add(m.key);
   });
+  // 舊對話若選了已移除的模型（例如 Haiku），改回自動
+  let changed = false;
+  conversations.forEach(c => {
+    if (c.model && !keys.has(c.model)) { c.model = data.default || 'auto'; changed = true; }
+  });
+  if (changed) saveConversations();
 }
 
 function saveConversations() {
@@ -1662,9 +1708,9 @@ function welcomeEl() {
   const box = el('div', 'welcome');
   box.appendChild(el('div', '', '✦'));
   box.appendChild(el('h3', '', '你好，我是你的退休顧問'));
-  box.appendChild(el('div', 'small', '我看得到左邊的計劃參數、組合與所有模擬結果。可以直接問，或點下面的問題開始。'));
+  box.appendChild(el('div', 'small', '左側參數可手動改；我也能直接調整 ETF 權重、起始年與退休消費等假設並重算。'));
   const quick = el('div', 'quick');
-  ['評估我目前的退休計劃', '怎樣把成功率提高到 95% 以上？', '幫我設計退休前後的下滑路徑', '最差起始年份當時發生什麼？', '我在香港，稅務與匯率要注意什麼？']
+  ['評估我目前的退休計劃', '把股債改成 70/30 並重算', '起始年改從 1980 開始', '退休年支出降到可達 95% 成功率', '怎樣把成功率提高到 95% 以上？']
     .forEach(q => { const b = el('button', '', q); b.onclick = () => sendMessage(q); quick.appendChild(b); });
   box.appendChild(quick);
   return box;
@@ -1889,8 +1935,10 @@ async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
       }
     }
     if (!acc) throw new Error('模型沒有回傳內容');
+    botMsg.text = acc;
     saveConversations();
     renderMessages();
+    await maybeAutoApplyControls(botMsg);
     if (isFirst) fetchAutoTitle(conv, text, acc);
   } catch (err) {
     conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + err.message, time: Date.now() };
