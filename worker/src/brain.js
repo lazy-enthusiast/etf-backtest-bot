@@ -1,10 +1,16 @@
-// ===== 模型池（僅 Sonnet 5 / Opus 5）=====
+// ===== 模型池（DeepSeek Flash／Sonnet 5／Opus 5）=====
 export const DEFAULT_MODEL_KEY = 'auto';
 
 export const MODEL_CONFIG = {
   'auto': {
     label: '自動',
-    description: '依複雜度分流 Sonnet／Opus'
+    description: '依複雜度分流 DeepSeek／Sonnet／Opus'
+  },
+  'DeepSeek-V4.1-Flash': {
+    label: 'DeepSeek V4.1 Flash',
+    description: '便宜／快速',
+    model: 'deepseek/deepseek-v4.1-flash-1017',
+    max_tokens: 8201
   },
   'Sonnet-5': {
     label: 'Claude Sonnet 5',
@@ -22,7 +28,9 @@ export const MODEL_CONFIG = {
 
 export function pickModelKey(complexity) {
   const score = Number.isFinite(complexity) ? complexity : 5;
-  return score <= 6 ? 'Sonnet-5' : 'Opus-5';
+  if (score <= 4) return 'DeepSeek-V4.1-Flash';
+  if (score <= 7) return 'Sonnet-5';
+  return 'Opus-5';
 }
 
 // ===== 退休規劃師 System Prompt =====

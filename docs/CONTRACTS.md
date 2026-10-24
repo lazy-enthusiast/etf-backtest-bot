@@ -158,7 +158,7 @@ OpenRouter  →  Claude / 其他模型
 - 存取密碼：不寫在原始碼。首次使用或 401 時顯示登入框，`GET /api/auth-check` 後存 `localStorage appAuth`。
 - 每則訊息附 `backtestContext`（計劃、退休模擬、組合績效、上一版精簡結果）。
 - ` ```portfolio ` → `js/ai-controls.js` `parsePortfolioBlock()`；` ```plan ` → `parsePlanBlock()`。單組建議自動寫入左側並重算；多組則顯示卡片供挑選。
-- 模型選單來自 `GET /api/models`：自動／Sonnet 5／Opus 5（無 Haiku）。
+- 模型選單來自 `GET /api/models`：自動／DeepSeek V4.1 Flash／Sonnet 5／Opus 5。自動分流：complexity ≤4 → DeepSeek，≤7 → Sonnet，其餘 → Opus。
 - 直接 `import` `backtest/engine.js`、`retirement.js`（無 `window.RP_MODULES`）。
 
 ### `worker/src/index.js`（+ cors／auth／mem0／openrouter）
