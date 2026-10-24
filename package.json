@@ -1,0 +1,14 @@
+{
+  "name": "etf-backtest-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "fetch": "node backtest/data-fetcher.js",
+    "fetch:all": "node backtest/data-fetcher.js --all",
+    "backtest": "node backtest/cli.js"
+  }
+}

@@ -17,7 +17,7 @@ function timingSafeEqual(a, b) {
 function getCorsHeaders(env) {
   return {
     'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-App-Auth',
     'Access-Control-Expose-Headers': 'X-Used-Model, X-Complexity, X-Task-Tag'
   };
@@ -53,6 +53,7 @@ function parseSummaryResponse(raw, fallbackSummary) {
 }
 
 const SUPPORTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const MAX_BACKTEST_CONTEXT_CHARS = 12000;
 
 function buildAttachmentBlock(attachment) {
   if (!attachment || !attachment.dataUrl) return null;
@@ -194,6 +195,15 @@ export default {
       });
     }
 
+    // ===== GET /api/auth-check（前端登入時驗證密碼，不呼叫任何模型）=====
+    if (url.pathname === '/api/auth-check' && request.method === 'GET') {
+      const ok = timingSafeEqual(request.headers.get('X-App-Auth'), env.NAME);
+      return new Response(JSON.stringify({ ok }), {
+        status: ok ? 200 : 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     // ===== /upload 端點（加暗號驗證）=====
     if (url.pathname === '/upload' && request.method === 'POST') {
       const clientSecret = request.headers.get('X-App-Auth');
@@ -238,7 +248,7 @@ export default {
     }
 
     try {
-      const { query, historySummary, lastAiResponse, model, action, attachment } = await request.json();
+      const { query, historySummary, lastAiResponse, model, action, attachment, backtestContext } = await request.json();
 
       // ===== 附件大小檢查 =====
       const MAX_BASE64_LENGTH = 22 * 1024 * 1024;
@@ -300,7 +310,8 @@ export default {
       const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG['Sonnet-5'];
 
       // ===== 組裝 System Block =====
-      const dynamicContextText = `【長期記憶】：\n${longTermMemory || '（無）'}\n\n【對話背景】：\n${newSummary || '（無）'}\n\n【上一輪回覆】：\n${lastAiResponse || '（無）'}`;
+      const backtestText = typeof backtestContext === 'string' ? backtestContext.slice(0, MAX_BACKTEST_CONTEXT_CHARS) : '';
+      const dynamicContextText = `【長期記憶】：\n${longTermMemory || '（無）'}\n\n【對話背景】：\n${newSummary || '（無）'}\n\n【上一輪回覆】：\n${lastAiResponse || '（無）'}\n\n【目前回測結果】：\n${backtestText || '（尚未回測）'}`;
 
       const attachmentBlock = buildAttachmentBlock(attachment);
       const userMessageContent = attachmentBlock

@@ -1,57 +1,76 @@
-# deep-water — 個人 AI 幕僚 Chatbot
+# etf-backtest-bot — 個人 ETF 回測 + AI 投資組合分析
 
 ## 這是什麼
-一個人用的 AI 幕僚對話系統，專門處理政府部門政策分析、公文產製、決策支援。
-前端是純靜態 HTML，跑在 GitHub Pages。核心邏輯在 Cloudflare Worker。
-因為辦公室無 VPN 無法直連 Claude，透過 Vercel proxy 換出口 IP 繞過封鎖。
+一個人用的 ETF 投資組合回測工具，附 AI 對話框：一邊回測、一邊讓 AI 分析結果並提出改良組合。
+前端是純靜態 HTML，跑在 GitHub Pages；回測引擎在瀏覽器跑，價格資料是 repo 內的靜態 JSON。
+AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換出口 IP、隔離 API key）。
+本 repo 由 deep-water 幕僚 chatbot 改造而來；Worker 名稱已改為 etf-backtest-worker，不要再部署成 deep-water-worker。
 
-## 三層架構（各有存在理由，不要合併）
-- index.html        → 前端 UI（GitHub Pages）。持有 UI 狀態、localStorage 的 historySummary
-- worker/           → Cloudflare Worker（邏輯層）。驗證、摘要、記憶、模型選擇、SSE 串流
-- proxy/            → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方。換出口 IP
+## 架構（各有存在理由，不要合併）
+- index.html → 前端 UI（GitHub Pages）。對話、回測面板、淨值曲線；localStorage 存對話、historySummary、組合、存取密碼
+- backtest/ → 回測引擎與資料工具
+  - engine.js：純計算、無 I/O，Node 與瀏覽器共用（前端以 ES module import）
+  - data-fetcher.js：Node 專用，從 Yahoo Finance 抓調整收盤價寫入 data/，並更新 data/manifest.json
+  - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數），依優先順序
+  - cli.js：終端機回測
+- data/ → 價格快取（提交進 git，由 GitHub Pages 提供給前端）
+- worker/ → Cloudflare Worker（邏輯層）。驗證、摘要、記憶、模型選擇、SSE 串流
+- proxy/ → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方
 
-## 資料流（記住這條線）
-前端 → Worker（X-App-Auth 驗證）→ Proxy（X-Proxy-Secret 驗證）→ OpenRouter → Claude
+## 資料流
+AI：前端 → Worker（X-App-Auth 驗證）→ Proxy（X-Proxy-Secret 驗證）→ OpenRouter → Claude
+回測：前端 fetch data/*.json + backtest/index-mapping.json → engine.js 在瀏覽器計算 → 結果文字化後隨每則訊息以 backtestContext 送給 Worker
+新代號：本機 `npm run fetch -- 代號` → commit data/ → push（瀏覽器無法直接抓 Yahoo，CORS）
 
 ## 環境變數（全部走 env，絕不硬編碼）
 Worker 持有：
-- NAME              = 前端來的 X-App-Auth 暗號（⚠️ 名字取差了，它其實是密鑰）
-- PROXY_URL         = Vercel proxy 的 URL
-- PROXY_SECRET      = 打 proxy 用的密鑰
-- MEM0_API_KEY      = Mem0 的 key
-- MEM0_USER_ID      = 只有我一個人用
-- ALLOWED_ORIGIN    = CORS 允許的來源
-- MY_BUCKET         = R2 bucket（/upload 端點用）
+- NAME = 前端存取密碼（⚠️ 名字取差了，它其實是密鑰）。前端不硬編碼，使用者首次使用時輸入，存在 localStorage
+- PROXY_URL = Vercel proxy 的 URL
+- PROXY_SECRET = 打 proxy 用的密鑰
+- MEM0_API_KEY = Mem0 的 key
+- MEM0_USER_ID = 與 deep-water 分開（避免記憶混用）
+- ALLOWED_ORIGIN = CORS 允許的來源
+- MY_BUCKET = R2 bucket（/upload 端點用，可不綁）
 
 Proxy 持有：
-- PROXY_SECRET         = 驗證 worker 來的請求
-- OPENROUTER_API_KEY   = 唯一持有 OpenRouter key 的地方
+- PROXY_SECRET = 驗證 worker 來的請求
+- OPENROUTER_API_KEY = 唯一持有 OpenRouter key 的地方
 
 ## 核心邏輯（worker/src/index.js）
-1. 驗證 X-App-Auth
+1. 驗證 X-App-Auth（GET /api/auth-check 供前端登入時驗證）
 2. 平行跑：摘要（deepseek-v4-flash）+ Mem0 檢索
 3. 摘要回傳 JSON：{ history_summary, complexity, task_tag }
 4. 依 complexity 挑模型：<=4 用 Haiku-4.5，>4 用 Sonnet-5
 5. 組 system block：
-   - SHARED_CORE_SYSTEM（幕僚 prompt，有 cache_control）
-   - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆）
+ - SHARED_CORE_SYSTEM（投資組合分析師 prompt，有 cache_control）
+ - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆 + 目前回測結果）
 6. 經 proxy 呼叫 OpenRouter，stream 回前端
 7. SSE 第一個 event 是 meta（含新 summary），前端存回 localStorage
 
+## 前後端契約（改了要兩邊同步）
+- SSE meta event 格式
+- 請求 body 的 backtestContext（字串，Worker 截斷至 12000 字）
+- AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }。
+  格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 index.html 的 parsePortfolioBlock()
+- engine.js 的 runBacktest() 輸出 shape（index.html 的 describeResult()/renderBacktestResult() 依賴它）
+
 ## 模型池
-- Haiku-4.5   = anthropic/claude-haiku-4.5   （輕量任務）
-- Sonnet-5    = anthropic/claude-sonnet-5    （複雜任務）
-- 摘要用       = deepseek/deepseek-v4-flash   （便宜）
-- 標題用       = meta-llama/llama-3.1-8b-instruct（便宜快）
+- Haiku-4.5 = anthropic/claude-haiku-4.5 （輕量任務）
+- Sonnet-5 = anthropic/claude-sonnet-5 （複雜任務）
+- 摘要用 = deepseek/deepseek-v4-flash （便宜）
+- 標題用 = meta-llama/llama-3.1-8b-instruct（便宜快）
 
 ## 編輯規則
 - 改 worker 的請求/回應 shape 時，同步檢查 index.html 和 proxy
-- 不要在 worker 或 index.html 硬編碼任何 key
-- SSE 的 meta event 格式是前後端契約，改了要兩邊同步
+- 不要在 worker 或 index.html 硬編碼任何 key 或密碼
+- engine.js 保持無 I/O（不得 import node:fs 等），否則瀏覽器會壞
 - SHARED_CORE_SYSTEM 很長，改動要謹慎（有 prompt caching 成本）
 - 動任何跟 token 預算、摘要觸發、模型選擇有關的邏輯前，先問我
+- 回測數據限制（價格指數不含股息、幣別未換算、Sharpe 用 rf=0）要在結果 warnings 或 UI 中揭露，不要悄悄忽略
 
 ## 已知待優化（不要主動改，先問）
 - 摘要每輪都跑，即使內容增量很小
 - historySummary 每輪重送給摘要模型
 - Mem0 search 每輪都打 API，沒快取
+- backtestContext 每輪都送（約 1–3k tokens），未做「結果沒變就不送」
+- 不做匯率換算；Sharpe 未使用真實無風險利率

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Chatbot</title>
+<title>ETF 回測助手</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js"></script>
@@ -14,6 +14,12 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script type="module">
+import * as engine from './backtest/engine.js';
+window.BacktestEngine = engine;
+window.dispatchEvent(new Event('backtest-engine-ready'));
+</script>
 
 <style>
   * { box-sizing: border-box; }
@@ -84,6 +90,55 @@
   .debugBlock summary:hover { color: var(--text); }
   .debugBlock pre { margin: 6px 0 0; padding: 10px; background: var(--code-bg); color: #abb2bf; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-family: 'Fira Code', Consolas, Monaco, monospace; }
   .debugTag { margin-top: 4px; color: var(--text-light); }
+  .topBtn { padding: 6px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px; }
+  .topBtn:hover { background: var(--hover); }
+  .spacer { flex: 1; }
+
+  #btPanel { width: 420px; flex-shrink: 0; border-left: 1px solid var(--border); background: var(--sidebar-bg); overflow-y: auto; padding: 14px; font-size: 13px; display: flex; flex-direction: column; gap: 12px; }
+  #btPanel.hidden { display: none; }
+  #btPanel h4 { margin: 0 0 8px; font-size: 14px; }
+  .btMuted { color: var(--text-light); font-weight: normal; font-size: 12px; }
+  .btRow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .btRow input, .btControls select, .btControls input { padding: 5px 8px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit; }
+  .btRow .btSym { flex: 1; min-width: 0; text-transform: uppercase; }
+  .btRow .btW { width: 72px; text-align: right; }
+  .btIconBtn { border: none; background: none; color: var(--text-light); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+  .btIconBtn:hover { background: var(--hover); color: var(--text); }
+  .btControls { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; margin-top: 4px; }
+  .btPrimary { padding: 7px 12px; border: none; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-size: 13px; }
+  .btSecondary { padding: 7px 12px; border: 1px solid var(--input-border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; font-size: 13px; }
+  .btPrimary:disabled, .btSecondary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btStatus { color: var(--text-light); font-size: 12px; min-height: 16px; }
+  .btStatus.error { color: var(--error-text); }
+  .btStats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .btStat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+  .btStat .k { color: var(--text-light); font-size: 11px; }
+  .btStat .v { font-size: 15px; font-weight: 600; }
+  .btStat .p { color: var(--text-light); font-size: 11px; }
+  .btChartWrap { position: relative; height: 240px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+  .btTable { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .btTable th, .btTable td { padding: 3px 4px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  .btTable th:first-child, .btTable td:first-child { text-align: left; }
+  .btResult details summary { cursor: pointer; color: var(--text-light); margin: 4px 0; }
+  .btWarnings { margin: 0; padding-left: 18px; color: #b45309; font-size: 12px; }
+  body.dark .btWarnings { color: #fbbf24; }
+  .neg { color: #dc2626; }
+  body.dark .neg { color: #f87171; }
+
+  .pfCard { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin: 8px 0; background: var(--bg); }
+  .pfName { font-weight: 600; margin-bottom: 6px; }
+  .pfHoldings { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .pfChip { background: var(--hover); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+  .pfMeta { font-size: 12px; color: var(--text-light); margin-bottom: 8px; }
+  .pfActions { display: flex; gap: 6px; }
+
+  #authOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  #authOverlay[hidden] { display: none; }
+  .authBox { background: var(--bg); color: var(--text); padding: 24px; border-radius: 12px; width: 360px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+  .authBox h3 { margin: 0; }
+  .authBox p { margin: 0; font-size: 13px; color: var(--text-light); }
+  .authBox input { padding: 10px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--bg); color: var(--text); font-size: 14px; }
+  #authError { color: var(--error-text); font-size: 12px; min-height: 16px; }
 </style>
 </head>
 <body>
@@ -102,6 +157,9 @@
     <label for="modelSelect">AI Model：</label>
     <select id="modelSelect" onchange="changeModel()">
     </select>
+    <span class="spacer"></span>
+    <button class="topBtn" onclick="showAuthDialog()" title="更換存取密碼">🔑 密碼</button>
+    <button class="topBtn" onclick="toggleBacktestPanel()" title="顯示／隱藏回測面板">📈 回測面板</button>
   </div>
   <div id="messages"></div>
   <div id="attachPreview" style="display:none;"></div>
@@ -113,10 +171,94 @@
   </div>
 </div>
 
+<div id="btPanel">
+  <div>
+    <h4>投資組合 <span id="btPfName" class="btMuted"></span></h4>
+    <div id="btHoldings"></div>
+    <div class="btRow">
+      <button class="btSecondary" onclick="addHoldingRow('', '')">+ 新增資產</button>
+      <span class="spacer"></span>
+      <span id="btWeightSum" class="btMuted"></span>
+    </div>
+    <div class="btControls">
+      <label for="btRebalance">再平衡</label>
+      <select id="btRebalance"></select>
+      <label for="btStart">起始日</label>
+      <input type="date" id="btStart" title="留空 = 取最長共同歷史">
+      <label for="btEnd">結束日</label>
+      <input type="date" id="btEnd" title="留空 = 最新">
+    </div>
+    <div class="btRow" style="margin-top: 10px;">
+      <button class="btPrimary" onclick="runBacktestFromPanel()">執行回測</button>
+      <button class="btSecondary" id="btAskBtn" onclick="askAiAboutBacktest()" disabled>請 AI 分析結果</button>
+    </div>
+    <div id="btStatus" class="btStatus"></div>
+  </div>
+  <div id="btResult" class="btResult" hidden></div>
+</div>
+<datalist id="btSymbolList"></datalist>
+
+<div id="authOverlay" hidden>
+  <div class="authBox">
+    <h3>輸入存取密碼</h3>
+    <p>密碼只存在這個瀏覽器（localStorage），不會寫進網頁原始碼。</p>
+    <input type="password" id="authInput" placeholder="存取密碼" autocomplete="current-password">
+    <div id="authError"></div>
+    <button class="btPrimary" id="authSubmitBtn" onclick="submitAuth()">確定</button>
+  </div>
+</div>
+
 <script>
 
-const WORKER_URL = 'https://deep-water-worker.davchan-clp.workers.dev/';
-const NAME = '674039782che2678sgs26784524567819987g1634567wthdy26wg6e384hrfh39';
+const WORKER_URL = ['localhost', '127.0.0.1'].includes(location.hostname)
+  ? 'http://localhost:8787/'
+  : 'https://etf-backtest-worker.davchan-clp.workers.dev/';
+const AUTH_STORAGE_KEY = 'appAuth';
+
+function getAuth() {
+  return localStorage.getItem(AUTH_STORAGE_KEY) || '';
+}
+
+function showAuthDialog(message) {
+  document.getElementById('authError').textContent = message || '';
+  document.getElementById('authOverlay').hidden = false;
+  const input = document.getElementById('authInput');
+  input.value = '';
+  input.focus();
+}
+
+async function submitAuth() {
+  const input = document.getElementById('authInput');
+  const errorEl = document.getElementById('authError');
+  const btn = document.getElementById('authSubmitBtn');
+  const password = input.value.trim();
+  if (!password) return;
+  btn.disabled = true;
+  errorEl.textContent = '驗證中…';
+  try {
+    const res = await fetch(`${WORKER_URL}api/auth-check`, { headers: { 'X-App-Auth': password } });
+    if (res.status === 401) {
+      errorEl.textContent = '密碼錯誤';
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    localStorage.setItem(AUTH_STORAGE_KEY, password);
+    document.getElementById('authOverlay').hidden = true;
+  } catch (e) {
+    errorEl.textContent = '無法連線到 Worker：' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function handleUnauthorized() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  showAuthDialog('密碼已失效，請重新輸入。');
+}
+
+document.getElementById('authInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
+});
 
 let MODEL_NAMES = {};
 
@@ -284,8 +426,13 @@ function renderMarkdownAndFeatures(container, text) {
     });
   }
 
+  container.querySelectorAll('pre code.language-portfolio').forEach((codeBlock) => {
+    const portfolio = parsePortfolioBlock(codeBlock.textContent);
+    if (portfolio) codeBlock.parentElement.replaceWith(buildPortfolioCard(portfolio));
+  });
+
   container.querySelectorAll('pre code').forEach((codeBlock) => {
-    hljs.highlightElement(codeBlock);
+    if (!codeBlock.classList.contains('language-portfolio')) hljs.highlightElement(codeBlock);
 
     const pre = codeBlock.parentElement;
     if (pre.parentElement.classList.contains('codeBlockContainer')) return;
@@ -416,15 +563,17 @@ function renderMessages() {
   document.getElementById('modelSelect').value = conv.model || 'auto';
   conv.messages.forEach(m => box.appendChild(buildMessageEl(m, conv)));
   box.scrollTop = box.scrollHeight;
+  syncBacktestPanel();
 }
 
 async function fetchAutoTitle(conv, userQuery, aiAnswer) {
   try {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Auth': NAME },
+      headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
       body: JSON.stringify({ action: 'generateTitle', query: userQuery, lastAiResponse: aiAnswer })
     });
+    if (res.status === 401) { handleUnauthorized(); return; }
     const data = await res.json();
     if (!res.ok) {
       console.error('標題生成失敗 (HTTP ' + res.status + ')：', data.error || data);
@@ -573,6 +722,7 @@ async function resendLastQuery(conv) {
 async function sendMessage(overrideText) {
   const text = (overrideText !== undefined ? overrideText : inputBox.value.trim());
   if (!text) return;
+  if (!getAuth()) { showAuthDialog(); return; }
   let conv = getActiveConv();
   if (!conv) { newConversation(); conv = getActiveConv(); }
 
@@ -624,22 +774,28 @@ async function _doSend(conv, text, attachmentToSend, lastAiResponse, isFirstMess
     : text;
   const attachmentForRequest = (attachmentToSend && attachmentToSend.kind === 'binary') ? attachmentToSend : undefined;
 
+  isSending = true;
   try {
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-App-Auth': NAME
+        'X-App-Auth': getAuth()
       },
       body: JSON.stringify({
         query: queryToSend,
         historySummary: conv.historySummary || '',
         lastAiResponse: lastAiResponse,
         model: conv.model,
-        attachment: attachmentForRequest
+        attachment: attachmentForRequest,
+        backtestContext: await buildBacktestContext()
       })
     });
 
+    if (res.status === 401) {
+      handleUnauthorized();
+      throw new Error('密碼錯誤或已失效');
+    }
     if (!res.ok) {
       let errText = '請求失敗';
       try {
@@ -725,6 +881,8 @@ async function _doSend(conv, text, attachmentToSend, lastAiResponse, isFirstMess
     conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + err.message, time: Date.now() };
     saveConversations();
     renderMessages();
+  } finally {
+    isSending = false;
   }
 }
 
@@ -732,7 +890,502 @@ inputBox.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-loadModels().then(() => {
+// ============================================================
+// 回測面板（引擎：backtest/engine.js；價格：data/*.json）
+// ============================================================
+let isSending = false;
+
+const REBALANCE_LABELS = { annual: '每年', semiannual: '每半年', quarterly: '每季', monthly: '每月', none: '不再平衡' };
+const DEFAULT_PORTFOLIO = { name: '範例：股債 60/40', holdings: { VTI: 60, BND: 40 }, rebalance: 'annual', start: '', end: '' };
+
+const bt = {
+  meta: null,           // Promise<{ engine, mapping, manifest }>
+  series: new Map(),    // symbol -> Promise<data>
+  panelConvId: undefined,
+  current: null,        // { name, result }
+  previous: null,       // { name, result }
+  chart: null,
+  logScale: true
+};
+
+const pct = x => (x == null || !Number.isFinite(x) ? '—' : `${(x * 100).toFixed(2)}%`);
+const num2 = x => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(2));
+
+function engineReady() {
+  if (window.BacktestEngine) return Promise.resolve(window.BacktestEngine);
+  return new Promise(resolve => window.addEventListener('backtest-engine-ready', () => resolve(window.BacktestEngine), { once: true }));
+}
+
+function loadBacktestMeta() {
+  if (!bt.meta) {
+    bt.meta = Promise.all([
+      engineReady(),
+      fetch('backtest/index-mapping.json').then(r => r.json()),
+      fetch('data/manifest.json').then(r => r.json())
+    ]).then(([engine, mapping, manifest]) => ({ engine, mapping, manifest }));
+    bt.meta.catch(() => { bt.meta = null; });
+  }
+  return bt.meta;
+}
+
+function earliestDate(meta, symbol) {
+  const dates = meta.engine.resolveChain(symbol, meta.mapping)
+    .map(link => meta.manifest.symbols[link.symbol]?.firstDate)
+    .filter(Boolean)
+    .sort();
+  return dates[0] || null;
+}
+
+function backtestableSymbols(meta) {
+  const proxies = new Set(Object.values(meta.mapping.etfs).flatMap(e => e.proxies.map(p => p.symbol.toUpperCase())));
+  const list = new Set(Object.keys(meta.mapping.etfs));
+  for (const s of Object.keys(meta.manifest.symbols)) if (!proxies.has(s)) list.add(s);
+  return [...list].filter(s => earliestDate(meta, s)).sort();
+}
+
+function loadSeries(meta, symbol) {
+  if (!bt.series.has(symbol)) {
+    const p = fetch('data/' + meta.engine.symbolToFile(symbol)).then(r => {
+      if (!r.ok) throw new Error(`無法載入 ${symbol} 價格（HTTP ${r.status}）`);
+      return r.json();
+    });
+    p.catch(() => bt.series.delete(symbol));
+    bt.series.set(symbol, p);
+  }
+  return bt.series.get(symbol);
+}
+
+async function runPortfolioBacktest(pf) {
+  const meta = await loadBacktestMeta();
+  const symbols = Object.keys(pf.holdings);
+  const missing = symbols.filter(s => !earliestDate(meta, s));
+  if (missing.length) {
+    throw new Error(`data/ 沒有 ${missing.join('、')} 的價格。請在本機執行 npm run fetch -- ${missing.join(' ')}，推送後再試。`);
+  }
+  const needed = meta.engine.symbolsNeeded(symbols, meta.mapping).filter(s => meta.manifest.symbols[s]);
+  const loaded = await Promise.all(needed.map(s => loadSeries(meta, s)));
+  const dataBySymbol = Object.fromEntries(needed.map((s, i) => [s, loaded[i]]));
+  return meta.engine.runBacktest({
+    holdings: pf.holdings,
+    rebalance: pf.rebalance,
+    start: pf.start || undefined,
+    end: pf.end || undefined
+  }, meta.mapping, dataBySymbol);
+}
+
+// ----- AI 回覆中的 ```portfolio 區塊 -----
+function parsePortfolioBlock(text) {
+  let obj;
+  try { obj = JSON.parse(text); } catch (e) { return null; }
+  if (!obj || typeof obj.holdings !== 'object' || obj.holdings === null) return null;
+  const holdings = {};
+  for (const [symbol, weight] of Object.entries(obj.holdings)) {
+    const w = Number(weight);
+    const s = String(symbol).trim().toUpperCase();
+    if (s && Number.isFinite(w) && w > 0) holdings[s] = w;
+  }
+  if (!Object.keys(holdings).length) return null;
+  const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  return {
+    name: String(obj.name || 'AI 建議組合').slice(0, 40),
+    holdings,
+    rebalance: REBALANCE_LABELS[obj.rebalance] ? obj.rebalance : 'annual',
+    start: isDate(obj.start) ? obj.start : '',
+    end: isDate(obj.end) ? obj.end : ''
+  };
+}
+
+function buildPortfolioCard(pf) {
+  const card = document.createElement('div');
+  card.className = 'pfCard';
+
+  const name = document.createElement('div');
+  name.className = 'pfName';
+  name.textContent = '📊 ' + pf.name;
+  card.appendChild(name);
+
+  const chips = document.createElement('div');
+  chips.className = 'pfHoldings';
+  for (const [symbol, weight] of Object.entries(pf.holdings)) {
+    const chip = document.createElement('span');
+    chip.className = 'pfChip';
+    chip.textContent = `${symbol} ${weight}%`;
+    chips.appendChild(chip);
+  }
+  card.appendChild(chips);
+
+  const meta = document.createElement('div');
+  meta.className = 'pfMeta';
+  const range = (pf.start || pf.end) ? `；期間 ${pf.start || '最早'} ~ ${pf.end || '最新'}` : '';
+  meta.textContent = `再平衡：${REBALANCE_LABELS[pf.rebalance]}${range}`;
+  card.appendChild(meta);
+
+  const actions = document.createElement('div');
+  actions.className = 'pfActions';
+  const applyBtn = document.createElement('button');
+  applyBtn.className = 'btPrimary';
+  applyBtn.textContent = '套用並回測';
+  applyBtn.onclick = () => applyPortfolioFromAi(pf);
+  const fillBtn = document.createElement('button');
+  fillBtn.className = 'btSecondary';
+  fillBtn.textContent = '只填入面板';
+  fillBtn.onclick = () => { showBacktestPanel(); writePanel(pf); };
+  actions.appendChild(applyBtn);
+  actions.appendChild(fillBtn);
+  card.appendChild(actions);
+  return card;
+}
+
+async function applyPortfolioFromAi(pf) {
+  showBacktestPanel();
+  writePanel(pf);
+  const result = await runBacktestFromPanel();
+  if (!result) return;
+  if (isSending) {
+    setBtStatus('回測完成。AI 仍在回覆中，稍後可按「請 AI 分析結果」。');
+    return;
+  }
+  const s = result.stats;
+  sendMessage(`已套用「${pf.name}」並完成回測（${result.period.start} ~ ${result.period.end}）：CAGR ${pct(s.cagr)}，最大回撤 ${pct(s.maxDrawdown)}，Sharpe ${num2(s.sharpe)}。請分析結果並繼續改良。`);
+}
+
+function askAiAboutBacktest() {
+  if (!bt.current) return;
+  sendMessage(`請分析目前的回測結果（${bt.current.name}），並提出改良建議。`);
+}
+
+// ----- 傳給 AI 的回測脈絡 -----
+function describeResult(name, r, brief) {
+  const s = r.stats;
+  const lines = [
+    `組合：${name}`,
+    `權重：${r.portfolio.holdings.map(h => `${h.symbol} ${(h.weight * 100).toFixed(1)}%`).join('、')}；再平衡：${r.portfolio.rebalance}`,
+    `期間：${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`,
+    `CAGR ${pct(s.cagr)}、年化波動 ${pct(s.volatility)}、Sharpe(rf=0) ${num2(s.sharpe)}、Sortino ${num2(s.sortino)}、Calmar ${num2(s.calmar)}`,
+    `最大回撤 ${pct(s.maxDrawdown)}（${s.peakDate} → ${s.troughDate}，回復：${s.recoveryDate || '尚未回復'}）`
+  ];
+  if (brief) return lines.join('\n');
+
+  lines.push('逐年報酬（* 為不完整年度）：' + r.annualReturns.map(y => `${y.year}${y.partial ? '*' : ''} ${pct(y.return)}`).join('、'));
+  lines.push('各資產（同一期間）：');
+  for (const a of r.assets) {
+    const src = a.dataSources.map(d => `${d.symbol}[${d.type}] ${d.from.slice(0, 4)}~`).join(' ← ');
+    lines.push(`- ${a.symbol}：權重 ${(a.weight * 100).toFixed(1)}%，CAGR ${pct(a.cagr)}，波動 ${pct(a.volatility)}，最大回撤 ${pct(a.maxDrawdown)}；數據：${src}`);
+  }
+  const c = r.correlation;
+  if (c.symbols.length > 1) {
+    lines.push('月報酬相關係數：');
+    c.symbols.forEach((sym, i) => lines.push(`- ${sym}：` + c.symbols.map((other, j) => `${other} ${c.matrix[i][j].toFixed(2)}`).join('、')));
+  }
+  if (r.warnings.length) lines.push('注意：' + r.warnings.join('；'));
+  return lines.join('\n');
+}
+
+async function buildBacktestContext() {
+  const parts = [];
+  try {
+    const meta = await loadBacktestMeta();
+    parts.push('【可回測代號】（括號內為含替代序列後最早可回測年份）：' +
+      backtestableSymbols(meta).map(s => `${s}(${earliestDate(meta, s).slice(0, 4)})`).join('、'));
+  } catch (e) {
+    parts.push('【可回測代號】載入失敗');
+  }
+  if (bt.current) parts.push('【目前組合】\n' + describeResult(bt.current.name, bt.current.result, false));
+  if (bt.previous) parts.push('【上一版組合，供比較】\n' + describeResult(bt.previous.name, bt.previous.result, true));
+  return parts.join('\n\n');
+}
+
+// ----- 面板讀寫 -----
+function addHoldingRow(symbol, weight) {
+  const row = document.createElement('div');
+  row.className = 'btRow';
+  row.innerHTML = '<input class="btSym" list="btSymbolList" placeholder="代號，如 VTI"><input class="btW" type="number" min="0" step="0.5" placeholder="%"><span class="btMuted">%</span><button class="btIconBtn" title="移除">✕</button>';
+  row.querySelector('.btSym').value = symbol;
+  row.querySelector('.btW').value = weight;
+  row.querySelector('button').onclick = () => { row.remove(); onPanelEdited(); };
+  row.querySelectorAll('input').forEach(input => input.addEventListener('input', onPanelEdited));
+  document.getElementById('btHoldings').appendChild(row);
+  updateWeightSum();
+}
+
+function onPanelEdited() {
+  document.getElementById('btPfName').textContent = '（自訂組合）';
+  updateWeightSum();
+}
+
+function updateWeightSum() {
+  const total = [...document.querySelectorAll('#btHoldings .btW')].reduce((a, el) => a + (Number(el.value) || 0), 0);
+  const el = document.getElementById('btWeightSum');
+  el.textContent = `合計 ${Number(total.toFixed(2))}%` + (Math.abs(total - 100) > 0.01 ? '（將按比例正規化）' : '');
+}
+
+function writePanel(pf) {
+  document.getElementById('btHoldings').innerHTML = '';
+  for (const [symbol, weight] of Object.entries(pf.holdings)) addHoldingRow(symbol, weight);
+  document.getElementById('btRebalance').value = pf.rebalance || 'annual';
+  document.getElementById('btStart').value = pf.start || '';
+  document.getElementById('btEnd').value = pf.end || '';
+  document.getElementById('btPfName').textContent = pf.name ? `（${pf.name}）` : '';
+  updateWeightSum();
+}
+
+function readPanel() {
+  const holdings = {};
+  document.querySelectorAll('#btHoldings .btRow').forEach(row => {
+    const symbol = row.querySelector('.btSym').value.trim().toUpperCase();
+    const weight = Number(row.querySelector('.btW').value);
+    if (symbol && weight > 0) holdings[symbol] = (holdings[symbol] || 0) + weight;
+  });
+  const label = document.getElementById('btPfName').textContent.replace(/^（|）$/g, '');
+  return {
+    name: label || '自訂組合',
+    holdings,
+    rebalance: document.getElementById('btRebalance').value,
+    start: document.getElementById('btStart').value,
+    end: document.getElementById('btEnd').value
+  };
+}
+
+function setBtStatus(text, isError) {
+  const el = document.getElementById('btStatus');
+  el.textContent = text;
+  el.classList.toggle('error', Boolean(isError));
+}
+
+async function runBacktestFromPanel() {
+  const pf = readPanel();
+  if (!Object.keys(pf.holdings).length) {
+    setBtStatus('請至少輸入一個代號和權重。', true);
+    return null;
+  }
+  const convId = activeId;
+  setBtStatus('回測中…');
+  try {
+    const result = await runPortfolioBacktest(pf);
+    if (convId !== activeId) return null;
+    if (bt.current) bt.previous = bt.current;
+    bt.current = { name: pf.name, result };
+    const conv = getActiveConv();
+    if (conv) { conv.portfolio = pf; saveConversations(); }
+    renderBacktestResult();
+    setBtStatus(`完成：${result.period.start} ~ ${result.period.end}（${result.period.years.toFixed(1)} 年）`);
+    return result;
+  } catch (e) {
+    setBtStatus('回測失敗：' + e.message, true);
+    return null;
+  }
+}
+
+function syncBacktestPanel() {
+  if (bt.panelConvId === activeId) return;
+  bt.panelConvId = activeId;
+  bt.current = null;
+  bt.previous = null;
+  const conv = getActiveConv();
+  writePanel(conv?.portfolio || DEFAULT_PORTFOLIO);
+  renderBacktestResult();
+  setBtStatus('');
+  if (conv?.portfolio) runBacktestFromPanel();
+}
+
+function showBacktestPanel() {
+  document.getElementById('btPanel').classList.remove('hidden');
+  localStorage.setItem('btPanelHidden', '0');
+}
+
+function toggleBacktestPanel() {
+  const panel = document.getElementById('btPanel');
+  panel.classList.toggle('hidden');
+  localStorage.setItem('btPanelHidden', panel.classList.contains('hidden') ? '1' : '0');
+}
+
+// ----- 結果呈現 -----
+function statCell(label, value, prevValue, isNegativeBad) {
+  const cell = document.createElement('div');
+  cell.className = 'btStat';
+  cell.innerHTML = '<div class="k"></div><div class="v"></div><div class="p"></div>';
+  cell.querySelector('.k').textContent = label;
+  cell.querySelector('.v').textContent = value;
+  if (isNegativeBad) cell.querySelector('.v').classList.add('neg');
+  cell.querySelector('.p').textContent = prevValue != null ? `上一版 ${prevValue}` : '';
+  return cell;
+}
+
+function buildTable(headers, rows) {
+  const table = document.createElement('table');
+  table.className = 'btTable';
+  const head = table.insertRow();
+  headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; head.appendChild(th); });
+  rows.forEach(cells => {
+    const tr = table.insertRow();
+    cells.forEach(c => {
+      const td = tr.insertCell();
+      td.textContent = c.text ?? c;
+      if (c.title) td.title = c.title;
+      if (c.neg) td.classList.add('neg');
+    });
+  });
+  return table;
+}
+
+function renderBacktestResult() {
+  const box = document.getElementById('btResult');
+  document.getElementById('btAskBtn').disabled = !bt.current;
+  if (bt.chart) { bt.chart.destroy(); bt.chart = null; }
+  box.innerHTML = '';
+  if (!bt.current) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const r = bt.current.result;
+  const s = r.stats;
+  const prev = bt.previous?.result.stats;
+  const growth = r.finalValue / r.portfolio.initial;
+
+  const period = document.createElement('div');
+  period.className = 'btMuted';
+  period.textContent = `${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`;
+  box.appendChild(period);
+
+  const stats = document.createElement('div');
+  stats.className = 'btStats';
+  stats.style.marginTop = '8px';
+  stats.appendChild(statCell('CAGR', pct(s.cagr), prev && pct(prev.cagr), s.cagr < 0));
+  stats.appendChild(statCell('年化波動', pct(s.volatility), prev && pct(prev.volatility)));
+  stats.appendChild(statCell('最大回撤', pct(s.maxDrawdown), prev && pct(prev.maxDrawdown), true));
+  stats.appendChild(statCell('Sharpe (rf=0)', num2(s.sharpe), prev && num2(prev.sharpe)));
+  stats.appendChild(statCell('Sortino', num2(s.sortino), prev && num2(prev.sortino)));
+  stats.appendChild(statCell('累積倍數', growth.toFixed(1) + 'x', bt.previous && (bt.previous.result.finalValue / bt.previous.result.portfolio.initial).toFixed(1) + 'x'));
+  box.appendChild(stats);
+
+  const ddNote = document.createElement('div');
+  ddNote.className = 'btMuted';
+  ddNote.style.margin = '6px 0';
+  ddNote.textContent = `最大回撤：${s.peakDate} → ${s.troughDate}，回復：${s.recoveryDate || '尚未回復'}`;
+  box.appendChild(ddNote);
+
+  const chartHeader = document.createElement('div');
+  chartHeader.className = 'btRow';
+  chartHeader.innerHTML = '<strong>淨值曲線</strong><span class="spacer"></span><label class="btMuted"><input type="checkbox" id="btLogScale"> 對數座標</label>';
+  box.appendChild(chartHeader);
+  const logBox = chartHeader.querySelector('#btLogScale');
+  logBox.checked = bt.logScale;
+  logBox.onchange = () => { bt.logScale = logBox.checked; renderBacktestResult(); };
+
+  const chartWrap = document.createElement('div');
+  chartWrap.className = 'btChartWrap';
+  const canvas = document.createElement('canvas');
+  chartWrap.appendChild(canvas);
+  box.appendChild(chartWrap);
+  renderEquityChart(canvas);
+
+  const assetsTitle = document.createElement('h4');
+  assetsTitle.style.marginTop = '12px';
+  assetsTitle.textContent = '個別資產（同一期間）';
+  box.appendChild(assetsTitle);
+  box.appendChild(buildTable(['代號', '權重', 'CAGR', '波動', '最大回撤'], r.assets.map(a => [
+    { text: a.symbol, title: '數據：' + a.dataSources.map(d => `${d.symbol}(${d.from}~)`).join(' ← ') },
+    pct(a.weight), pct(a.cagr), pct(a.volatility), { text: pct(a.maxDrawdown), neg: true }
+  ])));
+
+  const yearly = document.createElement('details');
+  yearly.innerHTML = '<summary>逐年報酬</summary>';
+  yearly.appendChild(buildTable(['年度', '報酬'], r.annualReturns.slice().reverse().map(y => [
+    `${y.year}${y.partial ? '（不完整）' : ''}`, { text: pct(y.return), neg: y.return < 0 }
+  ])));
+  box.appendChild(yearly);
+
+  if (r.correlation.symbols.length > 1) {
+    const corr = document.createElement('details');
+    corr.innerHTML = '<summary>相關係數（月報酬）</summary>';
+    corr.appendChild(buildTable(['', ...r.correlation.symbols], r.correlation.symbols.map((sym, i) => [
+      sym, ...r.correlation.matrix[i].map(v => v.toFixed(2))
+    ])));
+    box.appendChild(corr);
+  }
+
+  if (r.warnings.length) {
+    const ul = document.createElement('ul');
+    ul.className = 'btWarnings';
+    r.warnings.forEach(w => { const li = document.createElement('li'); li.textContent = w; ul.appendChild(li); });
+    box.appendChild(ul);
+  }
+}
+
+function renderEquityChart(canvas) {
+  if (!window.Chart) return;
+  const toPoints = r => r.equityMonthly.map(([d, v]) => ({ x: Date.parse(d), y: v / r.portfolio.initial }));
+  const datasets = [{
+    label: bt.current.name, data: toPoints(bt.current.result),
+    borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 0
+  }];
+  if (bt.previous) {
+    datasets.push({
+      label: '上一版：' + bt.previous.name, data: toPoints(bt.previous.result),
+      borderColor: '#9ca3af', borderWidth: 1.2, borderDash: [4, 3], pointRadius: 0
+    });
+  }
+  const niceLog = v => {
+    const mantissa = v / 10 ** Math.floor(Math.log10(v));
+    return [1, 2, 5].some(n => Math.abs(mantissa - n) < 1e-6) ? `${Number(v.toPrecision(2))}x` : '';
+  };
+  bt.chart = new Chart(canvas, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      parsing: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      scales: {
+        x: {
+          type: 'linear',
+          min: Math.min(...datasets.map(d => d.data[0].x)),
+          max: Math.max(...datasets.map(d => d.data.at(-1).x)),
+          ticks: { maxTicksLimit: 8, callback: v => new Date(v).getUTCFullYear() }
+        },
+        y: bt.logScale
+          ? { type: 'logarithmic', ticks: { callback: niceLog } }
+          : { type: 'linear', ticks: { callback: v => `${v}x` } }
+      },
+      plugins: {
+        legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: items => new Date(items[0].parsed.x).toISOString().slice(0, 7),
+            label: item => `${item.dataset.label}：${item.parsed.y.toFixed(2)}x`
+          }
+        }
+      }
+    }
+  });
+}
+
+function initBacktestPanel() {
+  const select = document.getElementById('btRebalance');
+  for (const [value, label] of Object.entries(REBALANCE_LABELS)) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+  ['btRebalance', 'btStart', 'btEnd'].forEach(id => document.getElementById(id).addEventListener('change', onPanelEdited));
+  if (localStorage.getItem('btPanelHidden') === '1') document.getElementById('btPanel').classList.add('hidden');
+
+  loadBacktestMeta().then(meta => {
+    const list = document.getElementById('btSymbolList');
+    backtestableSymbols(meta).forEach(symbol => {
+      const option = document.createElement('option');
+      option.value = symbol;
+      option.label = `${meta.manifest.symbols[symbol]?.name || meta.mapping.etfs[symbol]?.name || ''}（${earliestDate(meta, symbol).slice(0, 4)} 起）`;
+      list.appendChild(option);
+    });
+  }).catch(err => setBtStatus('載入回測資料失敗：' + err.message, true));
+}
+
+initBacktestPanel();
+if (!getAuth()) showAuthDialog();
+
+loadModels().catch(err => console.error('載入模型清單失敗:', err)).finally(() => {
   if (conversations.length === 0) {
     newConversation();
   } else {
