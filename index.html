@@ -52,10 +52,31 @@ window.dispatchEvent(new Event('rp-modules-ready'));
   .icon-btn:hover { background: var(--surface-2); }
   #advisorToggle { display: none; }
 
-  /* ===== Auth overlay ===== */
-  #authOverlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+  /* ===== Auth gate（未驗證時模糊主介面）===== */
+  body.locked .appbar,
+  body.locked .shell {
+    filter: blur(16px);
+    pointer-events: none;
+    user-select: none;
+  }
+  body.locked::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: none;
+  }
+  #authOverlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(15, 23, 42, 0.25);
+    pointer-events: auto;
+  }
   #authOverlay[hidden] { display: none; }
-  .authBox { background: var(--surface); color: var(--text); padding: 24px; border-radius: 16px; width: min(380px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .authBox { background: var(--surface); color: var(--text); padding: 24px; border-radius: 16px; width: min(380px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); border: 1px solid var(--border); position: relative; z-index: 1; }
   .authBox h3 { margin: 0; font-size: 16px; }
   .authBox p { margin: 0; font-size: 13px; color: var(--muted); }
   .authBox input { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 14px; outline: none; }
@@ -249,7 +270,15 @@ window.dispatchEvent(new Event('rp-modules-ready'));
   }
 </style>
 </head>
-<body>
+<body class="locked">
+<script>
+/* 有既有密碼時，在首屏前解除鎖定，避免已登入者閃一下模糊層 */
+(function () {
+  try {
+    if (localStorage.getItem('appAuth')) document.body.classList.remove('locked');
+  } catch (_) {}
+})();
+</script>
 
 <header class="appbar">
   <div class="brand">
@@ -384,6 +413,12 @@ window.dispatchEvent(new Event('rp-modules-ready'));
     <button class="btn primary" id="authSubmitBtn" onclick="submitAuth()">確定</button>
   </div>
 </div>
+<script>
+/* 未登入：立刻顯示密碼框（此時 body 仍為 locked） */
+if (document.body.classList.contains('locked')) {
+  document.getElementById('authOverlay').hidden = false;
+}
+</script>
 
 <script>
 // ============================================================
@@ -403,7 +438,16 @@ function getAuth() {
   return localStorage.getItem(AUTH_STORAGE_KEY) || '';
 }
 
+function lockApp() {
+  document.body.classList.add('locked');
+}
+
+function unlockApp() {
+  document.body.classList.remove('locked');
+}
+
 function showAuthDialog(message) {
+  lockApp();
   $('authError').textContent = message || '';
   $('authOverlay').hidden = false;
   const input = $('authInput');
@@ -425,6 +469,7 @@ async function submitAuth() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     localStorage.setItem(AUTH_STORAGE_KEY, password);
     $('authOverlay').hidden = true;
+    unlockApp();
   } catch (e) {
     errorEl.textContent = '無法連線到 Worker：' + e.message;
   } finally {
@@ -1780,6 +1825,7 @@ async function init() {
   renderConvSelect();
   renderMessages();
   if (!getAuth()) showAuthDialog();
+  else unlockApp();
 }
 
 init();
