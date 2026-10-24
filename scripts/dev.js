@@ -1,6 +1,6 @@
 // 本機一鍵啟動：靜態前端（只綁 127.0.0.1）+ wrangler dev（Worker）
 // 用法：npm run dev   → 開 http://127.0.0.1:5173
-// 靜態伺服器只提供 index.html、backtest/、data/，其他路徑（含 worker/.dev.vars）一律 404。
+// 靜態伺服器只提供 index.html、styles/、js/、backtest/、data/，其他路徑（含 worker/.dev.vars）一律 404。
 
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -28,7 +28,10 @@ function resolvePublicPath(urlPath) {
   const rel = decodeURIComponent(urlPath.split('?')[0]).replace(/^\/+/, '') || 'index.html';
   const normalized = path.posix.normalize(rel);
   if (normalized.startsWith('..') || normalized.split('/').some(part => part.startsWith('.'))) return null;
-  const allowed = normalized === 'index.html' || /^(backtest|data)\/[^/]+$/.test(normalized);
+  const allowed = normalized === 'index.html'
+    || /^(styles|js)\/[^/]+$/.test(normalized)
+    || /^(backtest|data)\/[^/]+$/.test(normalized)
+    || /^backtest\/fetch\/[^/]+$/.test(normalized);
   return allowed ? path.join(ROOT, normalized) : null;
 }
 
