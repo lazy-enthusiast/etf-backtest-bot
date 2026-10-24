@@ -1,5 +1,5 @@
 {
-  "_doc": "ETF → 歷史延伸用的替代序列（依優先順序）。回測時先用 ETF 自身價格，ETF 上市前的期間依序用 proxies 的日報酬往前拼接。type：mutual_fund = 追蹤同指數的共同基金（含息、已扣費用，最佳）；etf = 另一檔 ETF；total_return_index = 含息指數；price_index = 價格指數（不含股息，報酬會被低估）；synthetic = 合成月度序列（US_STOCK_TR、US_10Y_TR，來自 Shiller 資料集）；futures = 期貨連續合約。",
+  "_doc": "ETF → 歷史延伸用的替代序列（依優先順序）。回測時先用 ETF 自身價格，ETF 上市前的期間依序用 proxies 的日報酬往前拼接。type：mutual_fund = 追蹤同指數的共同基金（含息、已扣費用，最佳）；etf = 另一檔 ETF；total_return_index = 含息指數；price_index = 價格指數（不含股息，報酬會被低估）；synthetic = 合成月度序列（US_STOCK_TR、US_10Y_TR、US_BILL_TR、GOLD_SPOT；來自 Shiller／FRED／datasets）；futures = 期貨連續合約。",
   "etfs": {
     "SPY": {
       "name": "SPDR S&P 500 ETF",
@@ -13,7 +13,7 @@
         {
           "symbol": "US_STOCK_TR",
           "type": "synthetic",
-          "note": "Shiller S&P Composite 含息總報酬，1871 起，月度（月均價，波動被平滑）"
+          "note": "Shiller S&P Composite 含息總報酬，1871 起，月度（月均價，波動被平滑）；近端以 VFINX 銜接"
         }
       ]
     },
@@ -78,6 +78,11 @@
           "symbol": "^NDX",
           "type": "price_index",
           "note": "Nasdaq-100 價格指數，1985 起，不含股息（殖利率低，影響較小）"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "1985 年前以美股總報酬近似（成長股偏差，僅延長歷史）"
         }
       ]
     },
@@ -94,6 +99,11 @@
           "symbol": "^NDX",
           "type": "price_index",
           "note": "不含股息"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "1985 年前以美股總報酬近似"
         }
       ]
     },
@@ -110,6 +120,11 @@
           "symbol": "^RUT",
           "type": "price_index",
           "note": "不含股息"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "1980 年前以美股總報酬近似（小盤偏差）"
         }
       ]
     },
@@ -121,6 +136,16 @@
           "symbol": "NAESX",
           "type": "mutual_fund",
           "note": "Vanguard Small-Cap Index Investor"
+        },
+        {
+          "symbol": "^RUT",
+          "type": "price_index",
+          "note": "Russell 2000 價格指數，近似小盤"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "更早以美股總報酬近似"
         }
       ]
     },
@@ -132,6 +157,16 @@
           "symbol": "VISVX",
           "type": "mutual_fund",
           "note": "Vanguard Small-Cap Value Index Investor，1998 起"
+        },
+        {
+          "symbol": "NAESX",
+          "type": "mutual_fund",
+          "note": "小盤綜合近似"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "更早以美股總報酬近似"
         }
       ]
     },
@@ -143,6 +178,16 @@
           "symbol": "VIVAX",
           "type": "mutual_fund",
           "note": "Vanguard Value Index Investor，1992 起"
+        },
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "以 S&P 500 近似大盤價值"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "更早以美股總報酬近似"
         }
       ]
     },
@@ -154,6 +199,16 @@
           "symbol": "VIGRX",
           "type": "mutual_fund",
           "note": "Vanguard Growth Index Investor，1992 起"
+        },
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "以 S&P 500 近似大盤成長"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "更早以美股總報酬近似"
         }
       ]
     },
@@ -165,6 +220,16 @@
           "symbol": "VYM",
           "type": "etf",
           "note": "Vanguard High Dividend Yield ETF，2006 起，不同指數，僅近似"
+        },
+        {
+          "symbol": "VFINX",
+          "type": "mutual_fund",
+          "note": "以 S&P 500 近似美股（股息策略偏差）"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "更早以美股總報酬近似"
         }
       ]
     },
@@ -176,6 +241,11 @@
           "symbol": "VGTSX",
           "type": "mutual_fund",
           "note": "Vanguard Total International Stock Index Investor，1996 起"
+        },
+        {
+          "symbol": "VWIGX",
+          "type": "mutual_fund",
+          "note": "Vanguard International Growth，1981 起，主動成長型，僅延長歷史"
         }
       ]
     },
@@ -192,6 +262,11 @@
           "symbol": "VGTSX",
           "type": "mutual_fund",
           "note": "含新興市場，近似"
+        },
+        {
+          "symbol": "VWIGX",
+          "type": "mutual_fund",
+          "note": "國際成長基金，1981 起，僅延長歷史"
         }
       ]
     },
@@ -203,6 +278,11 @@
           "symbol": "VGTSX",
           "type": "mutual_fund",
           "note": "含新興市場，近似"
+        },
+        {
+          "symbol": "VWIGX",
+          "type": "mutual_fund",
+          "note": "國際成長基金，1981 起，僅延長歷史"
         }
       ]
     },
@@ -316,6 +396,11 @@
           "symbol": "VFISX",
           "type": "mutual_fund",
           "note": "Vanguard Short-Term Treasury Investor，1991 起"
+        },
+        {
+          "symbol": "US_BILL_TR",
+          "type": "synthetic",
+          "note": "3 個月國庫券合成總報酬（FRED TB3MS），1934 起；存續期短於 SHY"
         }
       ]
     },
@@ -326,7 +411,7 @@
         {
           "symbol": "VIPSX",
           "type": "mutual_fund",
-          "note": "Vanguard Inflation-Protected Securities Investor，2000 起"
+          "note": "Vanguard Inflation-Protected Securities Investor，2000 起（TIPS 市場約 1997 才出現）"
         }
       ]
     },
@@ -338,6 +423,11 @@
           "symbol": "VGSIX",
           "type": "mutual_fund",
           "note": "Vanguard REIT Index Investor，1996 起"
+        },
+        {
+          "symbol": "IYR",
+          "type": "etf",
+          "note": "iShares US Real Estate，2000 起（較短，僅備援）"
         }
       ]
     },
@@ -349,6 +439,11 @@
           "symbol": "GC=F",
           "type": "futures",
           "note": "COMEX 黃金期貨連續合約，2000 起"
+        },
+        {
+          "symbol": "GOLD_SPOT",
+          "type": "synthetic",
+          "note": "歷史現貨金價月度（datasets/gold-prices），1833 起"
         }
       ]
     },
@@ -365,6 +460,27 @@
           "symbol": "GC=F",
           "type": "futures",
           "note": "COMEX 黃金期貨連續合約"
+        },
+        {
+          "symbol": "GOLD_SPOT",
+          "type": "synthetic",
+          "note": "歷史現貨金價月度，1833 起"
+        }
+      ]
+    },
+    "DBC": {
+      "name": "Invesco DB Commodity Index Tracking Fund",
+      "index": "DBIQ Optimum Yield Diversified Commodity",
+      "proxies": [
+        {
+          "symbol": "GSG",
+          "type": "etf",
+          "note": "iShares S&P GSCI Commodity，近似廣基商品"
+        },
+        {
+          "symbol": "^SPGSCI",
+          "type": "price_index",
+          "note": "S&P GSCI 現貨指數，1984 起，不含滾倉收益"
         }
       ]
     },

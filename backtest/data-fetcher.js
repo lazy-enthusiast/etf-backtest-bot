@@ -1,8 +1,9 @@
-// 從 Yahoo Finance 抓日線調整收盤價（含股息/分割調整），快取到 data/*.json。
+// 從公開免費來源抓歷史價格，快取到 data/*.json。
 // 用法：
 //   node backtest/data-fetcher.js SPY TLT GLD   # 抓指定 ETF 及其替代序列
 //   node backtest/data-fetcher.js --all         # 抓 index-mapping.json 內全部代號 + CPI_US
-//   US_STOCK_TR / US_10Y_TR / CPI_US 為合成月度序列（Shiller 資料集、FRED），其餘走 Yahoo
+//   合成月度：US_STOCK_TR / US_10Y_TR / US_BILL_TR / GOLD_SPOT / CPI_US（Shiller、FRED、datasets）
+//   其餘走 Yahoo Finance adj close
 //   加 --refresh 強制重抓；加 --no-proxies 只抓 ETF 本身
 
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
@@ -81,10 +82,13 @@ async function writeCache(data) {
   await writeFile(path.join(DATA_DIR, symbolToFile(data.symbol)), JSON.stringify(data));
 }
 
-// ===== 合成長期序列（月度）：Shiller 資料集 + FRED CPI =====
+// ===== 合成長期序列（月度）：Shiller + FRED + datasets =====
 // Shiller 的 S&P 價格是月均價，回撤與波動會被平滑；只作為 ETF／共同基金上市前的延伸。
 const SHILLER_CSV = 'https://raw.githubusercontent.com/datasets/s-and-p-500/main/data/data.csv';
+const GOLD_MONTHLY_CSV = 'https://raw.githubusercontent.com/datasets/gold-prices/main/data/monthly.csv';
 const FRED_CPI_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCNS';
+const FRED_DGS10_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10';
+const FRED_TB3MS_CSV = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=TB3MS';
 
 async function fetchWithRetry(url, attempts = 3) {
   for (let i = 1; ; i++) {
@@ -95,6 +99,56 @@ async function fetchWithRetry(url, attempts = 3) {
       await new Promise(r => setTimeout(r, 2000 * i));
     }
   }
+}
+
+async function fetchFredCsv(url) {
+  const res = await fetchWithRetry(url);
+  if (!res.ok) throw new Error(`FRED：HTTP ${res.status}`);
+  return (await res.text()).trim().split('\n').slice(1)
+    .map(line => line.split(','))
+    .filter(([, v]) => v && v !== '.' && Number(v) > 0)
+    .map(([d, v]) => [d, Number(v)]);
+}
+
+// 日線 → 每月最後一筆，日期正規成 YYYY-MM-01
+function toMonthEnd(series) {
+  const byMonth = new Map();
+  for (const [d, p] of series) {
+    if (!(p > 0)) continue;
+    const key = d.slice(0, 7);
+    byMonth.set(key, [key + '-01', p]);
+  }
+  return [...byMonth.values()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function monthKey(date) {
+  return date.slice(0, 7);
+}
+
+function appendByReturns(base, extender) {
+  if (!extender?.length || !base?.length) return { series: base, extended: false };
+  const lastKey = monthKey(base.at(-1)[0]);
+  const monthly = toMonthEnd(extender);
+  const after = monthly.filter(([d]) => monthKey(d) > lastKey);
+  if (after.length < 2) return { series: base, extended: false };
+
+  let level = base.at(-1)[1];
+  const out = base.slice();
+  // 找到 extender 上「對齊 base 最後一個月」的錨點，再往後滾報酬
+  let anchorIdx = monthly.findIndex(([d]) => monthKey(d) === lastKey);
+  if (anchorIdx < 0) {
+    // 無同月錨點：用第一個晚於 lastKey 的點當起點，先對齊 level 再跳過該點
+    anchorIdx = monthly.findIndex(([d]) => monthKey(d) > lastKey);
+    if (anchorIdx < 0) return { series: base, extended: false };
+  }
+  for (let i = anchorIdx + 1; i < monthly.length; i++) {
+    const prev = monthly[i - 1][1];
+    const cur = monthly[i][1];
+    if (!(prev > 0) || !(cur > 0)) continue;
+    level *= cur / prev;
+    out.push([monthly[i][0], Number(level.toPrecision(10))]);
+  }
+  return { series: out, extended: out.length > base.length };
 }
 
 let shillerRows = null;
@@ -120,44 +174,113 @@ function syntheticRecord(symbol, name, source, series) {
   };
 }
 
-async function buildUsStockTR() {
+async function buildUsStockTR(log = console.log) {
   const rows = (await loadShillerRows()).filter(r => r.price > 0 && r.dividend > 0);
   let level = 100;
-  const series = [[rows[0].date, level]];
+  let series = [[rows[0].date, level]];
   for (let i = 1; i < rows.length; i++) {
     level *= (rows[i].price + rows[i].dividend / 12) / rows[i - 1].price;
     series.push([rows[i].date, Number(level.toPrecision(10))]);
   }
-  return syntheticRecord('US_STOCK_TR', 'US stocks total return (Shiller S&P Composite, dividends reinvested)', 'shiller', series);
+  let source = 'shiller';
+  try {
+    const vfinx = await fetchFromYahoo('VFINX');
+    const { series: ext, extended } = appendByReturns(series, vfinx.series);
+    if (extended) {
+      series = ext;
+      source = 'shiller+vfinx';
+      log(`  US_STOCK_TR 以 VFINX 月報酬延伸至 ${series.at(-1)[0]}`);
+    }
+  } catch (err) {
+    log(`! US_STOCK_TR 無法以 VFINX 延伸（${err.message}），只用 Shiller 至 ${series.at(-1)[0]}`);
+  }
+  return syntheticRecord('US_STOCK_TR', 'US stocks total return (Shiller S&P Composite TR; VFINX after Shiller cutoff)', source, series);
 }
 
 // 每月買入平價 10 年期國債（票息 = 上月殖利率），一個月後以新殖利率、剩餘 119 個月重新定價
-async function buildUs10yTR() {
-  const rows = (await loadShillerRows()).filter(r => r.rate > 0);
+function rollBondTr(rates) {
   let level = 100;
-  const series = [[rows[0].date, level]];
-  for (let i = 1; i < rows.length; i++) {
-    const coupon = rows[i - 1].rate / 100 / 12;
-    const y = rows[i].rate / 100 / 12;
+  const series = [[rates[0][0], level]];
+  for (let i = 1; i < rates.length; i++) {
+    const coupon = rates[i - 1][1] / 100 / 12;
+    const y = rates[i][1] / 100 / 12;
+    if (!(y > 0)) continue;
     const discount = (1 + y) ** -119;
     const price = coupon * (1 - discount) / y + discount;
     level *= price + coupon;
-    series.push([rows[i].date, Number(level.toPrecision(10))]);
+    series.push([rates[i][0], Number(level.toPrecision(10))]);
   }
-  return syntheticRecord('US_10Y_TR', 'US 10-year Treasury total return (synthetic from Shiller long rate)', 'shiller', series);
+  return series;
 }
 
-// FRED CPIAUCNS（1913 起）為主，1913 年前以 Shiller CPI 按比例銜接；FRED 連不上時只用 Shiller（至 2023 年）
+async function buildUs10yTR(log = console.log) {
+  const shillerRates = (await loadShillerRows())
+    .filter(r => r.rate > 0)
+    .map(r => [r.date, r.rate]);
+  let rates = shillerRates;
+  let source = 'shiller';
+  try {
+    const fredDaily = await fetchFredCsv(FRED_DGS10_CSV);
+    const fredMonthly = toMonthEnd(fredDaily);
+    const lastKey = monthKey(shillerRates.at(-1)[0]);
+    const extra = fredMonthly.filter(([d]) => monthKey(d) > lastKey);
+    if (extra.length) {
+      rates = shillerRates.concat(extra);
+      source = 'shiller+fred_dgs10';
+      log(`  US_10Y_TR 以 FRED DGS10 延伸至 ${rates.at(-1)[0]}`);
+    }
+  } catch (err) {
+    log(`! US_10Y_TR 無法以 FRED DGS10 延伸（${err.message}）`);
+  }
+  return syntheticRecord('US_10Y_TR', 'US 10-year Treasury total return (synthetic from Shiller/FRED long rate)', source, rollBondTr(rates));
+}
+
+// 3 個月國庫券近似月報酬（FRED TB3MS，1934 起）
+async function buildUsBillTR() {
+  const rows = await fetchFredCsv(FRED_TB3MS_CSV);
+  let level = 100;
+  const series = [[rows[0][0], level]];
+  for (let i = 1; i < rows.length; i++) {
+    level *= 1 + rows[i - 1][1] / 100 / 12;
+    series.push([rows[i][0], Number(level.toPrecision(10))]);
+  }
+  return syntheticRecord('US_BILL_TR', 'US 3-month T-bill total return (synthetic from FRED TB3MS)', 'fred_tb3ms', series);
+}
+
+// LBMA／歷史金價月度（datasets/gold-prices，1833 起）；近端以 GC=F 日線月報酬銜接
+async function buildGoldSpot(log = console.log) {
+  const res = await fetchWithRetry(GOLD_MONTHLY_CSV);
+  if (!res.ok) throw new Error(`Gold CSV：HTTP ${res.status}`);
+  let series = (await res.text()).trim().split('\n').slice(1)
+    .map(line => {
+      const [ym, price] = line.split(',');
+      const p = Number(price);
+      if (!ym || !(p > 0)) return null;
+      const date = ym.length === 7 ? `${ym}-01` : ym;
+      return [date, p];
+    })
+    .filter(Boolean);
+  let source = 'datasets/gold-prices';
+  try {
+    const fut = await fetchFromYahoo('GC=F');
+    const { series: ext, extended } = appendByReturns(series, fut.series);
+    if (extended) {
+      series = ext;
+      source = 'datasets/gold-prices+gc=f';
+      log(`  GOLD_SPOT 以 GC=F 月報酬延伸至 ${series.at(-1)[0]}`);
+    }
+  } catch (err) {
+    log(`! GOLD_SPOT 無法以 GC=F 延伸（${err.message}）`);
+  }
+  return syntheticRecord('GOLD_SPOT', 'LBMA / historical gold spot USD/oz (monthly)', source, series);
+}
+
+// FRED CPIAUCNS（1913 起）為主，1913 年前以 Shiller CPI 按比例銜接；FRED 連不上時只用 Shiller
 async function buildCpiUs(log = console.log) {
   const shiller = (await loadShillerRows()).filter(r => r.cpi > 0).map(r => [r.date, r.cpi]);
   let fred = null;
   try {
-    const res = await fetchWithRetry(FRED_CPI_CSV, 2);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    fred = (await res.text()).trim().split('\n').slice(1)
-      .map(line => line.split(','))
-      .filter(([, v]) => Number(v) > 0)
-      .map(([d, v]) => [d, Number(v)]);
+    fred = await fetchFredCsv(FRED_CPI_CSV);
   } catch (err) {
     log(`! CPI_US    FRED 無法連線（${err.message}），只用 Shiller CPI`);
   }
@@ -175,7 +298,13 @@ async function buildCpiUs(log = console.log) {
   return record;
 }
 
-const SYNTHETIC_BUILDERS = { US_STOCK_TR: buildUsStockTR, US_10Y_TR: buildUs10yTR, CPI_US: buildCpiUs };
+const SYNTHETIC_BUILDERS = {
+  US_STOCK_TR: buildUsStockTR,
+  US_10Y_TR: buildUs10yTR,
+  US_BILL_TR: buildUsBillTR,
+  GOLD_SPOT: buildGoldSpot,
+  CPI_US: buildCpiUs
+};
 
 // data/manifest.json：前端用來列出可回測代號，不必逐一下載價格檔
 export async function writeManifest() {
