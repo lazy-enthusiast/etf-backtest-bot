@@ -24,7 +24,7 @@ export function onAuthKeydown(e) {
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
-    // 已登入時開「更換密碼」可取消；未登入則無法關閉
+    // 僅已有本機密碼時允許 Esc 關閉（未登入不可關）
     if (getAuth()) {
       $('authOverlay').hidden = true;
       $('authError').textContent = '';
@@ -61,11 +61,11 @@ export function unlockApp() {
 export function showAuthDialog(message) {
   lockApp();
   const hadAuth = !!getAuth();
-  $('authTitle').textContent = hadAuth ? '更換存取密碼' : '解鎖退休航道';
+  $('authTitle').textContent = hadAuth ? '重新驗證' : '解鎖退休航道';
   $('authDesc').textContent = hadAuth
-    ? '輸入新的存取密碼並向 Worker 驗證。通過後會取代目前瀏覽器中的密碼。'
+    ? '存取密碼已失效或錯誤。請輸入與 Worker 環境變數 NAME 相同的密碼（於 Cloudflare 更新後，在此重新輸入即可）。'
     : '此為私人工具。請輸入存取密碼後才能使用；密碼只存在這個瀏覽器，不會寫進網頁原始碼。';
-  $('authSubmitBtn').textContent = hadAuth ? '更新並解鎖' : '解鎖';
+  $('authSubmitBtn').textContent = '解鎖';
   $('authError').textContent = message || '';
   $('authOverlay').hidden = false;
   const input = $('authInput');

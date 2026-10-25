@@ -37,7 +37,6 @@ function initRebalanceSelect() {
 }
 
 function bindUi() {
-  $('authKeyBtn')?.addEventListener('click', () => showAuthDialog());
   document.querySelectorAll('.appbar > .icon-btn').forEach(btn => {
     if (btn.title === '切換深色模式') btn.addEventListener('click', () => toggleTheme());
   });
