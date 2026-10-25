@@ -1,29 +1,22 @@
-// ===== 模型池（DeepSeek Flash／Sonnet 5／Opus 5）=====
+// ===== 模型池（DeepSeek Flash／Sonnet 5.5）=====
 export const DEFAULT_MODEL_KEY = 'auto';
 
 export const MODEL_CONFIG = {
   'auto': {
     label: '自動',
-    description: '依複雜度分流 DeepSeek／Sonnet／Opus'
+    description: '複雜度 ≥8 用 Sonnet 5.5，其餘 DeepSeek Flash'
   },
   'DeepSeek-V4.1-Flash': {
     label: 'DeepSeek V4.1 Flash',
-    description: '便宜／快速',
+    description: '便宜／快速（預設）',
     model: 'deepseek/deepseek-v4.1-flash-1017',
     max_tokens: 16000
   },
-  'Sonnet-5': {
-    label: 'Claude Sonnet 5',
-    description: '日常分析與調整',
-    model: 'anthropic/claude-sonnet-5',
-    // thinking 與可見回覆共用 max_tokens；長分析容易在 medium reasoning 下被 length 截斷。
-    max_tokens: 64000,
-    reasoning: { effort: 'medium' }
-  },
-  'Opus-5': {
-    label: 'Claude Opus 5',
-    description: '複雜權衡與多方案設計',
-    model: 'anthropic/claude-opus-5',
+  'Sonnet-5.5': {
+    label: 'Claude Sonnet 5.5',
+    description: '高複雜度分析',
+    model: 'anthropic/claude-sonnet-5.5',
+    // thinking 與可見回覆共用 max_tokens；長分析容易被 length 截斷。
     max_tokens: 64000,
     reasoning: { effort: 'medium' }
   }
@@ -31,9 +24,7 @@ export const MODEL_CONFIG = {
 
 export function pickModelKey(complexity) {
   const score = Number.isFinite(complexity) ? complexity : 5;
-  if (score <= 4) return 'DeepSeek-V4.1-Flash';
-  if (score <= 7) return 'Sonnet-5';
-  return 'Opus-5';
+  return score >= 8 ? 'Sonnet-5.5' : 'DeepSeek-V4.1-Flash';
 }
 
 // ===== 退休規劃師 System Prompt =====

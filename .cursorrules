@@ -52,7 +52,7 @@ Proxy 持有：
 1. 驗證 X-App-Auth（GET /api/auth-check 供前端登入時驗證）
 2. 平行跑：摘要（deepseek-v4-flash）+ Mem0 檢索
 3. 摘要回傳 JSON：{ history_summary, complexity, task_tag }
-4. 依 complexity 挑模型：<=4 用 DeepSeek-V4.1-Flash，<=7 用 Sonnet-5，>7 用 Opus-5
+4. 依 complexity 挑模型：>=8 用 Sonnet-5.5，其餘用 DeepSeek-V4.1-Flash
 5. 組 system block：
  - SHARED_CORE_SYSTEM（退休規劃師 prompt，有 cache_control）
  - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆 + 目前回測／退休模擬結果）
@@ -69,12 +69,11 @@ Proxy 持有：
 - engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）
 
 ## 模型池
-- DeepSeek-V4.1-Flash = deepseek/deepseek-v4.1-flash-1017 （便宜／快速；auto 低複雜度）
-- Sonnet-5 = anthropic/claude-sonnet-5 （日常；auto 中複雜度）
-- Opus-5 = anthropic/claude-opus-5 （複雜；auto 高複雜度）
+- DeepSeek-V4.1-Flash = deepseek/deepseek-v4.1-flash-1017 （便宜／快速；auto 預設）
+- Sonnet-5.5 = anthropic/claude-sonnet-5.5 （auto 僅 complexity ≥8）
 - 摘要用 = deepseek/deepseek-v4-flash （便宜）
 - 標題用 = meta-llama/llama-3.1-8b-instruct（便宜快）
-- （無 Haiku）
+- （無 Opus／Haiku）
 
 ## 編輯規則
 - 改 worker 的請求／回應 shape 時，同步檢查 js/（尤其 chat.js、context.js）和 proxy

@@ -279,7 +279,7 @@ export default {
       if (!selectedModelKey || selectedModelKey === 'auto') {
         selectedModelKey = pickModelKey(complexity);
       }
-      const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG['Sonnet-5'];
+      const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG['DeepSeek-V4.1-Flash'];
 
       let backtestText;
       if (backtestUnchanged) {
