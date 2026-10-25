@@ -104,7 +104,11 @@ async function init() {
     backtestableSymbols(meta).forEach(s => {
       const o = el('option');
       o.value = s;
-      const name = meta.manifest.symbols[s]?.name || meta.mapping.etfs[s]?.name || '';
+      const base = s.includes('.') ? s.split('.')[0] : s;
+      const name = meta.manifest.symbols[s]?.name
+        || meta.mapping.etfs[s]?.name
+        || meta.mapping.etfs[base]?.name
+        || '';
       const ed = earliestDate(meta, s);
       o.label = ed ? `${name}（${ed.slice(0, 4)} 起）` : `${name || s}（Yahoo 即時）`;
       $('symbolList').appendChild(o);

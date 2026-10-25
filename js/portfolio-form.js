@@ -2,13 +2,15 @@ import { STORE } from './config.js';
 import { state } from './state.js';
 import { $, el } from './dom.js';
 import { saveJSON } from './storage.js';
+import { migrateHoldingSymbol, parseHoldingSymbol, SYMBOL_HINT } from '../backtest/symbols.js';
 
 export function addHoldingRow(symbol, weight) {
   const row = el('div', 'holding');
   const sym = el('input', 'sym');
   sym.setAttribute('list', 'symbolList');
-  sym.placeholder = '代號，如 VTI';
-  sym.value = symbol;
+  sym.placeholder = 'VTI.US / IGLN.L / 2800.HK';
+  sym.title = SYMBOL_HINT;
+  sym.value = migrateHoldingSymbol(symbol);
   const w = el('input', 'w');
   w.type = 'number'; w.min = 0; w.step = 1; w.placeholder = '%';
   w.value = weight;
@@ -19,6 +21,10 @@ export function addHoldingRow(symbol, weight) {
   bar.appendChild(el('span'));
   row.append(sym, w, x, bar);
   [sym, w].forEach(i => i.addEventListener('input', onPortfolioEdited));
+  sym.addEventListener('change', () => {
+    sym.value = migrateHoldingSymbol(sym.value);
+    onPortfolioEdited();
+  });
   $('holdings').appendChild(row);
   updateWeightBars();
 }
@@ -36,7 +42,7 @@ export function writePortfolioForm(pf) {
 export function readPortfolioForm() {
   const holdings = {};
   document.querySelectorAll('#holdings .holding').forEach(row => {
-    const s = row.querySelector('.sym').value.trim().toUpperCase();
+    const s = migrateHoldingSymbol(row.querySelector('.sym').value);
     const w = Number(row.querySelector('.w').value);
     if (s && w > 0) holdings[s] = (holdings[s] || 0) + w;
   });
@@ -47,6 +53,16 @@ export function readPortfolioForm() {
     start: $('btStart').value,
     end: $('btEnd').value
   };
+}
+
+export function validateHoldings(holdings) {
+  const errors = [];
+  for (const s of Object.keys(holdings || {})) {
+    if (s.includes('=')) continue;
+    const p = parseHoldingSymbol(s);
+    if (!p.ok) errors.push(p.error);
+  }
+  return errors;
 }
 
 export function updateWeightBars() {

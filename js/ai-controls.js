@@ -6,6 +6,7 @@ import { writePlanForm } from './plan-form.js';
 import { writePortfolioForm, readPortfolioForm } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
 import { saveConversations } from './chat.js';
+import { migrateHoldingSymbol } from '../backtest/symbols.js';
 
 function toggleAdvisor(force) {
   const open = force ?? !document.body.classList.contains('advisor-open');
@@ -19,8 +20,8 @@ export function parsePortfolioBlock(text) {
   const holdings = {};
   for (const [symbol, weight] of Object.entries(obj.holdings)) {
     const w = Number(weight);
-    const s = String(symbol).trim().toUpperCase();
-    if (s && Number.isFinite(w) && w > 0) holdings[s] = w;
+    const s = migrateHoldingSymbol(symbol);
+    if (s && Number.isFinite(w) && w > 0) holdings[s] = (holdings[s] || 0) + w;
   }
   if (!Object.keys(holdings).length) return null;
   const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);

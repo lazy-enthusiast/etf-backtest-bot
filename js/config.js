@@ -9,7 +9,7 @@ export const STORE = {
   activeConv: 'rp.activeConv', theme: 'rp.theme', tab: 'rp.tab', logScale: 'rp.logScale'
 };
 export const REBALANCE_LABELS = { annual: '每年再平衡', semiannual: '每半年', quarterly: '每季', monthly: '每月', none: '不再平衡' };
-export const DEFAULT_PORTFOLIO = { name: '起始組合：股債 60/40', holdings: { VTI: 60, IEF: 40 }, rebalance: 'annual', start: '', end: '' };
+export const DEFAULT_PORTFOLIO = { name: '起始組合：股債 60/40', holdings: { 'VTI.US': 60, 'IEF.US': 40 }, rebalance: 'annual', start: '', end: '' };
 export const CURRENCIES = ['HKD', 'USD', 'TWD', 'CNY', 'SGD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD'];
 
 export const PLAN_FIELDS = [

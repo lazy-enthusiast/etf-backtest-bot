@@ -1,9 +1,17 @@
 import { STORE, DEFAULT_PORTFOLIO } from './config.js';
-import { loadJSON } from './storage.js';
+import { loadJSON, saveJSON } from './storage.js';
+import { migrateHoldings } from '../backtest/symbols.js';
+
+const rawPortfolio = loadJSON(STORE.portfolio, DEFAULT_PORTFOLIO);
+const migratedHoldings = migrateHoldings(rawPortfolio.holdings || DEFAULT_PORTFOLIO.holdings);
+const portfolio = { ...DEFAULT_PORTFOLIO, ...rawPortfolio, holdings: migratedHoldings };
+if (JSON.stringify(rawPortfolio.holdings) !== JSON.stringify(migratedHoldings)) {
+  saveJSON(STORE.portfolio, portfolio);
+}
 
 export const state = {
   plan: null,
-  portfolio: loadJSON(STORE.portfolio, DEFAULT_PORTFOLIO),
+  portfolio,
   current: null,
   previous: null,
   meta: null,

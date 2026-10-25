@@ -1,5 +1,6 @@
 import * as engine from '../backtest/engine.js';
 import * as retirement from '../backtest/retirement.js';
+import { toDisplaySymbol, normalizeSymbol } from '../backtest/symbols.js';
 import { WORKER_URL } from './config.js';
 import { getAuth, showAuthDialog } from './auth.js';
 import { state } from './state.js';
@@ -23,12 +24,25 @@ export function earliestDate(meta, symbol) {
   return dates[0] || null;
 }
 
-/** datalist 建議清單：mapping 內 ETF + 本地非 CPI；任意 Yahoo 代號仍可手動輸入。 */
+/** datalist 建議清單：顯示用 TICKER.EX；mapping 裸美股補 .US。任意 Yahoo 代號仍可手動輸入。 */
 export function backtestableSymbols(meta) {
-  const proxies = new Set(Object.values(meta.mapping.etfs).flatMap(e => e.proxies.map(p => p.symbol.toUpperCase())));
-  const list = new Set(Object.keys(meta.mapping.etfs));
+  const etfKeys = Object.keys(meta.mapping.etfs).map(s => s.toUpperCase());
+  const proxies = new Set(
+    Object.values(meta.mapping.etfs).flatMap(e => e.proxies.map(p => p.symbol.toUpperCase()))
+  );
+  const list = new Set();
+  for (const s of etfKeys) {
+    // 裸別名且已有非 .US 後綴鍵（如 IGLN + IGLN.L）→ 略過裸鍵，避免變成錯誤的 IGLN.US
+    if (!s.includes('.') && !s.includes('=')) {
+      const hasNonUsSuffix = etfKeys.some(k => k.startsWith(`${s}.`) && k !== `${s}.US`);
+      if (hasNonUsSuffix) continue;
+    }
+    list.add(toDisplaySymbol(s));
+  }
   for (const [s, info] of Object.entries(meta.manifest.symbols)) {
-    if (!proxies.has(s) && info.instrumentType !== 'CPI') list.add(s);
+    if (proxies.has(s)) continue;
+    if (info.instrumentType === 'CPI' || info.instrumentType === 'SYNTHETIC') continue;
+    list.add(toDisplaySymbol(s));
   }
   return [...list].sort();
 }
@@ -60,8 +74,9 @@ async function loadRemoteSeries(symbol) {
   return body;
 }
 
+/** 合成／CPI（manifest 有列）走本地 data/；其餘含 VTI.US／VWRD.L／GC=F 走 Worker Yahoo。 */
 export function loadSeries(meta, symbol) {
-  const sym = String(symbol).toUpperCase();
+  const sym = normalizeSymbol(symbol);
   if (!state.series.has(sym)) {
     const local = meta.manifest.symbols[sym];
     const p = (local ? loadLocalSeries(meta, sym) : loadRemoteSeries(sym))

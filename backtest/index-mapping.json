@@ -447,6 +447,111 @@
         }
       ]
     },
+    "IGLN": {
+      "name": "iShares Physical Gold ETC（對照別名；持倉請用 IGLN.L）",
+      "index": "LBMA Gold Price",
+      "proxies": [
+        {
+          "symbol": "GLD",
+          "type": "etf",
+          "note": "同標的美元金 ETF"
+        },
+        {
+          "symbol": "GOLD_SPOT",
+          "type": "synthetic",
+          "note": "歷史現貨金價月度，1833 起"
+        }
+      ]
+    },
+    "IGLN.L": {
+      "name": "iShares Physical Gold ETC (USD, LSE)",
+      "index": "LBMA Gold Price",
+      "proxies": [
+        {
+          "symbol": "GLD",
+          "type": "etf",
+          "note": "同標的美元金 ETF"
+        },
+        {
+          "symbol": "GOLD_SPOT",
+          "type": "synthetic",
+          "note": "歷史現貨金價月度，1833 起"
+        }
+      ]
+    },
+    "VWRD": {
+      "name": "Vanguard FTSE All-World UCITS ETF（對照別名；持倉請用 VWRD.L）",
+      "index": "FTSE All-World",
+      "proxies": [
+        {
+          "symbol": "VT",
+          "type": "etf",
+          "note": "Vanguard Total World Stock，近似全球股"
+        },
+        {
+          "symbol": "VTI",
+          "type": "etf",
+          "note": "以美股全市場近似（缺國際）"
+        },
+        {
+          "symbol": "VTSMX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total Stock Market Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成（全球偏差）"
+        }
+      ]
+    },
+    "VWRD.L": {
+      "name": "Vanguard FTSE All-World UCITS ETF (USD Acc, LSE)",
+      "index": "FTSE All-World",
+      "proxies": [
+        {
+          "symbol": "VT",
+          "type": "etf",
+          "note": "Vanguard Total World Stock，近似全球股"
+        },
+        {
+          "symbol": "VTI",
+          "type": "etf",
+          "note": "以美股全市場近似（缺國際）"
+        },
+        {
+          "symbol": "VTSMX",
+          "type": "mutual_fund",
+          "note": "Vanguard Total Stock Market Index Investor"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成（全球偏差）"
+        }
+      ]
+    },
+    "VWRA.L": {
+      "name": "Vanguard FTSE All-World UCITS ETF (USD Acc, LSE；與 VWRD.L 同系列)",
+      "index": "FTSE All-World",
+      "proxies": [
+        {
+          "symbol": "VT",
+          "type": "etf",
+          "note": "Vanguard Total World Stock，近似全球股"
+        },
+        {
+          "symbol": "VTI",
+          "type": "etf",
+          "note": "以美股全市場近似（缺國際）"
+        },
+        {
+          "symbol": "US_STOCK_TR",
+          "type": "synthetic",
+          "note": "美股總報酬合成（全球偏差）"
+        }
+      ]
+    },
     "IAU": {
       "name": "iShares Gold Trust",
       "index": "LBMA Gold Price",

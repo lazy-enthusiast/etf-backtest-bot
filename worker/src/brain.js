@@ -52,14 +52,14 @@ export const SHARED_CORE_SYSTEM = `你是使用者的私人退休規劃師，同
 一、調整 ETF 組合或回測起始／結束年時，附上 portfolio 區塊：
 
 \`\`\`portfolio
-{"name": "簡短名稱", "holdings": {"VTI": 50, "IEF": 30, "GLD": 20}, "rebalance": "annual", "start": "1990-01-01"}
+{"name": "簡短名稱", "holdings": {"VTI.US": 50, "IEF.US": 30, "GLD.US": 20}, "rebalance": "annual", "start": "1990-01-01"}
 \`\`\`
 
   1. 區塊內只放一個 JSON 物件，不得有註解或其他文字。
-  2. holdings 的鍵是 Yahoo Finance 代號，值是權重百分比，總和為 100。
+  2. holdings 的鍵必須是「代號.交易所」：美股 VTI.US、倫敦 IGLN.L／VWRD.L、港股 2800.HK、台股 0050.TW；期貨維持 GC=F。值是權重百分比，總和為 100。不要寫裸代號（VTI、VWRD）——倫敦 ETF 裸代號會打錯 Yahoo。
   3. rebalance 只能是 none、monthly、quarterly、semiannual、annual。
   4. 可選 start、end（YYYY-MM-DD）。要限定起始年份時請填 start（例如 "1980-01-01"）；通常省略以取得最長共同歷史。
-  5. 代號以 Yahoo Finance 可解析者為準（前端經 Worker 即時抓價）；【可回測代號】為建議清單（含長歷史替代序列）。清單外的常見美股／ETF 也可直接使用，無需本機 fetch。
+  5. 代號經 Worker 轉成 Yahoo 查詢（.US → 裸代號；其餘保留後綴）；【可回測代號】為建議清單（含長歷史替代序列）。清單外常見標的也可直接使用，無需本機 fetch。
 
 二、調整退休消費、年齡、儲蓄、通膨等假設時，附上 plan 區塊：
 

@@ -4,7 +4,7 @@ import { $, intFmt } from './dom.js';
 import { saveJSON } from './storage.js';
 import { loadMeta, runBacktestCached, loadCpi } from './data.js';
 import { readPlanForm } from './plan-form.js';
-import { readPortfolioForm } from './portfolio-form.js';
+import { readPortfolioForm, validateHoldings } from './portfolio-form.js';
 import { renderDashboard } from './dashboard.js';
 
 export function setStatus(text, isError) {
@@ -17,6 +17,8 @@ export async function recalc({ markPrevious = true, label } = {}) {
   const seq = ++recalcSeq;
   const pf = readPortfolioForm();
   if (!Object.keys(pf.holdings).length) { setStatus('請至少輸入一檔 ETF 與權重。', true); return null; }
+  const symErrors = validateHoldings(pf.holdings);
+  if (symErrors.length) { setStatus('計算失敗：' + symErrors[0], true); return null; }
   state.portfolio = pf;
   saveJSON(STORE.portfolio, pf);
   $('calcBtn').disabled = true;

@@ -1,6 +1,8 @@
 // 純計算模組：不做任何 I/O，Node 與瀏覽器都可直接 import。
 // 價格資料格式：{ symbol, series: [['YYYY-MM-DD', adjClose], ...] }（日期遞增）
 
+import { mappingLookupKey, normalizeSymbol } from './symbols.js';
+
 const SEGMENT_WARNINGS = {
   price_index: '價格指數，不含股息，報酬被低估',
   synthetic: '月度合成數據（Shiller 月均價／殖利率推算），波動與回撤被低估'
@@ -11,11 +13,12 @@ export function symbolToFile(symbol) {
 }
 
 export function resolveChain(symbol, mapping) {
-  const sym = symbol.toUpperCase();
-  const entry = mapping?.etfs?.[sym];
+  const sym = normalizeSymbol(symbol);
+  const mapKey = mappingLookupKey(sym, mapping);
+  const entry = mapping?.etfs?.[mapKey];
   return [
     { symbol: sym, type: 'etf' },
-    ...(entry?.proxies || []).map(p => ({ symbol: p.symbol.toUpperCase(), type: p.type, note: p.note }))
+    ...(entry?.proxies || []).map(p => ({ symbol: normalizeSymbol(p.symbol), type: p.type, note: p.note }))
   ];
 }
 

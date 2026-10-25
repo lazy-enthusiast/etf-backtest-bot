@@ -16,6 +16,7 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
   - retirement.js：實質月報酬、歷史起始月退休模擬、SWR／PWR；純計算、無 I/O
   - data-fetcher.js：薄 facade（ensureData + CLI）；實作在 fetch/
   - fetch/yahoo.js、synthetic.js、cache.js：Yahoo／合成序列／快取與 manifest
+  - symbols.js：持倉 TICKER.EX 規則、toYahooQuery／migrateHoldings（Node／瀏覽器／Worker 共用）
   - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數／合成），依優先順序
   - cli.js：終端機回測（可加 --withdraw 做提領測試）
 - data/ → 僅長歷史合成序列與 CPI（提交進 git）；一般 ETF 不放這裡
@@ -32,7 +33,9 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
 ## 資料流
 AI：前端 → Worker（X-App-Auth 驗證）→ Proxy（X-Proxy-Secret 驗證）→ OpenRouter → Claude
 回測／退休：前端 fetch backtest/index-mapping.json + 本地 data/（僅 SYNTHETIC／CPI）；缺的 ETF／基金 → Worker GET /api/series（Yahoo）→ engine.js + retirement.js 在瀏覽器計算 → backtestContext 送給 Worker
-新代號：直接在前端輸入 Yahoo 可解析代號即可（經 Worker）；本機 `npm run fetch` 僅用於更新合成／CPI 或離線開發
+持倉代號必須帶交易所後綴 TICKER.EX（VTI.US、IGLN.L、VWRD.L、2800.HK）；backtest/symbols.js 的 toYahooQuery：.US → 裸 Yahoo 代號，其餘保留後綴。禁止靜默把裸代號改成 .L。
+新代號：輸入帶後綴的 Yahoo 可解析代號即可（經 Worker）；本機 `npm run fetch` 僅用於更新合成／CPI 或離線開發
+Yahoo 日線 period1 限約 100 年（worker／fetch yahoo.js 用 ~99y，勿再用 1900）
 
 ## 環境變數（全部走 env，絕不硬編碼）
 Worker 持有：
@@ -62,7 +65,7 @@ Proxy 持有：
 ## 前後端契約（改了要兩邊同步）
 - SSE meta event 格式
 - 請求 body 的 backtestContext（字串，Worker 截斷至 12000 字；含計劃參數、退休模擬、組合績效）
-- AI 回覆中的 ```portfolio 區塊：{ name, holdings: { 代號: 權重% }, rebalance, start?, end? }
+- AI 回覆中的 ```portfolio 區塊：{ name, holdings: { "VTI.US": 權重% }, rebalance, start?, end? }（鍵須含交易所後綴）
 - AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency、withdrawalStrategy、guardrailCeiling／Floor／AdjustPct）+ 可選 note
   格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 js/ai-controls.js 的 parsePortfolioBlock()／parsePlanBlock()
 - 單組 portfolio／plan 會自動寫入左側可編輯表單並重算；左側參數仍可手動改後按「重新計算」
