@@ -1,12 +1,13 @@
 import { STORE, REBALANCE_LABELS } from './config.js';
 import { state } from './state.js';
 import { $, el } from './dom.js';
-import { loadJSON } from './storage.js';
+import { loadJSON, saveJSON } from './storage.js';
 import { getAuth, showAuthDialog, submitAuth, unlockApp } from './auth.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 import { renderPlanForm, writePlanForm } from './plan-form.js';
 import { writePortfolioForm, addHoldingRow, onPortfolioEdited } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
+import { migrateHoldings, usBareKeysFromMapping } from '../backtest/symbols.js';
 import { renderDashboard, renderActiveTab } from './dashboard.js';
 import {
   loadModels, newConversation, getActiveConv, renderConvSelect, renderMessages,
@@ -98,6 +99,16 @@ async function init() {
   const meta = await loadMeta().catch(err => { setStatus('載入資料失敗：' + err.message, true); return null; });
   state.plan = meta ? meta.retirement.normalizePlan(loadJSON(STORE.plan, {})) : loadJSON(STORE.plan, {});
   writePlanForm();
+
+  if (meta) {
+    // 僅對 mapping 已知美股裸代號補 .US（VWRD／IGLN 等有非美後綴者不遷）
+    state.usBareKeys = usBareKeysFromMapping(meta.mapping);
+    const nextHoldings = migrateHoldings(state.portfolio.holdings, state.usBareKeys);
+    if (JSON.stringify(nextHoldings) !== JSON.stringify(state.portfolio.holdings)) {
+      state.portfolio = { ...state.portfolio, holdings: nextHoldings };
+      saveJSON(STORE.portfolio, state.portfolio);
+    }
+  }
   writePortfolioForm(state.portfolio);
 
   if (meta) {

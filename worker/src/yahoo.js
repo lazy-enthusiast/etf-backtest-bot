@@ -1,6 +1,12 @@
 // Yahoo Finance chart → 與 data/*.json 相同 shape（Worker 用，無 Node I/O）
 
-import { toYahooQuery, normalizeSymbol, parseHoldingSymbol, SYMBOL_HINT } from '../../backtest/symbols.js';
+import {
+  toYahooQuery,
+  normalizeSymbol,
+  parseHoldingSymbol,
+  holdingSymbolError,
+  SYMBOL_HINT
+} from '../../backtest/symbols.js';
 
 const YAHOO_CHART = 'https://query2.finance.yahoo.com/v8/finance/chart/';
 // Yahoo 日線約限 100 年／次；用 99 年留餘裕（勿再用 1900-01-01）
@@ -73,6 +79,13 @@ async function fetchYahooOnce(yahooSymbol) {
 
 export async function fetchFromYahoo(symbol) {
   const requested = normalizeSymbol(symbol);
+  // 攔截誤標美股的非美股別名（VWRD.US）；裸 proxy（VFINX）仍放行
+  const badEx = holdingSymbolError(requested);
+  if (badEx && requested.includes('.') && !requested.includes('=')) {
+    const err = new Error(badEx);
+    err.status = 400;
+    throw err;
+  }
   const yahoo = toYahooQuery(requested);
   try {
     const data = await fetchYahooOnce(yahoo);
@@ -85,11 +98,14 @@ export async function fetchFromYahoo(symbol) {
     return data;
   } catch (err) {
     const holding = parseHoldingSymbol(requested);
-    const hint = !holding.ok && !requested.includes('=')
-      ? ` ${SYMBOL_HINT}`
-      : (!requested.includes('.') && !requested.includes('=')
-        ? ` 若為倫敦／港股請用後綴（如 IGLN.L、2800.HK）；美股請寫 ${requested}.US`
-        : '');
+    let hint = '';
+    if (!holding.ok && !requested.includes('=')) {
+      hint = ` ${SYMBOL_HINT}`;
+    } else if (holding.ok && holding.exchange === 'US') {
+      hint = `（Yahoo 查詢「${yahoo}」）。若為倫敦／港股 ETF，請改用 ${holding.base}.L／${holding.base}.HK，勿用 ${holding.base}.US`;
+    } else if (!requested.includes('.') && !requested.includes('=')) {
+      hint = ` 若為倫敦／港股請用後綴（如 VWRD.L、IGLN.L、2800.HK）；美股請寫 ${requested}.US`;
+    }
     const out = new Error((err.message || `Yahoo ${requested}：找不到資料`) + hint);
     out.status = err.status || 404;
     throw out;

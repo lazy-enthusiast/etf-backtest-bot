@@ -2,15 +2,16 @@ import { STORE } from './config.js';
 import { state } from './state.js';
 import { $, el } from './dom.js';
 import { saveJSON } from './storage.js';
-import { migrateHoldingSymbol, parseHoldingSymbol, SYMBOL_HINT } from '../backtest/symbols.js';
+import { normalizeSymbol, holdingSymbolError, SYMBOL_HINT } from '../backtest/symbols.js';
 
 export function addHoldingRow(symbol, weight) {
   const row = el('div', 'holding');
   const sym = el('input', 'sym');
   sym.setAttribute('list', 'symbolList');
-  sym.placeholder = 'VTI.US / IGLN.L / 2800.HK';
+  sym.placeholder = 'VTI.US / VWRD.L / 2800.HK';
   sym.title = SYMBOL_HINT;
-  sym.value = migrateHoldingSymbol(symbol);
+  // 不自動補 .US：裸代號留給 validateHoldings 攔截
+  sym.value = normalizeSymbol(symbol);
   const w = el('input', 'w');
   w.type = 'number'; w.min = 0; w.step = 1; w.placeholder = '%';
   w.value = weight;
@@ -22,7 +23,7 @@ export function addHoldingRow(symbol, weight) {
   row.append(sym, w, x, bar);
   [sym, w].forEach(i => i.addEventListener('input', onPortfolioEdited));
   sym.addEventListener('change', () => {
-    sym.value = migrateHoldingSymbol(sym.value);
+    sym.value = normalizeSymbol(sym.value);
     onPortfolioEdited();
   });
   $('holdings').appendChild(row);
@@ -42,7 +43,7 @@ export function writePortfolioForm(pf) {
 export function readPortfolioForm() {
   const holdings = {};
   document.querySelectorAll('#holdings .holding').forEach(row => {
-    const s = migrateHoldingSymbol(row.querySelector('.sym').value);
+    const s = normalizeSymbol(row.querySelector('.sym').value);
     const w = Number(row.querySelector('.w').value);
     if (s && w > 0) holdings[s] = (holdings[s] || 0) + w;
   });
@@ -58,9 +59,8 @@ export function readPortfolioForm() {
 export function validateHoldings(holdings) {
   const errors = [];
   for (const s of Object.keys(holdings || {})) {
-    if (s.includes('=')) continue;
-    const p = parseHoldingSymbol(s);
-    if (!p.ok) errors.push(p.error);
+    const err = holdingSymbolError(s);
+    if (err) errors.push(err);
   }
   return errors;
 }

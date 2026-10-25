@@ -68,9 +68,15 @@ export async function fetchFromYahoo(symbol) {
     if (parseHoldingSymbol(requested).ok) data.symbol = requested;
     return data;
   } catch (err) {
-    const hint = !requested.includes('.') && !requested.includes('=')
-      ? ` ${SYMBOL_HINT}`
-      : '';
+    const holding = parseHoldingSymbol(requested);
+    let hint = '';
+    if (!holding.ok && !requested.includes('=')) {
+      hint = ` ${SYMBOL_HINT}`;
+    } else if (holding.ok && holding.exchange === 'US') {
+      hint = `（Yahoo 查詢「${yahoo}」）。若為倫敦／港股 ETF，請改用 ${holding.base}.L／${holding.base}.HK，勿用 ${holding.base}.US`;
+    } else if (!requested.includes('.') && !requested.includes('=')) {
+      hint = ` ${SYMBOL_HINT}`;
+    }
     throw new Error((err.message || `Yahoo ${requested}：找不到資料`) + hint);
   }
 }

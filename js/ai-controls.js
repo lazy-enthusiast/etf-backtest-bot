@@ -20,7 +20,8 @@ export function parsePortfolioBlock(text) {
   const holdings = {};
   for (const [symbol, weight] of Object.entries(obj.holdings)) {
     const w = Number(weight);
-    const s = migrateHoldingSymbol(symbol);
+    // 僅對 mapping 已知美股裸代號補 .US；VWRD／IGLN 等保持原樣由 validate 攔截
+    const s = migrateHoldingSymbol(symbol, state.usBareKeys);
     if (s && Number.isFinite(w) && w > 0) holdings[s] = (holdings[s] || 0) + w;
   }
   if (!Object.keys(holdings).length) return null;
