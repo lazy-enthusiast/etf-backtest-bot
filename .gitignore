@@ -17,3 +17,6 @@ dist/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 本機心法／契約／方法論（留在 docs/，不進遠端）
+docs/*.md

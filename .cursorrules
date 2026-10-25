@@ -19,6 +19,7 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
   - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數／合成），依優先順序
   - cli.js：終端機回測（可加 --withdraw 做提領測試）
 - data/ → 僅長歷史合成序列與 CPI（提交進 git）；一般 ETF 不放這裡
+- docs/ → 本機心法（METHODOLOGY／CONTRACTS／WORK_LOG）；`docs/*.md` 已 gitignore，勿提交
 - scripts/dev.js → 本機一鍵：靜態前端（127.0.0.1:5173）+ wrangler dev；允許 index.html、styles/、js/、backtest/、data/
 - worker/ → Cloudflare Worker（邏輯層）
   - src/index.js：薄路由（含 GET /api/series）
