@@ -129,8 +129,9 @@ async function init() {
 
   await loadModels().catch(err => {
     console.error('載入模型清單失敗:', err);
-    const o = el('option', '', '自動（Worker 未連線）');
-    o.value = 'auto';
+    const o = el('option', '', 'DeepSeek V4.1 Flash（Worker 未連線）');
+    o.value = 'DeepSeek-V4.1-Flash';
+    o.selected = true;
     $('modelSelect').appendChild(o);
   });
   if (!conversations.length || !getActiveConv()) {

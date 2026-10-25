@@ -27,7 +27,7 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
   - src/yahoo.js：Yahoo chart 代抓（與 data/*.json 同 shape）
   - src/context-budget.js：上一輪骨架化、摘要跳過、Mem0 條件
   - src/cors.js、auth.js、mem0.js、openrouter.js：CORS、驗證、Mem0、Proxy 呼叫
-  - src/brain.js：prompt、MODEL_CONFIG、pickModelKey
+  - src/brain.js：prompt、MODEL_CONFIG（無 auto 路由）
 - proxy/ → Vercel Proxy。唯一持有 OPENROUTER_API_KEY 的地方
 
 ## 資料流
@@ -55,7 +55,7 @@ Proxy 持有：
 1. 驗證 X-App-Auth（GET /api/auth-check 供前端登入時驗證）
 2. 平行跑：摘要（deepseek-v4-flash）+ Mem0 檢索
 3. 摘要回傳 JSON：{ history_summary, complexity, task_tag }
-4. 依 complexity 挑模型：>=8 用 Sonnet-5.5，其餘用 DeepSeek-V4.1-Flash
+4. 使用前端選定的模型（預設 DeepSeek-V4.1-Flash；Sonnet 需手動切換）
 5. 組 system block：
  - SHARED_CORE_SYSTEM（退休規劃師 prompt，有 cache_control）
  - dynamicContextText（長期記憶 + 摘要 + 上一輪回覆 + 目前回測／退休模擬結果）
@@ -72,11 +72,11 @@ Proxy 持有：
 - engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）
 
 ## 模型池
-- DeepSeek-V4.1-Flash = deepseek/deepseek-v4.1-flash-1017 （便宜／快速；auto 預設）
-- Sonnet-5.5 = anthropic/claude-sonnet-5.5 （auto 僅 complexity ≥8）
+- DeepSeek-V4.1-Flash = deepseek/deepseek-v4.1-flash-1017 （便宜／快速；預設；無自動升模）
+- Sonnet-5.5 = anthropic/claude-sonnet-5.5 （使用者手動切換）
 - 摘要用 = deepseek/deepseek-v4-flash （便宜）
 - 標題用 = meta-llama/llama-3.1-8b-instruct（便宜快）
-- （無 Opus／Haiku）
+- （無 Opus／Haiku／auto 路由）
 
 ## 編輯規則
 - 改 worker 的請求／回應 shape 時，同步檢查 js/（尤其 chat.js、context.js）和 proxy

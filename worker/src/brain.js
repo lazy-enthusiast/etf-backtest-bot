@@ -1,11 +1,7 @@
-// ===== 模型池（DeepSeek Flash／Sonnet 5.5）=====
-export const DEFAULT_MODEL_KEY = 'auto';
+// ===== 模型池（DeepSeek Flash／Sonnet 5.5；手動切換，無自動路由）=====
+export const DEFAULT_MODEL_KEY = 'DeepSeek-V4.1-Flash';
 
 export const MODEL_CONFIG = {
-  'auto': {
-    label: '自動',
-    description: '複雜度 ≥8 用 Sonnet 5.5，其餘 DeepSeek Flash'
-  },
   'DeepSeek-V4.1-Flash': {
     label: 'DeepSeek V4.1 Flash',
     description: '便宜／快速（預設）',
@@ -14,18 +10,13 @@ export const MODEL_CONFIG = {
   },
   'Sonnet-5.5': {
     label: 'Claude Sonnet 5.5',
-    description: '高複雜度分析',
+    description: '手動切換：長分析／高複雜度',
     model: 'anthropic/claude-sonnet-5.5',
     // thinking 與可見回覆共用 max_tokens；長分析容易被 length 截斷。
     max_tokens: 64000,
     reasoning: { effort: 'medium' }
   }
 };
-
-export function pickModelKey(complexity) {
-  const score = Number.isFinite(complexity) ? complexity : 5;
-  return score >= 8 ? 'Sonnet-5.5' : 'DeepSeek-V4.1-Flash';
-}
 
 // ===== 退休規劃師 System Prompt =====
 export const SHARED_CORE_SYSTEM = `你是使用者的私人退休規劃師，同時是 ETF 投資組合分析師。你的任務是以歷史數據為依據，協助使用者把「退休計劃」與「ETF 組合」一起調整到能穩健支撐退休生活。

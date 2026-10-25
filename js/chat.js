@@ -33,10 +33,11 @@ export async function loadModels() {
     MODEL_NAMES[m.key] = m.label;
     keys.add(m.key);
   });
-  // 舊對話若選了已移除的模型（例如 Haiku），改回自動
+  const fallback = data.default || 'DeepSeek-V4.1-Flash';
+  // 舊對話若選了已移除的模型（auto／Haiku 等），改回預設
   let changed = false;
   conversations.forEach(c => {
-    if (c.model && !keys.has(c.model)) { c.model = data.default || 'auto'; changed = true; }
+    if (!c.model || !keys.has(c.model)) { c.model = fallback; changed = true; }
   });
   if (changed) saveConversations();
 }
@@ -58,7 +59,7 @@ export function newConversation() {
   const conv = {
     id: Date.now().toString(),
     title: '新對話',
-    model: $('modelSelect').value || 'auto',
+    model: $('modelSelect').value || 'DeepSeek-V4.1-Flash',
     historySummary: '',
     lastBacktestHash: '',
     lastComplexity: null,

@@ -1,4 +1,4 @@
-import { SHARED_CORE_SYSTEM, SUMMARIZER_SYSTEM, MODEL_CONFIG, pickModelKey, DEFAULT_MODEL_KEY } from './brain.js';
+import { SHARED_CORE_SYSTEM, SUMMARIZER_SYSTEM, MODEL_CONFIG, DEFAULT_MODEL_KEY } from './brain.js';
 import { getCorsHeaders } from './cors.js';
 import { isAuthorized } from './auth.js';
 import { mem0Search, mem0Add } from './mem0.js';
@@ -276,11 +276,9 @@ export default {
         longTermMemory = await mem0Promise;
       }
 
-      let selectedModelKey = model;
-      if (!selectedModelKey || selectedModelKey === 'auto') {
-        selectedModelKey = pickModelKey(complexity);
-      }
-      const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG['DeepSeek-V4.1-Flash'];
+      // 舊前端若仍送 auto，一律改回預設 DeepSeek（不再依複雜度自動升 Sonnet）
+      let selectedModelKey = (!model || model === 'auto') ? DEFAULT_MODEL_KEY : model;
+      const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG[DEFAULT_MODEL_KEY];
 
       let backtestText;
       if (backtestUnchanged) {
