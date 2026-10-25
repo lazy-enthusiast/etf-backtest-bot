@@ -7,6 +7,7 @@ import { writePortfolioForm, readPortfolioForm } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
 import { saveConversations } from './chat.js';
 import { migrateHoldingSymbol } from '../backtest/symbols.js';
+import { buildApplyReceipt } from './context.js';
 
 function toggleAdvisor(force) {
   const open = force ?? !document.body.classList.contains('advisor-open');
@@ -129,7 +130,15 @@ export async function autoSendAfterApply(what) {
   const cur = state.current;
   if (!cur) return;
   if (state.isSending) { setStatus('已重算。AI 仍在回覆中，稍後可再請它分析。'); return; }
-  import('./chat.js').then(({ sendMessage }) => sendMessage(`已套用${what}並重算：${summaryLine(cur, state.previous)}。請分析結果並繼續改良。`));
+  const receipt = state.lastApplyReceipt;
+  const receiptLine = receipt
+    ? `執行回執：status=${receipt.status}` +
+      (receipt.warning ? `；${receipt.warning}` : '') +
+      `；實際期間 ${receipt.actual_start} 起共 ${receipt.period_years} 年（限制資產 ${receipt.limiting_asset}）。`
+    : '';
+  import('./chat.js').then(({ sendMessage }) => sendMessage(
+    `已套用${what}並重算：${summaryLine(cur, state.previous)}。${receiptLine}請依回執分析（若 partial_data 先修正代號／起點），再繼續改良。`
+  ));
 }
 
 export function describeControlApply(portfolio, plan) {
@@ -148,9 +157,11 @@ export async function applyAiControls({ portfolio, plan, notifyAi = false } = {}
   if (portfolio) writePortfolioForm(portfolio);
   const cur = await recalc({ markPrevious: true, label: portfolio?.name });
   if (!cur) return null;
+  state.lastApplyReceipt = buildApplyReceipt({ portfolio, plan, cur });
   const what = describeControlApply(portfolio, plan);
+  const statusTag = state.lastApplyReceipt?.status === 'partial_data' ? '（數據被截斷）' : '';
   if (notifyAi) autoSendAfterApply(what);
-  else setStatus(`已套用${what}並重算。`);
+  else setStatus(`已套用${what}並重算${statusTag}。`);
   return cur;
 }
 

@@ -23,7 +23,9 @@ export const state = {
   charts: {},
   tab: localStorage.getItem(STORE.tab) || 'scenarios',
   logScale: localStorage.getItem(STORE.logScale) !== '0',
-  isSending: false
+  isSending: false,
+  /** 最近一次 AI／手動套用 portfolio／plan 後的執行回執 */
+  lastApplyReceipt: null
 };
 
 if (localStorage.getItem(STORE.theme) === 'dark') document.body.classList.add('dark');

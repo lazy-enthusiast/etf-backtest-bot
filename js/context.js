@@ -4,7 +4,7 @@ import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 
 function describeWithdrawal(p) {
   if (p.withdrawalStrategy === 'guardrails') {
-    return `護欄法（Guyton-Klinger：提領率>${p.guardrailCeiling}% 砍 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%）`;
+    return `護欄法（絕對提領率＝年提領÷資產：>${p.guardrailCeiling}% 砍支出 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%；非相對初始提領率）`;
   }
   if (p.withdrawalStrategy === 'vpw') return '變動百分比 VPW（每月提領＝剩餘資產÷剩餘月數）';
   return '固定實質提領（每年固定今日幣值）';
@@ -71,19 +71,129 @@ export function describeBacktest(name, r, brief) {
   return lines.join('\n');
 }
 
+function currentStateObject() {
+  const p = state.plan;
+  const pf = state.portfolio;
+  const cur = state.current;
+  return {
+    age: p.currentAge,
+    retirement_age: p.retireAge,
+    end_age: p.endAge,
+    currency: p.currency,
+    current_assets: p.currentSavings,
+    monthly_contribution: p.monthlyContribution,
+    annual_spending: p.annualSpending,
+    other_income: p.otherIncome,
+    other_income_age: p.otherIncomeAge,
+    inflation_mode: p.inflationMode,
+    inflation_rate: p.inflationRate,
+    fee_rate: p.feeRate,
+    withdrawal_strategy: p.withdrawalStrategy,
+    guardrail_ceiling_abs_pct: p.guardrailCeiling,
+    guardrail_floor_abs_pct: p.guardrailFloor,
+    guardrail_adjust_pct: p.guardrailAdjustPct,
+    current_portfolio: {
+      name: pf.name,
+      holdings: pf.holdings,
+      rebalance: pf.rebalance,
+      start: pf.start || null,
+      end: pf.end || null
+    },
+    last_backtest: cur ? {
+      period_start: cur.result.period.start,
+      period_end: cur.result.period.end,
+      years: Number(cur.result.period.years.toFixed(1)),
+      limiting_asset: cur.result.period.limitingAsset,
+      success_rate: cur.sim.successRate,
+      max_drawdown: cur.result.stats.maxDrawdown,
+      cagr: cur.result.stats.cagr,
+      sustainable_p95: cur.sim.sustainableSpending.p95,
+      starts: cur.sim.history.starts
+    } : null
+  };
+}
+
+function holdingsHistoryLines(meta, holdings) {
+  const lines = [];
+  for (const sym of Object.keys(holdings || {})) {
+    const ed = earliestDate(meta, sym);
+    const chain = meta.engine.resolveChain(sym, meta.mapping);
+    const chainStr = chain.map(l => `${l.symbol}[${l.type || 'etf'}]`).join(' ← ');
+    const year = ed ? ed.slice(0, 4) : '?';
+    lines.push(`- ${sym}：含替代序列最早 ${year}；鏈 ${chainStr || '（無 mapping，僅 Yahoo）'}`);
+  }
+  return lines;
+}
+
+/** 套用 portfolio／plan 後的執行回執，供下一輪 AI 避免鬼打牆 */
+export function buildApplyReceipt({ portfolio, plan, cur } = {}) {
+  if (!cur) return null;
+  const requestedStart = portfolio?.start || null;
+  const actualStart = cur.result.period.start;
+  const limiting = cur.result.period.limitingAsset;
+  const warnings = [...(cur.result.warnings || [])];
+  let status = 'ok';
+  if (requestedStart && actualStart.slice(0, 10) > requestedStart) {
+    status = 'partial_data';
+    warnings.unshift(
+      `請求起始 ${requestedStart}，實際共同起點 ${actualStart}（受限於 ${limiting}）。若要長歷史，改用有替代序列的代號或省略 start。`
+    );
+  }
+  return {
+    status,
+    applied: {
+      portfolio: portfolio ? { name: portfolio.name, holdings: portfolio.holdings, start: portfolio.start || null, end: portfolio.end || null } : null,
+      plan_changes: plan?.changes || null
+    },
+    requested_start: requestedStart,
+    actual_start: actualStart,
+    limiting_asset: limiting,
+    period_years: Number(cur.result.period.years.toFixed(1)),
+    warning: warnings.length ? warnings.join('；') : null,
+    available_tickers_with_long_history_hint:
+      '見【可回測代號】括號年份；常見長歷史鍵：VT、IEF、GLD、IVV（裸鍵走 mapping 合成）；對應 .US 通常只有 ETF 上市後。',
+    result_summary: {
+      success_rate: cur.sim.successRate,
+      max_drawdown: cur.result.stats.maxDrawdown,
+      cagr: cur.result.stats.cagr,
+      starts: cur.sim.history.starts,
+      sustainable_p95: cur.sim.sustainableSpending.p95
+    }
+  };
+}
+
 export async function buildBacktestContext() {
   const parts = [];
+  parts.push(
+    '【已確認事實｜本系統】\n' +
+    '- 【目前狀態】是左側面板唯一真相；勿與對話裡舊數字混用。\n' +
+    '- 護欄 ceiling／floor＝絕對年提領率%（提領÷資產），不是相對初始提領率；adjustPct 才是觸發後增減支出%。\n' +
+    '- 帶 .US／.L／.HK 的代號以 Yahoo 該標的本身為主；要 20 世紀長歷史請用 mapping 有替代序列的鍵（常為裸代號如 VT、IEF、GLD、IVV）或省略 start。\n' +
+    '- 黃金早期（約 1833–1968）含固定官價段，含金長歷史須標註失真風險。\n' +
+    '- 已套用回執若 status=partial_data，下一輪必須先修正代號／起點，勿當完整長歷史解讀。'
+  );
+
   try {
     const meta = await loadMeta();
     const listed = backtestableSymbols(meta).map(s => {
       const ed = earliestDate(meta, s);
       return ed ? `${s}(${ed.slice(0, 4)})` : s;
     }).join('、');
-    parts.push('【可回測代號】Yahoo Finance 可解析的美股／ETF／基金代號皆可即時抓取（經 Worker）；下列為對照表＋本地長歷史合成建議清單（括號為含替代序列後最早年份）：' + listed);
+    parts.push('【可回測代號】Yahoo 可解析代號皆可即時抓取；下列為對照表＋本地長歷史建議（括號＝含替代序列最早年）：' + listed);
+
+    const hist = holdingsHistoryLines(meta, state.portfolio.holdings);
+    if (hist.length) parts.push('【持倉歷史起點】\n' + hist.join('\n'));
   } catch (e) {
     parts.push('【可回測代號】載入失敗');
   }
-  parts.push('【退休計劃】\n' + describePlan(state.plan));
+
+  parts.push('【目前狀態】\n' + JSON.stringify(currentStateObject()));
+  parts.push('【退休計劃（說明）】\n' + describePlan(state.plan));
+
+  if (state.lastApplyReceipt) {
+    parts.push('【最近一次套用回執】\n' + JSON.stringify(state.lastApplyReceipt));
+  }
+
   const cur = state.current;
   if (cur) {
     parts.push('【退休模擬結果】\n' + describeSim(cur));

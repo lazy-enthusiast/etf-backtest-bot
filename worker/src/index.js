@@ -10,6 +10,7 @@ import {
   estimateComplexity,
   shouldSearchMem0
 } from './context-budget.js';
+import { maybeRunTools } from './tools.js';
 
 const SERIES_CACHE_TTL = 86400; // 24h；日線歷史夠用
 
@@ -291,12 +292,14 @@ export default {
         `【長期記憶】：\n${longTermMemory || '（無）'}\n\n` +
         `【對話背景】：\n${newSummary || '（無）'}\n\n` +
         `【上一輪回覆（骨架）】：\n${lastSkeleton}\n\n` +
-        `【目前回測結果】：\n${backtestText || '（尚未回測）'}`;
+        `【目前狀態與回測】：\n${backtestText || '（尚未回測）'}`;
 
       const attachmentBlock = buildAttachmentBlock(attachment);
       const userMessageContent = attachmentBlock
         ? [{ type: 'text', text: query }, attachmentBlock]
         : query;
+
+      const toolMessages = await maybeRunTools(env, cfg, dynamicContextText, query);
 
       const answerBody = {
         model: cfg.model,
@@ -319,7 +322,8 @@ export default {
           {
             role: 'user',
             content: userMessageContent
-          }
+          },
+          ...(toolMessages || [])
         ]
       };
 

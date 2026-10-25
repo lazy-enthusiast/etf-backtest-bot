@@ -9,9 +9,13 @@ export function renderPlanForm() {
   const form = $('planForm');
   form.innerHTML = '';
   for (const f of PLAN_FIELDS) {
-    const field = el('div', 'field' + (f.wide ? ' wide' : ''));
+    const field = el('div', 'field' + (f.wide ? ' wide' : '') + (f.guardrail ? ' guardrail-only' : ''));
+    if (f.guardrail) field.dataset.guardrail = '1';
     const label = el('label', '', f.label);
     label.htmlFor = 'plan-' + f.key;
+    if (f.guardrail && f.key === 'guardrailCeiling') {
+      label.title = '絕對提領率＝年提領額÷當下資產（例如 6＝6%），不是相對初始提領率 +6%';
+    }
     field.appendChild(label);
 
     if (f.type === 'inflation') {
@@ -81,6 +85,10 @@ export function writePlanForm() {
   }
   document.querySelectorAll('#planForm .unit').forEach(u => {
     if (u.dataset.money !== '') u.textContent = `${p.currency}${u.dataset.money}`;
+  });
+  const showGuard = p.withdrawalStrategy === 'guardrails';
+  document.querySelectorAll('#planForm .field[data-guardrail]').forEach(f => {
+    f.hidden = !showGuard;
   });
   renderPlanTimeline();
 }
