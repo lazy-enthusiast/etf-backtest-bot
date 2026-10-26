@@ -29,8 +29,15 @@ export function successTone(rate) {
   return rate >= 0.9 ? 'good' : rate >= 0.75 ? 'warn' : 'bad';
 }
 
+function setText(id, text) {
+  const node = $(id);
+  if (node) node.textContent = text;
+  return node;
+}
+
 export function setDelta(id, cur, prev, fmt, higherIsBetter = true) {
   const node = $(id);
+  if (!node) return;
   if (prev == null || !Number.isFinite(prev) || !Number.isFinite(cur)) { node.textContent = ''; node.className = 'delta'; return; }
   const diff = cur - prev;
   if (Math.abs(diff) < 1e-9) { node.textContent = '與上一版相同'; node.className = 'delta'; return; }
@@ -48,52 +55,63 @@ export function renderDashboard() {
 
   const tone = successTone(sim.successRate);
   const meter = $('ringMeter');
-  meter.style.stroke = c[tone];
-  meter.setAttribute('stroke-dashoffset', String(314.16 * (1 - sim.successRate)));
-  $('ringText').textContent = pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0);
-  $('kpiSuccessSub').innerHTML = '';
-  const pill = el('span', 'pill ' + tone, tone === 'good' ? '穩健' : tone === 'warn' ? '需留意' : '風險高');
-  const stratLabel = ({ fixed_real: '固定實質', guardrails: '護欄法', vpw: 'VPW' })[plan.withdrawalStrategy] || '固定實質';
-  let successNote = ` ${stratLabel} · 撐到 ${plan.endAge} 歲（${intFmt.format(sim.history.starts)} 起點）`;
-  if (plan.withdrawalStrategy !== 'fixed_real' && Number.isFinite(sim.successRateFixedReal)) {
-    successNote += ` · 固定實質對照 ${pct(sim.successRateFixedReal, 0)}`;
+  if (meter) {
+    meter.style.stroke = c[tone];
+    meter.setAttribute('stroke-dashoffset', String(314.16 * (1 - sim.successRate)));
   }
-  $('kpiSuccessSub').append(pill, document.createTextNode(successNote));
+  setText('ringText', pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0));
+  const successSub = $('kpiSuccessSub');
+  if (successSub) {
+    successSub.innerHTML = '';
+    const pill = el('span', 'pill ' + tone, tone === 'good' ? '穩健' : tone === 'warn' ? '需留意' : '風險高');
+    const stratLabel = ({ fixed_real: '固定實質', guardrails: '護欄法', vpw: 'VPW' })[plan.withdrawalStrategy] || '固定實質';
+    let successNote = ` ${stratLabel} · 撐到 ${plan.endAge} 歲（${intFmt.format(sim.history.starts)} 起點）`;
+    if (plan.withdrawalStrategy !== 'fixed_real' && Number.isFinite(sim.successRateFixedReal)) {
+      successNote += ` · 固定實質對照 ${pct(sim.successRateFixedReal, 0)}`;
+    }
+    successSub.append(pill, document.createTextNode(successNote));
+  }
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
 
   const atRetire = sim.balanceAtRetire;
-  $('kpiRetire').textContent = atRetire ? compact(atRetire.p50) : '—';
-  $('kpiRetireSub').textContent = atRetire
+  setText('kpiRetire', atRetire ? compact(atRetire.p50) : '—');
+  setText('kpiRetireSub', atRetire
     ? `（P10 ${compact(atRetire.p10)} · P90 ${compact(atRetire.p90)}）`
-    : '（已在退休期）';
+    : '（已在退休期）');
   setDelta('kpiRetireDelta', atRetire?.p50, prev?.balanceAtRetire?.p50, compact);
 
   const s95 = sim.sustainableSpending.p95;
   const monthly = s95 / 12;
   const targetMonthly = plan.annualSpending / 12;
   const gapMonthly = monthly - targetMonthly;
-  $('kpiSpend').innerHTML = '';
-  $('kpiSpend').append(document.createTextNode(compact(monthly)), el('span', 'unit', '/月'));
-  $('kpiSpendAnnual').textContent = compact(s95);
-  $('kpiSpendSub').innerHTML = '';
-  const spendBasis = plan.withdrawalStrategy !== 'fixed_real' ? '固定實質口徑 · ' : '';
-  $('kpiSpendSub').append(
-    document.createTextNode(`${spendBasis}95% 成功可持續 · 年 ${compact(s95)} · 目標 ${compact(targetMonthly)}/月 · `),
-    el('span', gapMonthly >= 0 ? 'delta up' : 'delta down', gapMonthly >= 0 ? `寬裕 ${compact(gapMonthly)}/月` : `不足 ${compact(-gapMonthly)}/月`)
-  );
+  const spend = $('kpiSpend');
+  if (spend) {
+    spend.innerHTML = '';
+    spend.append(document.createTextNode(compact(monthly)), el('span', 'unit', '/月'));
+  }
+  setText('kpiSpendAnnual', compact(s95));
+  const spendSub = $('kpiSpendSub');
+  if (spendSub) {
+    spendSub.innerHTML = '';
+    const spendBasis = plan.withdrawalStrategy !== 'fixed_real' ? '固定實質口徑 · ' : '';
+    spendSub.append(
+      document.createTextNode(`${spendBasis}95% 成功可持續 · 年 ${compact(s95)} · 目標 ${compact(targetMonthly)}/月 · `),
+      el('span', gapMonthly >= 0 ? 'delta up' : 'delta down', gapMonthly >= 0 ? `寬裕 ${compact(gapMonthly)}/月` : `不足 ${compact(-gapMonthly)}/月`)
+    );
+  }
   setDelta('kpiSpendDelta', monthly, prev?.sustainableSpending?.p95 != null ? prev.sustainableSpending.p95 / 12 : null, compact);
 
   const w = sim.withdrawalRates;
   const initRate = sim.initialWithdrawalRate;
-  $('kpiWithdraw').textContent = Number.isFinite(initRate) ? pct(initRate) : '—';
-  $('kpiWithdrawSub').textContent = atRetire
+  setText('kpiWithdraw', Number.isFinite(initRate) ? pct(initRate) : '—');
+  setText('kpiWithdrawSub', atRetire
     ? `目標年支出 ÷ 退休時中位資產`
-    : '已在退休期，以目前資產估算';
-  $('kpiSwr').textContent = w ? pct(w.swr.min, 2) : '—';
-  $('kpiPwr').textContent = w ? pct(w.pwr.min, 2) : '—';
+    : '已在退休期，以目前資產估算');
+  const swrEl = setText('kpiSwr', w ? pct(w.swr.min, 2) : '—');
+  const pwrEl = setText('kpiPwr', w ? pct(w.pwr.min, 2) : '—');
   if (w) {
-    $('kpiSwr').title = `${w.horizonYears} 年最差起點 ${w.worstStart} · P10 ${pct(w.swr.p10, 2)}`;
-    $('kpiPwr').title = `保住實質本金 · 中位 ${pct(w.pwr.p50, 2)}`;
+    if (swrEl) swrEl.title = `${w.horizonYears} 年最差起點 ${w.worstStart} · P10 ${pct(w.swr.p10, 2)}`;
+    if (pwrEl) pwrEl.title = `保住實質本金 · 中位 ${pct(w.pwr.p50, 2)}`;
   }
   setDelta('kpiWithdrawDelta', initRate, prev?.initialWithdrawalRate, x => pct(x), false);
 
@@ -104,19 +122,21 @@ export function renderDashboard() {
   const refAssets = (nestEgg != null && nestEgg > 0) ? nestEgg : (plan.currentSavings > 0 ? plan.currentSavings : null);
   const requiredYield = refAssets > 0 ? netSpend / refAssets : null;
   const portCagr = cur.result?.stats?.cagr;
-  $('kpiYield').textContent = Number.isFinite(requiredYield) ? pct(requiredYield) : '—';
-  $('kpiYield').style.color = '';
-  if (Number.isFinite(requiredYield) && Number.isFinite(portCagr)) {
-    if (requiredYield > portCagr) $('kpiYield').style.color = 'var(--bad)';
-    else if (requiredYield > portCagr * 0.85) $('kpiYield').style.color = 'var(--warn)';
+  const yieldEl = setText('kpiYield', Number.isFinite(requiredYield) ? pct(requiredYield) : '—');
+  if (yieldEl) {
+    yieldEl.style.color = '';
+    if (Number.isFinite(requiredYield) && Number.isFinite(portCagr)) {
+      if (requiredYield > portCagr) yieldEl.style.color = 'var(--bad)';
+      else if (requiredYield > portCagr * 0.85) yieldEl.style.color = 'var(--warn)';
+    }
   }
   const yieldBasis = (nestEgg != null && nestEgg > 0)
     ? `目標年支出 ÷ 退休時中位資產 ${compact(nestEgg)}`
     : (plan.currentSavings > 0 ? `目標年支出 ÷ 現有資產 ${compact(plan.currentSavings)}` : '—');
   const cagrNote = Number.isFinite(portCagr) ? ` · 組合歷史 CAGR ${pct(portCagr)}` : '';
-  $('kpiYieldSub').textContent = Number.isFinite(requiredYield)
+  setText('kpiYieldSub', Number.isFinite(requiredYield)
     ? `${yieldBasis}${cagrNote} · 達此％可用收益支撐開銷（簡化、不計本金侵蝕）`
-    : '無法計算（缺資產或支出）';
+    : '無法計算（缺資產或支出）');
   const prevYield = (() => {
     if (!prev || !state.previous) return null;
     const pp = state.previous.plan;
@@ -191,18 +211,21 @@ export function renderFanChart(cur, c) {
       }
     }
   });
-  $('fanHint').textContent = `${plan.currency}，今日幣值`;
+  setText('fanHint', `${plan.currency}，今日幣值`);
   const h = sim.history;
   const method = h.method === 'rolling' ? '完整歷史窗口' : '歷史不足計劃年限，以循環序列補足';
   const infl = plan.inflationMode === 'cpi'
     ? `美國 CPI${cur.cpiFallbackMonths ? `（最近 ${cur.cpiFallbackMonths} 個月缺 CPI，以 ${plan.inflationRate}% 替代）` : ''}`
     : `固定 ${plan.inflationRate}%/年`;
-  $('fanNote').textContent = `以 ${h.start} ~ ${h.end} 每個起始月份各模擬一次（${intFmt.format(h.starts)} 次，${method}）。通膨：${infl}；費用 ${plan.feeRate}%/年。色帶為各年齡資產的 P10–P90 與 P25–P75。`;
+  setText('fanNote', `以 ${h.start} ~ ${h.end} 每個起始月份各模擬一次（${intFmt.format(h.starts)} 次，${method}）。通膨：${infl}；費用 ${plan.feeRate}%/年。色帶為各年齡資產的 P10–P90 與 P25–P75。`);
 }
 
 export function renderActiveTab() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
-  ['scenarios', 'performance', 'assets'].forEach(t => { $('tab-' + t).hidden = t !== state.tab; });
+  ['scenarios', 'performance', 'assets'].forEach(t => {
+    const panel = $('tab-' + t);
+    if (panel) panel.hidden = t !== state.tab;
+  });
   if (!state.current) return;
   ({ scenarios: renderScenarios, performance: renderPerformance, assets: renderAssets })[state.tab]();
 }
@@ -238,6 +261,7 @@ export function table(headers, rows, className = 'tbl') {
 export function renderScenarios() {
   const { sim, plan } = state.current;
   const box = $('tab-scenarios');
+  if (!box) return;
   box.innerHTML = '';
   const c = themeColors();
   const w = sim.withdrawalRates;
@@ -301,6 +325,7 @@ export function renderPerformance() {
   const { result: r } = state.current;
   const prev = state.previous?.result;
   const box = $('tab-performance');
+  if (!box) return;
   box.innerHTML = '';
   const s = r.stats;
   const ps = prev?.stats;
@@ -385,6 +410,7 @@ export function renderPerformance() {
 export function renderAssets() {
   const { result: r } = state.current;
   const box = $('tab-assets');
+  if (!box) return;
   box.innerHTML = '';
   box.appendChild(el('div', 'section-h', '個別資產（同一期間）'));
   box.appendChild(table(['代號', '權重', 'CAGR', '波動', '最大回撤', '數據來源（新 ← 舊）'], r.assets.map(a => [
