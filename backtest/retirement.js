@@ -181,6 +181,13 @@ function summarize(values, qs = PERCENTILES) {
  * @param equityMonthly  runBacktest().equityMonthly
  * @param cpiSeries      [['YYYY-MM-DD', 指數], ...]（月度），inflationMode = 'fixed' 時可省略
  */
+export function inflationLabel(plan, cpiFallbackMonths = 0) {
+  const p = normalizePlan(plan);
+  if (p.inflationMode === 'fixed') return `通膨：固定 ${p.inflationRate}%`;
+  const n = Math.max(0, Number(cpiFallbackMonths) || 0);
+  return n ? `通膨：CPI，缺 ${n} 個月` : '通膨：CPI';
+}
+
 export function realMonthlyReturns(equityMonthly, plan, cpiSeries) {
   const p = normalizePlan(plan);
   const cpi = new Map((cpiSeries || []).map(([d, v]) => [d.slice(0, 7), v]));

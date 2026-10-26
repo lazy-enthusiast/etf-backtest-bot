@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -194,7 +194,16 @@ export function renderDashboard() {
   renderDividendHighlight(cur);
   renderFeeHighlight(cur);
   renderFxHighlight(cur);
+  renderInflationLabel(cur);
   renderActiveTab();
+}
+
+function renderInflationLabel(cur) {
+  const node = $('inflationLabel');
+  if (!node) return;
+  if (!cur?.plan) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = inflationLabel(cur.plan, cur.cpiFallbackMonths);
+  node.hidden = false;
 }
 
 function renderFxHighlight(cur) {

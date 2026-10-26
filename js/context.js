@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { pct, num2, money, compact } from './dom.js';
+import { inflationLabel } from '../backtest/retirement.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 
 function shortSnippet(snippet, tightAge) {
@@ -69,7 +70,7 @@ export function describePlan(p) {
     `幣別 ${p.currency}；目前 ${p.currentAge} 歲、${p.retireAge} 歲退休、規劃至 ${p.endAge} 歲（所有金額為今日幣值）`,
     `現有投資資產 ${money(p.currentSavings, p.currency)}；每月投入 ${money(p.monthlyContribution, p.currency)}（至退休）；退休後目標年支出 ${money(p.annualSpending, p.currency)}；${income}`,
     `提領規則：${describeWithdrawal(p)}`,
-    `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`,
+    `${inflationLabel(p, 0)}；費用＋成本 ${p.feeRate}%/年`,
     p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null,
     p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null,
     p.feeSplit ? `費用拆分：開，並取代單一費用率 ${p.feeRate}%（TER ${p.ter}%、年換手 ${p.turnover}% × 成本 ${p.turnoverCost}%、匯率價差 ${p.fxSpread}%）。` : null,
