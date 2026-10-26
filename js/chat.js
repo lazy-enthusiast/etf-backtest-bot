@@ -194,6 +194,10 @@ export function buildMessageEl(m, conv) {
   const bubble = el('div', 'bubble');
   if (m.role === 'bot') renderMarkdown(bubble, m.text || '');
   else bubble.textContent = m.text;
+  if (m.pending) {
+    const wait = el('div', 'wait-status', '正在連線…');
+    bubble.appendChild(wait);
+  }
   wrap.appendChild(bubble);
   if (m.attachmentName) wrap.appendChild(el('div', 'attach-tag', '📎 ' + m.attachmentName));
 
@@ -324,12 +328,13 @@ export async function sendMessage(overrideText) {
 }
 
 export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
-  const botMsg = { role: 'bot', text: '', time: Date.now() };
+  const botMsg = { role: 'bot', text: '思考中…', pending: true, time: Date.now() };
   conv.messages.push(botMsg);
   renderMessages();
   const box = $('messages');
-  const bubble = box.lastElementChild.querySelector('.bubble');
-  bubble.textContent = '思考中…';
+  const bubble = box.lastElementChild?.querySelector('.bubble');
+  const waitEl = bubble?.querySelector('.wait-status');
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
   const query = attachment?.kind === 'text' ? `${text}\n\n【附加檔案：${attachment.filename}】\n${attachment.extractedText}` : text;
   state.isSending = true;
@@ -373,7 +378,11 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     const scheduleRender = () => {
       if (pending) return;
       pending = true;
-      requestAnimationFrame(() => { renderMarkdown(bubble, acc); box.scrollTop = box.scrollHeight; pending = false; });
+      requestAnimationFrame(() => {
+        if (bubble) renderMarkdown(bubble, acc);
+        if (box) box.scrollTop = box.scrollHeight;
+        pending = false;
+      });
     };
 
     while (true) {
@@ -389,7 +398,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
         try { json = JSON.parse(t.slice(6)); } catch (e) { continue; }
         if (json.error && !json.choices) throw new Error(json.error);
         if (json.type === 'status' && json.text && !acc) {
-          bubble.textContent = json.text;
+          if (waitEl) waitEl.textContent = json.text;
           continue;
         }
         if (json.type === 'meta') {
@@ -404,6 +413,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
         const token = json.choices?.[0]?.delta?.content || '';
         if (token) {
           acc += token;
+          botMsg.pending = false;
           botMsg.text = acc;
           const now = Date.now();
           if (now - lastRender >= 80) { lastRender = now; scheduleRender(); }
@@ -411,6 +421,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
       }
     }
     if (!acc) throw new Error('模型沒有回傳內容');
+    botMsg.pending = false;
     botMsg.text = acc;
     conv.lastBacktestHash = backtestHash;
     saveConversations();
@@ -428,7 +439,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     } else if (sawHttp && fetchThrew) {
       msg = '回覆傳到一半中斷了。請再送一次。';
     }
-    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + msg, time: Date.now() };
+    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + msg, pending: false, time: Date.now() };
     saveConversations();
     renderMessages();
   } finally {
