@@ -2,6 +2,27 @@ import { state } from './state.js';
 import { pct, num2, money, compact } from './dom.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 
+function shortSnippet(snippet, tightAge) {
+  if (!snippet?.length) return [];
+  if (snippet.length <= 8) return snippet;
+  const picks = new Set([0, snippet.length - 1]);
+  const tight = snippet.findIndex(s => s.age === tightAge);
+  if (tight >= 0) picks.add(tight);
+  const step = Math.max(1, Math.ceil(snippet.length / 6));
+  for (let i = 0; i < snippet.length; i += step) picks.add(i);
+  return [...picks].sort((a, b) => a - b).map(i => snippet[i]);
+}
+
+function describeSpendingBrief(sim, plan) {
+  const b = sim?.spendingBrief;
+  if (!b?.tightest) return null;
+  const tight = `最差起點 ${b.worstStart}：最緊的一年是 ${b.tightest.age} 歲（${b.tightest.year}）實質年支出 ${money(b.tightest.spending, plan.currency)}`;
+  const vol = Number.isFinite(b.meanAbsGapRatio) ? `；年支出相對目標的平均絕對偏差 ${pct(b.meanAbsGapRatio, 0)}` : '';
+  const guard = b.guardrail ? `；護欄最長連續下調 ${b.guardrail.longest} 年、單次最大 ${money(b.guardrail.largest, plan.currency)}` : '';
+  const snip = shortSnippet(b.snippet, b.tightest.age).map(s => `${s.age}歲 ${compact(s.spending)}`).join('、');
+  return `路徑摘要（逐月帳本只在記憶體裡算完即丟）：${tight}${vol}${guard}。最差起點逐年：${snip}`;
+}
+
 function describeWithdrawal(p) {
   if (p.withdrawalStrategy === 'guardrails') {
     return `護欄法（絕對提領率＝年提領÷資產：>${p.guardrailCeiling}% 砍支出 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%；非相對初始提領率）`;
@@ -38,6 +59,7 @@ export function describeSim(cur) {
     flex ? `實際／目標累積提領比：P10 ${pct(flex.spendRatio.p10, 0)}、中位 ${pct(flex.spendRatio.p50, 0)}、P90 ${pct(flex.spendRatio.p90, 0)}；達目標九成的月份占比中位 ${pct(flex.coverageRate.p50, 0)}` : null,
     `提領期 ${w.horizonYears} 年的 SWR：最差 ${pct(w.swr.min, 2)}（${w.worstStart} 起）、P5 ${pct(w.swr.p5, 2)}、P10 ${pct(w.swr.p10, 2)}、中位 ${pct(w.swr.p50, 2)}；PWR：最差 ${pct(w.pwr.min, 2)}、P10 ${pct(w.pwr.p10, 2)}、中位 ${pct(w.pwr.p50, 2)}`,
     '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
+    describeSpendingBrief(sim, plan),
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

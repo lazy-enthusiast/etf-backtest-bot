@@ -62,6 +62,10 @@
 2. CSV 的 `withdrawal` 加總後，其分位等於所公布的累計提領分位；年底餘額分位等於現有 `bands`。
 3. 稅、匯率、下滑路徑（以及 P1-4 的費用拆分、P2-7 拔靴、P2-8 頻率）預設關閉，關閉時與現有基線一致。
 
+## 進度
+
+- P0-1：已做。逐月列只在 `buildLifeLedger`（測試）與同一次 walk 裡存在；`simulateRetirement` 只留下 `spendingBrief` 與 `cumWithdrawal`。畫面在 KPI 下兩行（本分支沒有概況分頁）。
+
 ## 第一個 PR 只做 P0-1
 
 做：無 I/O 的帳本函數、欄位如上、一個 Node 測試（兩次相同、提領加總對得上分位、`simulateRetirement` 與基線一致）。

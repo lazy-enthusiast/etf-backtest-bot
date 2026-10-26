@@ -128,7 +128,19 @@ function monthWithdrawal(strategy, p, state, balance, k, retireMonth, totalMonth
  * 單一提領規則下，對所有歷史起點跑完整人生路徑。
  * fixed_real 時同時用線性分解算 maxSpending（期末歸零的最大固定年支出）。
  */
-function runLifePaths(p, returns, strategy) {
+function worseRun(a, b) {
+  if (a.success !== b.success) return !a.success;
+  const da = a.depletedAge ?? Infinity;
+  const db = b.depletedAge ?? Infinity;
+  if (da !== db) return da < db;
+  return a.endBalance < b.endBalance;
+}
+
+/**
+ * 與 runLifePaths 同一條月初現金流、其後報酬的迴圈。
+ * keepRows 只給測試對帳；正式摘要算完就丟掉逐月列。
+ */
+function walkLife(p, returns, strategy, { keepRows = false } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -137,6 +149,7 @@ function runLifePaths(p, returns, strategy) {
   const circular = L < totalMonths;
   const starts = circular ? L : L - totalMonths + 1;
   const years = totalMonths / 12;
+  const retireYears = p.endAge - p.retireAge;
   const contribution = p.monthlyContribution;
   const income = p.otherIncome / 12;
   const targetMonthly = p.annualSpending / 12;
@@ -144,6 +157,10 @@ function runLifePaths(p, returns, strategy) {
 
   const yearly = Array.from({ length: years + 1 }, () => new Float64Array(starts));
   const runs = new Array(starts);
+  const totals = new Float64Array(starts);
+  const yearSpends = new Array(starts);
+  const guardStats = new Array(starts);
+  const rows = keepRows ? [] : null;
 
   for (let s = 0; s < starts; s++) {
     let balance = p.currentSavings;
@@ -156,16 +173,33 @@ function runLifePaths(p, returns, strategy) {
     let coverageMonths = 0;
     let retireMonths = 0;
     const spendState = { annualSpend: p.annualSpending };
+    const yearSpend = new Float64Array(retireYears);
+    let streak = 0;
+    let longest = 0;
+    let largest = 0;
     yearly[0][s] = balance;
 
     for (let k = 0; k < totalMonths; k++) {
-      const growth = 1 + r[(s + k) % L];
-      const inflow = (k < retireMonth ? contribution : 0) + (k >= incomeMonth ? income : 0);
+      const idx = (s + k) % L;
+      const growth = 1 + r[idx];
+      const contrib = k < retireMonth ? contribution : 0;
+      const other = k >= incomeMonth ? income : 0;
+      const inflow = contrib + other;
       if (trackLinear) base += inflow;
       balance += inflow;
 
+      let withdraw = 0;
       if (k >= retireMonth) {
-        const withdraw = monthWithdrawal(strategy, p, spendState, balance, k, retireMonth, totalMonths);
+        const beforeSpend = spendState.annualSpend;
+        withdraw = monthWithdrawal(strategy, p, spendState, balance, k, retireMonth, totalMonths);
+        if (strategy === 'guardrails' && (k - retireMonth) % 12 === 0) {
+          const cut = beforeSpend - spendState.annualSpend;
+          if (cut > 1e-6) {
+            streak += 1;
+            if (streak > longest) longest = streak;
+            if (cut > largest) largest = cut;
+          } else streak = 0;
+        }
         if (trackLinear) perSpend -= 1 / 12;
         balance -= withdraw;
         totalSpent += withdraw;
@@ -174,8 +208,11 @@ function runLifePaths(p, returns, strategy) {
         if (withdraw + 1e-9 >= targetMonthly * 0.9) coverageMonths++;
         if (balance < -1e-6 && depletedAt === null) depletedAt = k;
         if (balance < 0) balance = 0;
+        const y = Math.floor((k - retireMonth) / 12);
+        if (y >= 0 && y < retireYears) yearSpend[y] += withdraw;
       }
 
+      const balanceAfterFlows = balance;
       balance *= growth;
       if (trackLinear) {
         base *= growth;
@@ -183,8 +220,27 @@ function runLifePaths(p, returns, strategy) {
       }
       if (k + 1 === retireMonth) balanceAtRetire = balance;
       if ((k + 1) % 12 === 0) yearly[(k + 1) / 12][s] = balance;
+
+      if (rows) {
+        rows.push({
+          start_month: returns[s].month,
+          k,
+          return_month: returns[idx].month,
+          circular,
+          contribution: contrib,
+          other_income: other,
+          withdrawal: withdraw,
+          real_return: r[idx],
+          balance_after_flows: balanceAfterFlows,
+          balance_end: balance,
+          depleted: depletedAt !== null && k >= depletedAt ? 1 : 0
+        });
+      }
     }
 
+    totals[s] = totalSpent;
+    yearSpends[s] = yearSpend;
+    guardStats[s] = { longest, largest };
     runs[s] = {
       start: returns[s].month,
       success: depletedAt === null,
@@ -197,7 +253,64 @@ function runLifePaths(p, returns, strategy) {
     };
   }
 
-  return { runs, yearly, starts, circular, years };
+  return { runs, yearly, starts, circular, years, rows, totals, yearSpends, guardStats, retireYears };
+}
+
+function runLifePaths(p, returns, strategy) {
+  return walkLife(p, returns, strategy, { keepRows: false });
+}
+
+function spendingBriefFromWalk(p, strategy, returns, walked) {
+  const { runs, yearSpends, guardStats, retireYears } = walked;
+  let worst = 0;
+  for (let s = 1; s < runs.length; s++) if (worseRun(runs[s], runs[worst])) worst = s;
+  const target = p.annualSpending;
+  const years = yearSpends[worst];
+  let tightY = 0;
+  for (let y = 1; y < retireYears; y++) if (years[y] < years[tightY]) tightY = y;
+  const retireMonth = (p.retireAge - p.currentAge) * 12;
+  const L = returns.length;
+  const yearOf = y => returns[(worst + retireMonth + y * 12) % L].month.slice(0, 4);
+  let absGap = 0;
+  const snippet = [];
+  for (let y = 0; y < retireYears; y++) {
+    if (target > 0) absGap += Math.abs(years[y] - target) / target;
+    snippet.push({ age: p.retireAge + y, year: yearOf(y), spending: years[y] });
+  }
+  const guard = strategy === 'guardrails' ? guardStats[worst] : null;
+  return {
+    worstStart: runs[worst].start,
+    tightest: { age: p.retireAge + tightY, year: yearOf(tightY), spending: years[tightY] },
+    meanAbsGapRatio: retireYears > 0 ? absGap / retireYears : null,
+    guardrail: guard && (guard.longest > 0 || guard.largest > 0) ? guard : (strategy === 'guardrails' ? { longest: 0, largest: 0 } : null),
+    snippet
+  };
+}
+
+/** 測試用：逐月列只在呼叫時存在。正式畫面不保留。 */
+export function buildLifeLedger(plan, returns, strategy) {
+  const p = normalizePlan(plan);
+  const strat = strategy || p.withdrawalStrategy;
+  const walked = walkLife(p, returns, strat, { keepRows: true });
+  return {
+    header: {
+      feeRate: p.feeRate,
+      inflationMode: p.inflationMode,
+      method: walked.circular ? 'circular' : 'rolling'
+    },
+    rows: walked.rows,
+    paths: walked.runs.map((run, s) => ({
+      start_month: run.start,
+      success: run.success,
+      end_balance: run.endBalance,
+      balance_at_retire: run.balanceAtRetire,
+      total_withdrawal: walked.totals[s],
+      spend_ratio: run.spendRatio,
+      depleted_age: run.depletedAge
+    })),
+    totals: walked.totals,
+    cumWithdrawal: summarize(walked.totals)
+  };
 }
 
 /**
@@ -281,6 +394,8 @@ export function simulateRetirement(plan, returns) {
     },
     worstRuns: sortedRuns.slice(0, 5),
     bands,
+    cumWithdrawal: summarize(primary.totals),
+    spendingBrief: spendingBriefFromWalk(p, p.withdrawalStrategy, returns, primary),
     byStartYear: runs.filter(x => x.start.endsWith('-01')).map(x => ({
       year: Number(x.start.slice(0, 4)),
       success: x.success,

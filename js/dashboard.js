@@ -189,7 +189,19 @@ export function renderDashboard() {
   setDelta('kpiYieldDelta', deltaCur, deltaPrev, x => pct(x), false);
 
   renderFanChart(cur, c);
+  renderPathHighlights(cur);
   renderActiveTab();
+}
+
+function renderPathHighlights(cur) {
+  const node = $('pathHighlights');
+  const brief = cur?.sim?.spendingBrief;
+  if (!node) return;
+  if (!brief?.tightest) { node.hidden = true; node.textContent = ''; return; }
+  const lines = [`最緊的一年：${brief.tightest.age} 歲實質支出 ${compact(brief.tightest.spending)}`];
+  if (brief.guardrail) lines.push(`護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`);
+  node.textContent = lines.join('\n');
+  node.hidden = false;
 }
 
 const retireLinePlugin = {
