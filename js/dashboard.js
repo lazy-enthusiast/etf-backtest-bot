@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
+import { requiredPhaseReturns } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -44,6 +45,64 @@ export function setDelta(id, cur, prev, fmt, higherIsBetter = true) {
   const better = higherIsBetter ? diff > 0 : diff < 0;
   node.textContent = `${diff > 0 ? '▲' : '▼'} ${fmt(Math.abs(diff))} vs 上一版`;
   node.className = 'delta ' + (better ? 'up' : 'down');
+}
+
+function phaseRateText(annual, flag, belowLabel) {
+  if (flag === 'above_cap') return '超過 30%';
+  if (flag === 'below_zero') return belowLabel;
+  if (!Number.isFinite(annual)) return null;
+  return pct(annual);
+}
+
+function phaseTone(annual, flag, cagr) {
+  if (flag === 'above_cap') return 'tone-bad';
+  if (!Number.isFinite(annual) || !Number.isFinite(cagr) || annual <= cagr) return '';
+  if (annual > cagr * 1.15) return 'tone-bad';
+  return 'tone-warn';
+}
+
+function phaseDelta(cur, prev) {
+  if (!prev) return [null, null];
+  if (Number.isFinite(cur.withdrawalAnnual) && Number.isFinite(prev.withdrawalAnnual)) {
+    return [cur.withdrawalAnnual, prev.withdrawalAnnual];
+  }
+  if (Number.isFinite(cur.accumulationAnnual) && Number.isFinite(prev.accumulationAnnual)) {
+    return [cur.accumulationAnnual, prev.accumulationAnnual];
+  }
+  return [null, null];
+}
+
+function renderPhaseYield(phases, cagr) {
+  const yieldEl = $('kpiYield');
+  const subEl = $('kpiYieldSub');
+  const accumText = phaseRateText(phases.accumulationAnnual, phases.flags.accumulation, '0% 以下');
+  const withdrawText = phaseRateText(phases.withdrawalAnnual, phases.flags.withdrawal, '低於 0%');
+  if (yieldEl) {
+    yieldEl.style.color = '';
+    yieldEl.classList.add('phase-rates');
+    yieldEl.innerHTML = '';
+    const addLine = (prefix, text, annual, flag) => {
+      const line = el('div');
+      line.append(document.createTextNode(`${prefix} `), el('span', phaseTone(annual, flag, cagr), text));
+      yieldEl.append(line);
+    };
+    if (accumText) addLine('至退休', accumText, phases.accumulationAnnual, phases.flags.accumulation);
+    if (withdrawText) addLine('退休後', withdrawText, phases.withdrawalAnnual, phases.flags.withdrawal);
+    if (!accumText && !withdrawText) yieldEl.textContent = '—';
+  }
+  if (!subEl) return;
+  subEl.innerHTML = '';
+  if (!accumText && !withdrawText) {
+    subEl.textContent = '無法計算（缺退休資產）';
+    return;
+  }
+  const assumption = accumText
+    ? '實質報酬。累積：現有資產＋每月投入，長到退休時中位資產。提領：由該資產支付淨支出至終點，允許花完本金。'
+    : '實質報酬。提領：由現有資產支付淨支出至終點，允許花完本金。';
+  subEl.append(document.createTextNode(assumption));
+  if (Number.isFinite(cagr)) {
+    subEl.append(document.createElement('br'), document.createTextNode(`對照組合歷史名目 CAGR ${pct(cagr)}（口徑不同，僅供參考）`));
+  }
 }
 
 export function renderDashboard() {
@@ -115,38 +174,19 @@ export function renderDashboard() {
   }
   setDelta('kpiWithdrawDelta', initRate, prev?.initialWithdrawalRate, x => pct(x), false);
 
-  // 所需年化獲利 ≈ 淨目標年支出 ÷ 參考資產：達此％則「收益≈支出」（永續、不計本金侵蝕的簡化口徑）
-  const otherAtRetire = plan.otherIncomeAge <= plan.retireAge ? plan.otherIncome : 0;
-  const netSpend = Math.max(0, plan.annualSpending - otherAtRetire);
+  // 所需報酬分兩段：累積到退休時中位資產，以及退休後花到終點（允許花完本金）。不是支出÷資產。
   const nestEgg = atRetire?.p50;
-  const refAssets = (nestEgg != null && nestEgg > 0) ? nestEgg : (plan.currentSavings > 0 ? plan.currentSavings : null);
-  const requiredYield = refAssets > 0 ? netSpend / refAssets : null;
-  const portCagr = cur.result?.stats?.cagr;
-  const yieldEl = setText('kpiYield', Number.isFinite(requiredYield) ? pct(requiredYield) : '—');
-  if (yieldEl) {
-    yieldEl.style.color = '';
-    if (Number.isFinite(requiredYield) && Number.isFinite(portCagr)) {
-      if (requiredYield > portCagr) yieldEl.style.color = 'var(--bad)';
-      else if (requiredYield > portCagr * 0.85) yieldEl.style.color = 'var(--warn)';
-    }
-  }
-  const yieldBasis = (nestEgg != null && nestEgg > 0)
-    ? `目標年支出 ÷ 退休時中位資產 ${compact(nestEgg)}`
-    : (plan.currentSavings > 0 ? `目標年支出 ÷ 現有資產 ${compact(plan.currentSavings)}` : '—');
-  const cagrNote = Number.isFinite(portCagr) ? ` · 組合歷史 CAGR ${pct(portCagr)}` : '';
-  setText('kpiYieldSub', Number.isFinite(requiredYield)
-    ? `${yieldBasis}${cagrNote} · 達此％可用收益支撐開銷（簡化、不計本金侵蝕）`
-    : '無法計算（缺資產或支出）');
-  const prevYield = (() => {
-    if (!prev || !state.previous) return null;
-    const pp = state.previous.plan;
-    const other = pp.otherIncomeAge <= pp.retireAge ? pp.otherIncome : 0;
-    const spend = Math.max(0, pp.annualSpending - other);
-    const egg = prev.balanceAtRetire?.p50;
-    const ref = (egg != null && egg > 0) ? egg : (pp.currentSavings > 0 ? pp.currentSavings : null);
-    return ref > 0 ? spend / ref : null;
-  })();
-  setDelta('kpiYieldDelta', requiredYield, prevYield, x => pct(x), false);
+  const alreadyRetired = plan.retireAge <= plan.currentAge || !Number.isFinite(nestEgg);
+  const phases = requiredPhaseReturns(plan, { nestEgg, alreadyRetired });
+  renderPhaseYield(phases, cur.result?.stats?.cagr);
+  const prevPhases = state.previous?.plan
+    ? requiredPhaseReturns(state.previous.plan, {
+      nestEgg: prev?.balanceAtRetire?.p50,
+      alreadyRetired: state.previous.plan.retireAge <= state.previous.plan.currentAge || !Number.isFinite(prev?.balanceAtRetire?.p50)
+    })
+    : null;
+  const [deltaCur, deltaPrev] = phaseDelta(phases, prevPhases);
+  setDelta('kpiYieldDelta', deltaCur, deltaPrev, x => pct(x), false);
 
   renderFanChart(cur, c);
   renderActiveTab();

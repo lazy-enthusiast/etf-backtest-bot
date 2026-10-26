@@ -290,3 +290,89 @@ export function simulateRetirement(plan, returns) {
     }))
   };
 }
+
+// 兩段所需報酬的搜尋邊界（年化實質）。超出邊界不回假精度數字，改由 flags 標示。
+const PHASE_RATE_FLOOR = -0.20;
+const PHASE_RATE_CAP = 0.30;
+
+function accumulateToNestEgg(savings, contribution, months, annual) {
+  const g = (1 + annual) ** (1 / 12);
+  let balance = savings;
+  for (let k = 0; k < months; k++) balance = (balance + contribution) * g;
+  return balance;
+}
+
+// 月初先扣支出、加上已開始的其他收入，再套用當月報酬。不把負餘額歸零，才能解出期末剛好花完的利率。
+function withdrawToEnd(start, spendMonthly, incomeMonthly, incomeDelayMonths, months, annual) {
+  const g = (1 + annual) ** (1 / 12);
+  let balance = start;
+  for (let k = 0; k < months; k++) {
+    const income = k >= incomeDelayMonths ? incomeMonthly : 0;
+    balance = (balance - spendMonthly + income) * g;
+  }
+  return balance;
+}
+
+function solvePhaseRate(scoreAt, scale) {
+  const tol = Math.max(1, Math.abs(scale) * 1e-8);
+  const fLo = scoreAt(PHASE_RATE_FLOOR);
+  const fHi = scoreAt(PHASE_RATE_CAP);
+  if (Math.abs(fLo) <= tol && Math.abs(fHi) <= tol) return { annual: 0, flag: null };
+  if (fLo > tol) return { annual: null, flag: 'below_zero' };
+  if (fHi < -tol) return { annual: null, flag: 'above_cap' };
+  if (Math.abs(fLo) <= tol) return { annual: PHASE_RATE_FLOOR, flag: null };
+  if (Math.abs(fHi) <= tol) return { annual: PHASE_RATE_CAP, flag: null };
+  let lo = PHASE_RATE_FLOOR;
+  let hi = PHASE_RATE_CAP;
+  let annual = 0;
+  for (let i = 0; i < 64; i++) {
+    annual = (lo + hi) / 2;
+    const f = scoreAt(annual);
+    if (Math.abs(f) <= tol) break;
+    if (f > 0) hi = annual;
+    else lo = annual;
+  }
+  return { annual, flag: null };
+}
+
+/**
+ * 累積期與提領期各自需要的實質年化報酬（今日幣值）。
+ * 累積：現有資產＋每月投入，月初入帳後再增值，長到 nestEgg。
+ * 提領：由該資產（已退休則用現有資產）支付年支出至終點，其他收入自 otherIncomeAge 起每月加入，允許花完本金。
+ * 年化為 null 表示這一段不適用，或利率落在搜尋邊界外（見 flags：below_zero / above_cap）。
+ */
+export function requiredPhaseReturns(plan, { nestEgg = null, alreadyRetired = false } = {}) {
+  const p = normalizePlan(plan);
+  const retired = Boolean(alreadyRetired) || p.retireAge <= p.currentAge;
+  const target = Number(nestEgg);
+  const accumMonths = retired ? 0 : (p.retireAge - p.currentAge) * 12;
+
+  let accumulation = { annual: null, flag: null };
+  if (accumMonths > 0 && Number.isFinite(target) && target > 0) {
+    accumulation = solvePhaseRate(
+      annual => accumulateToNestEgg(p.currentSavings, p.monthlyContribution, accumMonths, annual) - target,
+      target
+    );
+  }
+
+  const start = retired ? p.currentSavings : (Number.isFinite(target) && target > 0 ? target : null);
+  let withdrawal = { annual: null, flag: null };
+  if (start != null) {
+    const anchorAge = retired ? p.currentAge : p.retireAge;
+    const months = (p.endAge - anchorAge) * 12;
+    const incomeDelay = (p.otherIncomeAge - anchorAge) * 12;
+    withdrawal = solvePhaseRate(
+      annual => withdrawToEnd(start, p.annualSpending / 12, p.otherIncome / 12, incomeDelay, months, annual),
+      Math.max(start, p.annualSpending, 1)
+    );
+  }
+
+  return {
+    accumulationAnnual: accumulation.annual,
+    withdrawalAnnual: withdrawal.annual,
+    flags: {
+      accumulation: accumulation.flag,
+      withdrawal: withdrawal.flag
+    }
+  };
+}
