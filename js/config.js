@@ -40,5 +40,8 @@ export const PLAN_LABELS = {
   ...Object.fromEntries(PLAN_FIELDS.map(f => [f.key, f.label])),
   guardrailCeiling: '護欄上限（絕對%）',
   guardrailFloor: '護欄下限（絕對%）',
-  guardrailAdjustPct: '觸發後調整支出%'
+  guardrailAdjustPct: '觸發後調整支出%',
+  glidePath: '下滑路徑',
+  equityTickers: '股票代號',
+  glideEquityEnd: '期末股權重'
 };

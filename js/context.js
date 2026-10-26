@@ -23,6 +23,13 @@ function describeSpendingBrief(sim, plan) {
   return `路徑摘要（逐月帳本只在記憶體裡算完即丟）：${tight}${vol}${guard}。最差起點逐年：${snip}`;
 }
 
+function describeGlide(sim) {
+  const g = sim?.glide;
+  if (!g) return null;
+  if (g.skipped || !Number.isFinite(g.min)) return '下滑路徑未套用：需要同時標示股票代號與其他持倉，且價格月序對得上。';
+  return `實際股權重 ${pct(g.min, 0)}–${pct(g.max, 0)}（同一條歷史索引，只改該月目標權重；這條成功率不宜與固定權重或其他權重路徑橫比）`;
+}
+
 function describeWithdrawal(p) {
   if (p.withdrawalStrategy === 'guardrails') {
     return `護欄法（絕對提領率＝年提領÷資產：>${p.guardrailCeiling}% 砍支出 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%；非相對初始提領率）`;
@@ -39,8 +46,9 @@ export function describePlan(p) {
     `幣別 ${p.currency}；目前 ${p.currentAge} 歲、${p.retireAge} 歲退休、規劃至 ${p.endAge} 歲（所有金額為今日幣值）`,
     `現有投資資產 ${money(p.currentSavings, p.currency)}；每月投入 ${money(p.monthlyContribution, p.currency)}（至退休）；退休後目標年支出 ${money(p.annualSpending, p.currency)}；${income}`,
     `提領規則：${describeWithdrawal(p)}`,
-    `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`
-  ].join('\n');
+    `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`,
+    p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null
+  ].filter(Boolean).join('\n');
 }
 
 export function describeSim(cur) {
@@ -60,6 +68,7 @@ export function describeSim(cur) {
     `提領期 ${w.horizonYears} 年的 SWR：最差 ${pct(w.swr.min, 2)}（${w.worstStart} 起）、P5 ${pct(w.swr.p5, 2)}、P10 ${pct(w.swr.p10, 2)}、中位 ${pct(w.swr.p50, 2)}；PWR：最差 ${pct(w.pwr.min, 2)}、P10 ${pct(w.pwr.p10, 2)}、中位 ${pct(w.pwr.p50, 2)}`,
     '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
     describeSpendingBrief(sim, plan),
+    describeGlide(sim),
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

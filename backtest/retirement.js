@@ -25,7 +25,10 @@ export const DEFAULT_PLAN = {
   // 護欄法：提領率高於上限砍支出、低於下限加支出（每年檢視一次）
   guardrailCeiling: 6,    // % of portfolio
   guardrailFloor: 3,
-  guardrailAdjustPct: 10
+  guardrailAdjustPct: 10,
+  glidePath: false,
+  equityTickers: [],
+  glideEquityEnd: null
 };
 
 const PERCENTILES = [10, 25, 50, 75, 90];
@@ -49,7 +52,23 @@ export function normalizePlan(plan) {
   p.guardrailCeiling = Math.min(20, Math.max(1, Number(p.guardrailCeiling) || DEFAULT_PLAN.guardrailCeiling));
   p.guardrailFloor = Math.min(p.guardrailCeiling - 0.1, Math.max(0.5, Number(p.guardrailFloor) || DEFAULT_PLAN.guardrailFloor));
   p.guardrailAdjustPct = Math.min(50, Math.max(1, Number(p.guardrailAdjustPct) || DEFAULT_PLAN.guardrailAdjustPct));
+  p.glidePath = p.glidePath === true || p.glidePath === 'true';
+  p.equityTickers = normalizeEquityTickers(p.equityTickers);
+  const end = Number(p.glideEquityEnd);
+  p.glideEquityEnd = p.glideEquityEnd == null || p.glideEquityEnd === '' || !Number.isFinite(end)
+    ? null
+    : Math.min(100, Math.max(0, end));
   return p;
+}
+
+function normalizeEquityTickers(value) {
+  const raw = Array.isArray(value) ? value : String(value || '').split(/[\s,]+/);
+  const out = [];
+  for (const item of raw) {
+    const sym = String(item || '').trim().toUpperCase();
+    if (sym && !out.includes(sym)) out.push(sym);
+  }
+  return out;
 }
 
 function percentile(sorted, q) {
@@ -93,6 +112,75 @@ export function realMonthlyReturns(equityMonthly, plan, cpiSeries) {
     returns.push({ month: date.slice(0, 7), r: (value / prevValue) * feeFactor / inflation - 1 });
   }
   return { returns, cpiFallbackMonths };
+}
+
+/**
+ * 股／其他兩袖的月價格報酬，對齊 equityMonthly 的同一個月序。
+ * 下滑關閉、或無法分成兩袖時回傳 null，呼叫端繼續用既有的單一實質報酬。
+ */
+export function buildGlide(assetMonthly, holdings, plan, cpiSeries) {
+  const p = normalizePlan(plan);
+  if (!p.glidePath || !assetMonthly?.length || !p.equityTickers.length) return null;
+  const list = Array.isArray(holdings)
+    ? holdings.map(h => [h.symbol, h.weight])
+    : Object.entries(holdings);
+  const cleaned = list.map(([symbol, weight]) => [String(symbol).toUpperCase(), Number(weight)]);
+  const total = cleaned.reduce((sum, [, weight]) => sum + (Number.isFinite(weight) ? weight : 0), 0);
+  if (!(total > 0)) return null;
+  const equitySet = new Set(p.equityTickers);
+  const bySym = new Map();
+  let eqW = 0;
+  for (const [symbol, weight] of cleaned) {
+    if (!Number.isFinite(weight) || weight < 0) continue;
+    const w = weight / total;
+    bySym.set(symbol, (bySym.get(symbol) || 0) + w);
+    if (equitySet.has(symbol)) eqW += w;
+  }
+  const restW = 1 - eqW;
+  if (eqW <= 1e-12 || restW <= 1e-12) return null;
+  const base = assetMonthly[0].series;
+  if (!base || base.length < 2) return null;
+  const seriesBy = new Map(assetMonthly.map(a => [String(a.symbol).toUpperCase(), a.series]));
+  for (const symbol of bySym.keys()) {
+    const series = seriesBy.get(symbol);
+    if (!series || series.length !== base.length) return null;
+  }
+  const n = base.length - 1;
+  const equityR = new Float64Array(n);
+  const restR = new Float64Array(n);
+  for (let i = 1; i < base.length; i++) {
+    let eq = 0;
+    let rest = 0;
+    for (const [symbol, weight] of bySym) {
+      const series = seriesBy.get(symbol);
+      const ret = series[i][1] / series[i - 1][1] - 1;
+      if (equitySet.has(symbol)) eq += (weight / eqW) * ret;
+      else rest += (weight / restW) * ret;
+    }
+    equityR[i - 1] = eq;
+    restR[i - 1] = rest;
+  }
+  const feeFactor = (1 - p.feeRate / 100) ** (1 / 12);
+  const fixedInflation = (1 + p.inflationRate / 100) ** (1 / 12);
+  const cpi = new Map((cpiSeries || []).map(([d, v]) => [String(d).slice(0, 7), v]));
+  const inflation = new Float64Array(n);
+  for (let i = 1; i < base.length; i++) {
+    let factor = fixedInflation;
+    if (p.inflationMode === 'cpi') {
+      const a = cpi.get(String(base[i - 1][0]).slice(0, 7));
+      const b = cpi.get(String(base[i][0]).slice(0, 7));
+      if (a && b) factor = b / a;
+    }
+    inflation[i - 1] = factor;
+  }
+  return {
+    equityR,
+    restR,
+    inflation,
+    feeFactor,
+    startEquity: eqW,
+    endEquity: p.glideEquityEnd == null ? eqW : p.glideEquityEnd / 100
+  };
 }
 
 // 給定一段月報酬，提領期的最大可持續提領率（SWR：期末歸零）與永續提領率（PWR：期末保住實質本金）
@@ -140,7 +228,7 @@ function worseRun(a, b) {
  * 與 runLifePaths 同一條月初現金流、其後報酬的迴圈。
  * keepRows 只給測試對帳；正式摘要算完就丟掉逐月列。
  */
-function walkLife(p, returns, strategy, { keepRows = false } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -161,6 +249,9 @@ function walkLife(p, returns, strategy, { keepRows = false } = {}) {
   const yearSpends = new Array(starts);
   const guardStats = new Array(starts);
   const rows = keepRows ? [] : null;
+  const glideOn = Boolean(glide && p.glidePath && glide.equityR.length === L);
+  let eqMin = Infinity;
+  let eqMax = -Infinity;
 
   for (let s = 0; s < starts; s++) {
     let balance = p.currentSavings;
@@ -181,7 +272,21 @@ function walkLife(p, returns, strategy, { keepRows = false } = {}) {
 
     for (let k = 0; k < totalMonths; k++) {
       const idx = (s + k) % L;
-      const growth = 1 + r[idx];
+      let equityWeight = null;
+      let growth;
+      if (glideOn) {
+        const span = totalMonths <= 1 ? 0 : k / (totalMonths - 1);
+        equityWeight = glide.startEquity + (glide.endEquity - glide.startEquity) * span;
+        if (equityWeight < 0) equityWeight = 0;
+        if (equityWeight > 1) equityWeight = 1;
+        if (equityWeight < eqMin) eqMin = equityWeight;
+        if (equityWeight > eqMax) eqMax = equityWeight;
+        const gross = 1 + equityWeight * glide.equityR[idx] + (1 - equityWeight) * glide.restR[idx];
+        growth = gross * glide.feeFactor / glide.inflation[idx];
+      } else {
+        growth = 1 + r[idx];
+      }
+      const realReturn = growth - 1;
       const contrib = k < retireMonth ? contribution : 0;
       const other = k >= incomeMonth ? income : 0;
       const inflow = contrib + other;
@@ -230,10 +335,11 @@ function walkLife(p, returns, strategy, { keepRows = false } = {}) {
           contribution: contrib,
           other_income: other,
           withdrawal: withdraw,
-          real_return: r[idx],
+          real_return: realReturn,
           balance_after_flows: balanceAfterFlows,
           balance_end: balance,
-          depleted: depletedAt !== null && k >= depletedAt ? 1 : 0
+          depleted: depletedAt !== null && k >= depletedAt ? 1 : 0,
+          ...(equityWeight === null ? {} : { equity_weight_actual: equityWeight })
         });
       }
     }
@@ -253,11 +359,14 @@ function walkLife(p, returns, strategy, { keepRows = false } = {}) {
     };
   }
 
-  return { runs, yearly, starts, circular, years, rows, totals, yearSpends, guardStats, retireYears };
+  return {
+    runs, yearly, starts, circular, years, rows, totals, yearSpends, guardStats, retireYears,
+    equityWeightRange: glideOn ? { min: eqMin, max: eqMax } : null
+  };
 }
 
-function runLifePaths(p, returns, strategy) {
-  return walkLife(p, returns, strategy, { keepRows: false });
+function runLifePaths(p, returns, strategy, glide) {
+  return walkLife(p, returns, strategy, { keepRows: false, glide: p.glidePath ? glide : null });
 }
 
 function spendingBriefFromWalk(p, strategy, returns, walked) {
@@ -288,10 +397,10 @@ function spendingBriefFromWalk(p, strategy, returns, walked) {
 }
 
 /** 測試用：逐月列只在呼叫時存在。正式畫面不保留。 */
-export function buildLifeLedger(plan, returns, strategy) {
+export function buildLifeLedger(plan, returns, strategy, glide = null) {
   const p = normalizePlan(plan);
   const strat = strategy || p.withdrawalStrategy;
-  const walked = walkLife(p, returns, strat, { keepRows: true });
+  const walked = walkLife(p, returns, strat, { keepRows: true, glide: p.glidePath ? glide : null });
   return {
     header: {
       feeRate: p.feeRate,
@@ -318,14 +427,14 @@ export function buildLifeLedger(plan, returns, strategy) {
  * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
  * @param returns realMonthlyReturns().returns
  */
-export function simulateRetirement(plan, returns) {
+export function simulateRetirement(plan, returns, glide = null) {
   const p = normalizePlan(plan);
   const L = returns.length;
   if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
 
-  const primary = runLifePaths(p, returns, p.withdrawalStrategy);
+  const primary = runLifePaths(p, returns, p.withdrawalStrategy, glide);
   const needFixedCompare = p.withdrawalStrategy !== 'fixed_real';
-  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real') : primary;
+  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real', glide) : primary;
   const { runs, yearly, starts, circular } = primary;
 
   const successCount = runs.filter(x => x.success).length;
@@ -396,6 +505,7 @@ export function simulateRetirement(plan, returns) {
     bands,
     cumWithdrawal: summarize(primary.totals),
     spendingBrief: spendingBriefFromWalk(p, p.withdrawalStrategy, returns, primary),
+    glide: p.glidePath ? (primary.equityWeightRange || { skipped: true }) : null,
     byStartYear: runs.filter(x => x.start.endsWith('-01')).map(x => ({
       year: Number(x.start.slice(0, 4)),
       success: x.success,

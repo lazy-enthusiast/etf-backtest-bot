@@ -52,6 +52,10 @@ export function parsePlanBlock(text) {
   for (const k of ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
+  if (obj.glidePath === true || obj.glidePath === false) changes.glidePath = obj.glidePath;
+  if (Array.isArray(obj.equityTickers) || typeof obj.equityTickers === 'string') changes.equityTickers = obj.equityTickers;
+  if (obj.glideEquityEnd === null) changes.glideEquityEnd = null;
+  else if (obj.glideEquityEnd !== undefined && Number.isFinite(Number(obj.glideEquityEnd))) changes.glideEquityEnd = Number(obj.glideEquityEnd);
   if (!Object.keys(changes).length) return null;
   return { note: typeof obj.note === 'string' ? obj.note.slice(0, 80) : '', changes };
 }
@@ -64,6 +68,9 @@ export function formatPlanValue(key, v) {
     return ({ fixed_real: '固定實質', guardrails: '護欄法', vpw: 'VPW' })[v] || v;
   }
   if (key.endsWith('Age')) return `${v} 歲`;
+  if (key === 'glidePath') return v ? '開' : '關';
+  if (key === 'equityTickers') return Array.isArray(v) ? v.join('、') : String(v || '');
+  if (key === 'glideEquityEnd') return v == null || v === '' ? '維持目前' : `${v}%`;
   return String(v);
 }
 

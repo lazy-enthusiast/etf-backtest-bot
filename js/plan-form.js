@@ -67,6 +67,32 @@ export function renderPlanForm() {
     }
     form.appendChild(field);
   }
+  form.appendChild(renderGlideFields());
+}
+
+function renderGlideFields() {
+  const box = el('details', 'advanced-plan');
+  box.appendChild(el('summary', '', '進階：下滑路徑（預設關閉）'));
+  const row = el('label', 'check-row');
+  const toggle = el('input');
+  toggle.type = 'checkbox';
+  toggle.id = 'plan-glidePath';
+  toggle.addEventListener('change', onPlanEdited);
+  row.append(toggle, document.createTextNode(' 啟用下滑路徑'));
+  const tick = el('input');
+  tick.id = 'plan-equityTickers';
+  tick.placeholder = '股票代號，例如 VTI.US';
+  tick.addEventListener('input', onPlanEdited);
+  const end = el('input');
+  end.id = 'plan-glideEquityEnd';
+  end.type = 'number';
+  end.min = 0;
+  end.max = 100;
+  end.step = 1;
+  end.placeholder = '期末股權重 %，空白＝維持目前';
+  end.addEventListener('input', onPlanEdited);
+  box.append(row, tick, end);
+  return box;
 }
 
 export function writePlanForm() {
@@ -90,6 +116,14 @@ export function writePlanForm() {
   document.querySelectorAll('#planForm .field[data-guardrail]').forEach(f => {
     f.hidden = !showGuard;
   });
+  const glideToggle = $('plan-glidePath');
+  if (glideToggle && document.activeElement !== glideToggle) glideToggle.checked = Boolean(p.glidePath);
+  const tickers = $('plan-equityTickers');
+  if (tickers && document.activeElement !== tickers) {
+    tickers.value = Array.isArray(p.equityTickers) ? p.equityTickers.join(', ') : (p.equityTickers || '');
+  }
+  const glideEnd = $('plan-glideEquityEnd');
+  if (glideEnd && document.activeElement !== glideEnd) glideEnd.value = p.glideEquityEnd == null ? '' : p.glideEquityEnd;
   renderPlanTimeline();
 }
 
@@ -100,6 +134,12 @@ export function readPlanForm() {
     const v = $('plan-' + f.key).value;
     p[f.key] = f.type === 'currency' ? v : (v === '' ? 0 : Number(v));
   }
+  const glideToggle = $('plan-glidePath');
+  if (glideToggle) p.glidePath = glideToggle.checked;
+  const tickers = $('plan-equityTickers');
+  if (tickers) p.equityTickers = tickers.value;
+  const glideEnd = $('plan-glideEquityEnd');
+  if (glideEnd) p.glideEquityEnd = glideEnd.value === '' ? null : Number(glideEnd.value);
   return p;
 }
 

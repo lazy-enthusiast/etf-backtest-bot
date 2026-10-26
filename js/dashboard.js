@@ -190,7 +190,19 @@ export function renderDashboard() {
 
   renderFanChart(cur, c);
   renderPathHighlights(cur);
+  renderGlideHighlight(cur);
   renderActiveTab();
+}
+
+function renderGlideHighlight(cur) {
+  const node = $('glideHighlight');
+  const glide = cur?.sim?.glide;
+  if (!node) return;
+  if (!glide) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = glide.skipped || !Number.isFinite(glide.min)
+    ? '下滑路徑未套用：請同時標示股票代號與其他持倉。'
+    : `實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`;
+  node.hidden = false;
 }
 
 function renderPathHighlights(cur) {

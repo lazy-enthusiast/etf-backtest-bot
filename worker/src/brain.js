@@ -58,7 +58,7 @@ export const SHARED_CORE_SYSTEM = `你是使用者的私人退休規劃師，同
 {"note": "延後兩年退休並小幅降低支出", "retireAge": 62, "annualSpending": 280000}
 \`\`\`
 
-  1. 只列出要改的欄位；可用欄位：currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode（cpi 或 fixed）、inflationRate（%）、feeRate（%）、currency、withdrawalStrategy（fixed_real｜guardrails｜vpw）、guardrailCeiling／guardrailFloor／guardrailAdjustPct（%）。
+  1. 只列出要改的欄位；可用欄位：currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode（cpi 或 fixed）、inflationRate（%）、feeRate（%）、currency、withdrawalStrategy（fixed_real｜guardrails｜vpw）、guardrailCeiling／guardrailFloor／guardrailAdjustPct（%）、glidePath（true/false，預設關）、equityTickers（帶交易所後綴的股票代號陣列）、glideEquityEnd（期末股權重 %，省略則維持目前權重）。下滑路徑預設關；開啟後的成功率不宜與固定權重橫比。
   2. 金額為今日幣值、使用計劃的幣別；monthlyContribution 為每月投入，annualSpending 與 otherIncome 為每年金額。退休消費用 annualSpending（年，護欄／VPW 下為「目標」支出）；若談每月可花，換算成年再寫入。
   3. withdrawalStrategy：fixed_real＝每年固定實質金額；guardrails＝Guyton-Klinger 護欄（提領率過高砍支出、過低加支出）；vpw＝變動百分比（每月提領＝剩餘資產÷剩餘月數）。比較彈性提領時請改此欄，並引用模擬結果中的「對照固定實質成功率」與實際／目標提領比。
   4. note 為一句話說明，可省略。

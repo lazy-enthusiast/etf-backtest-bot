@@ -65,6 +65,7 @@
 ## 進度
 
 - P0-1：已做。逐月列只在 `buildLifeLedger`（測試）與同一次 walk 裡存在；`simulateRetirement` 只留下 `spendingBrief` 與 `cumWithdrawal`。畫面在 KPI 下兩行（本分支沒有概況分頁）。
+- P0-2：已做。`glidePath` 預設關；關時不產生 `equity_weight_actual`。開時用同一月序的股／其他袖套，結果只加一行實際股權重區間。
 
 ## 第一個 PR 只做 P0-1
 
