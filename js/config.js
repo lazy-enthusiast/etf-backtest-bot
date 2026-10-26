@@ -54,5 +54,8 @@ export const PLAN_LABELS = {
   fxSpread: '匯率價差',
   fxMode: '支出匯率',
   spendingBasket: '支出籃',
+  pathMode: '路徑抽樣',
+  bootstrapSeed: '拔靴種子',
+  bootstrapBlock: '拔靴區塊月數'
   fxSeries: '台幣匯率序列'
 };

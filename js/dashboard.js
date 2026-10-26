@@ -195,7 +195,16 @@ export function renderDashboard() {
   renderFeeHighlight(cur);
   renderFxHighlight(cur);
   renderInflationLabel(cur);
+  renderBootstrapHighlight(cur);
   renderActiveTab();
+}
+
+function renderBootstrapHighlight(cur) {
+  const node = $('bootstrapHighlight');
+  if (!node) return;
+  if (cur?.plan?.pathMode !== 'bootstrap') { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = `拔靴：${cur.plan.bootstrapBlock} 個月區塊，種子 ${cur.plan.bootstrapSeed}`;
+  node.hidden = false;
 }
 
 function renderInflationLabel(cur) {

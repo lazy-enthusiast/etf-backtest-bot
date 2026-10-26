@@ -136,7 +136,27 @@ function renderGlideFields() {
   series.rows = 2;
   series.placeholder = '台幣匯率（每 1 USD），例如 2000-01,32.5。沒有序列就不套用台幣。港幣用 7.8 聯繫匯率假設。';
   series.addEventListener('input', onPlanEdited);
-  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series);
+  const bootRow = el('label', 'check-row');
+  const bootToggle = el('input');
+  bootToggle.type = 'checkbox';
+  bootToggle.id = 'plan-pathMode';
+  bootToggle.addEventListener('change', onPlanEdited);
+  bootRow.append(bootToggle, document.createTextNode(' 區塊拔靴（額外模式，預設關）'));
+  const seed = el('input');
+  seed.id = 'plan-bootstrapSeed';
+  seed.type = 'number';
+  seed.step = 1;
+  seed.placeholder = '種子';
+  seed.addEventListener('input', onPlanEdited);
+  const block = el('input');
+  block.id = 'plan-bootstrapBlock';
+  block.type = 'number';
+  block.min = 1;
+  block.max = 120;
+  block.step = 1;
+  block.placeholder = '區塊月數';
+  block.addEventListener('input', onPlanEdited);
+  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block);
   return box;
 }
 
@@ -187,6 +207,12 @@ export function writePlanForm() {
   if (basket && document.activeElement !== basket) basket.value = rateMapText(p.spendingBasket);
   const series = $('plan-fxSeries');
   if (series && document.activeElement !== series) series.value = p.fxSeries || '';
+  const bootToggle = $('plan-pathMode');
+  if (bootToggle && document.activeElement !== bootToggle) bootToggle.checked = p.pathMode === 'bootstrap';
+  const seed = $('plan-bootstrapSeed');
+  if (seed && document.activeElement !== seed) seed.value = p.bootstrapSeed ?? 1;
+  const block = $('plan-bootstrapBlock');
+  if (block && document.activeElement !== block) block.value = p.bootstrapBlock ?? 12;
   renderPlanTimeline();
 }
 
@@ -221,6 +247,12 @@ export function readPlanForm() {
   if (basket) p.spendingBasket = basket.value;
   const series = $('plan-fxSeries');
   if (series) p.fxSeries = series.value;
+  const bootToggle = $('plan-pathMode');
+  if (bootToggle) p.pathMode = bootToggle.checked ? 'bootstrap' : 'historical';
+  const seed = $('plan-bootstrapSeed');
+  if (seed && seed.value !== '') p.bootstrapSeed = Number(seed.value);
+  const block = $('plan-bootstrapBlock');
+  if (block && block.value !== '') p.bootstrapBlock = Number(block.value);
   return p;
 }
 

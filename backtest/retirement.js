@@ -537,6 +537,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
       spendRatio: targetSpent > 0 ? totalSpent / targetSpent : 1,
       coverageRate: retireMonths > 0 ? coverageMonths / retireMonths : 1
     };
+    if (yearMonths) runs[s].yearMonths = yearMonths;
   }
 
   return {
@@ -571,7 +572,7 @@ function spendingBriefFromWalk(p, strategy, returns, walked) {
   for (let y = 1; y < retireYears; y++) if (years[y] < years[tightY]) tightY = y;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
   const L = returns.length;
-  const yearOf = y => returns[(worst + retireMonth + y * 12) % L].month.slice(0, 4);
+  const yearOf = y => (runs[worst].yearMonths ? runs[worst].yearMonths[y] : returns[(worst + retireMonth + y * 12) % L].month).slice(0, 4);
   let absGap = 0;
   const snippet = [];
   for (let y = 0; y < retireYears; y++) {
@@ -603,7 +604,7 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
     header: {
       feeRate: p.feeRate,
       inflationMode: p.inflationMode,
-      method: walked.circular ? 'circular' : 'rolling'
+      method: p.pathMode === 'bootstrap' ? 'bootstrap' : (walked.circular ? 'circular' : 'rolling')
     },
     rows: walked.rows,
     paths: walked.runs.map((run, s) => ({

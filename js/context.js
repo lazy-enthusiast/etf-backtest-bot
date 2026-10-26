@@ -73,7 +73,8 @@ export function describePlan(p) {
     p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null,
     p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null,
     p.feeSplit ? `費用拆分：開，並取代單一費用率 ${p.feeRate}%（TER ${p.ter}%、年換手 ${p.turnover}% × 成本 ${p.turnoverCost}%、匯率價差 ${p.fxSpread}%）。` : null,
-    p.fxMode ? '支出匯率：開。港幣對美元是 7.8 的聯繫匯率假設，不是歷史匯率；台幣必須另有匯率序列，不能拿港幣聯繫充數。支出籃預設 100% 計劃幣別。' : null
+    p.fxMode ? '支出匯率：開。港幣對美元是 7.8 的聯繫匯率假設，不是歷史匯率；台幣必須另有匯率序列，不能拿港幣聯繫充數。支出籃預設 100% 計劃幣別。' : null,
+    p.pathMode === 'bootstrap' ? `路徑抽樣：區塊拔靴 ${p.bootstrapBlock} 個月，種子 ${p.bootstrapSeed}。這是額外模式，不要拿它的成功率去和歷史起點比。` : null
   ].filter(Boolean).join('\n');
 }
 
@@ -84,7 +85,7 @@ export function describeSim(cur) {
   const keyAges = [...new Set([plan.retireAge, plan.retireAge + 10, plan.retireAge + 20, plan.endAge])].filter(a => a >= plan.currentAge && a <= plan.endAge);
   const flex = sim.spendingFlexibility;
   const lines = [
-    `方法：${h.start} ~ ${h.end} 共 ${h.months} 個月實質報酬（已扣費用與通膨），${h.starts} 個起始月份（${h.method === 'rolling' ? '完整歷史窗口' : '歷史不足，循環序列'}）${cur.cpiFallbackMonths ? `；${cur.cpiFallbackMonths} 個月缺 CPI` : ''}`,
+    `方法：${h.start} ~ ${h.end} 共 ${h.months} 個月實質報酬（已扣費用與通膨），${h.starts} 個起始月份（${h.method === 'rolling' ? '完整歷史窗口' : h.method === 'bootstrap' ? '區塊拔靴，額外模式' : '歷史不足，循環序列'}）${cur.cpiFallbackMonths ? `；${cur.cpiFallbackMonths} 個月缺 CPI` : ''}`,
     `提領規則 ${describeWithdrawal(plan)}；成功率 ${pct(sim.successRate, 1)}` +
       (plan.withdrawalStrategy !== 'fixed_real' ? `（對照固定實質 ${pct(sim.successRateFixedReal, 1)}）` : ''),
     sim.balanceAtRetire ? `退休時資產：中位 ${money(sim.balanceAtRetire.p50)}、P10 ${money(sim.balanceAtRetire.p10)}、P90 ${money(sim.balanceAtRetire.p90)}；以中位數計初始淨提領率 ${pct(sim.initialWithdrawalRate, 2)}` : '已在退休期',

@@ -65,6 +65,9 @@ export function parsePlanBlock(text) {
   if (obj.fxMode === true || obj.fxMode === false) changes.fxMode = obj.fxMode;
   if (obj.spendingBasket && typeof obj.spendingBasket === 'object') changes.spendingBasket = obj.spendingBasket;
   else if (typeof obj.spendingBasket === 'string') changes.spendingBasket = obj.spendingBasket;
+  if (obj.pathMode === 'historical' || obj.pathMode === 'bootstrap') changes.pathMode = obj.pathMode;
+  if (obj.bootstrapSeed !== undefined && Number.isFinite(Number(obj.bootstrapSeed))) changes.bootstrapSeed = Math.trunc(Number(obj.bootstrapSeed));
+  if (obj.bootstrapBlock !== undefined && Number.isFinite(Number(obj.bootstrapBlock))) changes.bootstrapBlock = Number(obj.bootstrapBlock);
   for (const k of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
@@ -86,6 +89,7 @@ export function formatPlanValue(key, v) {
   if (key === 'dividendTax') return v ? '開' : '關';
   if (key === 'feeSplit' || key === 'fxMode') return v ? '開' : '關';
   if (key === 'spendingBasket') return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
+  if (key === 'pathMode') return v === 'bootstrap' ? '拔靴' : '歷史起點';
   if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
   if (key === 'dividendYields' || key === 'dividendTaxRates') {
     return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
