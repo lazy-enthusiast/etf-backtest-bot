@@ -160,19 +160,15 @@
         <textarea id="inputBox" rows="1" placeholder="問問你的退休顧問…（Shift+Enter 換行）"></textarea>
         <button id="sendBtn">送出</button>
       </div>
-      <div class="ctx-note">每則訊息都會附上目前的計劃參數與模擬結果</div>
     </div>
   </section>
 </div>
 
 <datalist id="symbolList"></datalist>
 
-<div id="authOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="authTitle" aria-describedby="authDesc">
+<div id="authOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="authTitle">
   <div class="authBox" role="document">
-    <div class="auth-lock" aria-hidden="true">🔒</div>
-    <h3 id="authTitle">解鎖退休航道</h3>
-    <p id="authDesc">此為私人工具。請輸入存取密碼後才能使用；密碼只存在這個瀏覽器，不會寫進網頁原始碼。</p>
-    <label for="authInput">存取密碼</label>
+    <h3 id="authTitle">輸入密碼</h3>
     <input type="password" id="authInput" placeholder="輸入密碼" autocomplete="current-password" aria-required="true" aria-describedby="authError">
     <div id="authError" role="alert" aria-live="assertive"></div>
     <button class="btn primary" id="authSubmitBtn" type="button">解鎖</button>

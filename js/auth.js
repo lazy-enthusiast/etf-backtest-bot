@@ -60,11 +60,7 @@ export function unlockApp() {
 
 export function showAuthDialog(message) {
   lockApp();
-  const hadAuth = !!getAuth();
-  $('authTitle').textContent = hadAuth ? '重新驗證' : '解鎖退休航道';
-  $('authDesc').textContent = hadAuth
-    ? '存取密碼已失效或錯誤。請輸入與 Worker 環境變數 NAME 相同的密碼（於 Cloudflare 更新後，在此重新輸入即可）。'
-    : '此為私人工具。請輸入存取密碼後才能使用；密碼只存在這個瀏覽器，不會寫進網頁原始碼。';
+  $('authTitle').textContent = '輸入密碼';
   $('authSubmitBtn').textContent = '解鎖';
   $('authError').textContent = message || '';
   $('authOverlay').hidden = false;
