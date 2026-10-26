@@ -412,7 +412,14 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     await maybeAutoApplyControls(botMsg);
     if (isFirst) fetchAutoTitle(conv, text, acc);
   } catch (err) {
-    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + err.message, time: Date.now() };
+    let msg = err.message || String(err);
+    if (/Failed to fetch|NetworkError|Load failed|network/i.test(msg)) {
+      const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+      msg = local
+        ? '無法連上本機 Worker（127.0.0.1:8787）。請先在專案根目錄執行 npm run dev，或改用 GitHub Pages 線上版。'
+        : '無法連上 AI Worker（網路中斷、CORS 被擋或 Worker 無回應）。請硬重新整理後重試。';
+    }
+    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + msg, time: Date.now() };
     saveConversations();
     renderMessages();
   } finally {
