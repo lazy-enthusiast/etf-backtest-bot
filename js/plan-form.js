@@ -156,7 +156,23 @@ function renderGlideFields() {
   block.step = 1;
   block.placeholder = '區塊月數';
   block.addEventListener('input', onPlanEdited);
-  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block);
+  const withdrawEvery = el('input');
+  withdrawEvery.id = 'plan-withdrawEvery';
+  withdrawEvery.type = 'number';
+  withdrawEvery.min = 1;
+  withdrawEvery.max = 12;
+  withdrawEvery.step = 1;
+  withdrawEvery.placeholder = '提領間隔月數，1＝每月';
+  withdrawEvery.addEventListener('input', onPlanEdited);
+  const guardrailEvery = el('input');
+  guardrailEvery.id = 'plan-guardrailEvery';
+  guardrailEvery.type = 'number';
+  guardrailEvery.min = 1;
+  guardrailEvery.max = 12;
+  guardrailEvery.step = 1;
+  guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
+  guardrailEvery.addEventListener('input', onPlanEdited);
+  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block, withdrawEvery, guardrailEvery);
   return box;
 }
 
@@ -213,6 +229,10 @@ export function writePlanForm() {
   if (seed && document.activeElement !== seed) seed.value = p.bootstrapSeed ?? 1;
   const block = $('plan-bootstrapBlock');
   if (block && document.activeElement !== block) block.value = p.bootstrapBlock ?? 12;
+  const withdrawEvery = $('plan-withdrawEvery');
+  if (withdrawEvery && document.activeElement !== withdrawEvery) withdrawEvery.value = p.withdrawEvery ?? 1;
+  const guardrailEvery = $('plan-guardrailEvery');
+  if (guardrailEvery && document.activeElement !== guardrailEvery) guardrailEvery.value = p.guardrailEvery ?? 12;
   renderPlanTimeline();
 }
 
@@ -253,6 +273,10 @@ export function readPlanForm() {
   if (seed && seed.value !== '') p.bootstrapSeed = Number(seed.value);
   const block = $('plan-bootstrapBlock');
   if (block && block.value !== '') p.bootstrapBlock = Number(block.value);
+  const withdrawEvery = $('plan-withdrawEvery');
+  if (withdrawEvery && withdrawEvery.value !== '') p.withdrawEvery = Number(withdrawEvery.value);
+  const guardrailEvery = $('plan-guardrailEvery');
+  if (guardrailEvery && guardrailEvery.value !== '') p.guardrailEvery = Number(guardrailEvery.value);
   return p;
 }
 

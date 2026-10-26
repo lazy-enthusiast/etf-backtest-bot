@@ -42,7 +42,9 @@ export const DEFAULT_PLAN = {
   fxSeries: '',
   pathMode: 'historical',
   bootstrapSeed: 1,
-  bootstrapBlock: 12
+  bootstrapBlock: 12,
+  withdrawEvery: 1,
+  guardrailEvery: 12
 };
 
 export const HKD_USD_PEG = 7.8;
@@ -89,6 +91,8 @@ export function normalizePlan(plan) {
   p.pathMode = p.pathMode === 'bootstrap' ? 'bootstrap' : 'historical';
   p.bootstrapSeed = Number.isFinite(Number(p.bootstrapSeed)) ? Math.trunc(Number(p.bootstrapSeed)) : 1;
   p.bootstrapBlock = Math.min(120, Math.max(1, Math.round(Number(p.bootstrapBlock) || 12)));
+  p.withdrawEvery = Math.min(12, Math.max(1, Math.round(Number(p.withdrawEvery) || 1)));
+  p.guardrailEvery = Math.min(12, Math.max(1, Math.round(Number(p.guardrailEvery) || 12)));
   return p;
 }
 
@@ -335,20 +339,25 @@ function withdrawalRates(rs) {
 
 /** 當月從投資組合提領的金額（不含其他收入；其他收入另以 inflow 加入）。 */
 function monthWithdrawal(strategy, p, state, balance, k, retireMonth, totalMonths) {
+  const due = (k - retireMonth) % p.withdrawEvery === 0;
+  const step = Math.min(p.withdrawEvery, Math.max(1, totalMonths - k));
   if (strategy === 'vpw') {
     const remaining = totalMonths - k;
     if (remaining <= 0) return Math.max(0, balance);
-    return Math.max(0, balance / remaining);
+    if (!due) return 0;
+    return Math.max(0, balance / remaining) * step;
   }
   if (strategy === 'guardrails') {
-    if ((k - retireMonth) % 12 === 0 && balance > 1e-6) {
+    if ((k - retireMonth) % p.guardrailEvery === 0 && balance > 1e-6) {
       const wr = state.annualSpend / balance;
       if (wr > p.guardrailCeiling / 100) state.annualSpend *= 1 - p.guardrailAdjustPct / 100;
       else if (wr < p.guardrailFloor / 100) state.annualSpend *= 1 + p.guardrailAdjustPct / 100;
     }
-    return Math.max(0, state.annualSpend / 12);
+    if (!due) return 0;
+    return Math.max(0, state.annualSpend / 12) * step;
   }
-  return p.annualSpending / 12;
+  if (!due) return 0;
+  return p.annualSpending / 12 * step;
 }
 
 /**
@@ -464,7 +473,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
             fxRateUsed = twdW > 0 ? indexed : fx.peg;
           }
         }
-        if (strategy === 'guardrails' && (k - retireMonth) % 12 === 0) {
+        if (strategy === 'guardrails' && (k - retireMonth) % p.guardrailEvery === 0) {
           const cut = beforeSpend - spendState.annualSpend;
           if (cut > 1e-6) {
             streak += 1;
@@ -472,7 +481,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
             if (cut > largest) largest = cut;
           } else streak = 0;
         }
-        if (trackLinear) perSpend -= 1 / 12;
+        if (trackLinear && (k - retireMonth) % p.withdrawEvery === 0) perSpend -= Math.min(p.withdrawEvery, totalMonths - k) / 12;
         const payable = Math.min(withdraw, Math.max(0, balance));
         balance -= withdraw;
         totalSpent += withdraw;

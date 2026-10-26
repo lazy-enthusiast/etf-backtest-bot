@@ -74,7 +74,10 @@ export function describePlan(p) {
     p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null,
     p.feeSplit ? `費用拆分：開，並取代單一費用率 ${p.feeRate}%（TER ${p.ter}%、年換手 ${p.turnover}% × 成本 ${p.turnoverCost}%、匯率價差 ${p.fxSpread}%）。` : null,
     p.fxMode ? '支出匯率：開。港幣對美元是 7.8 的聯繫匯率假設，不是歷史匯率；台幣必須另有匯率序列，不能拿港幣聯繫充數。支出籃預設 100% 計劃幣別。' : null,
-    p.pathMode === 'bootstrap' ? `路徑抽樣：區塊拔靴 ${p.bootstrapBlock} 個月，種子 ${p.bootstrapSeed}。這是額外模式，不要拿它的成功率去和歷史起點比。` : null
+    p.pathMode === 'bootstrap' ? `路徑抽樣：區塊拔靴 ${p.bootstrapBlock} 個月，種子 ${p.bootstrapSeed}。這是額外模式，不要拿它的成功率去和歷史起點比。` : null,
+    (p.withdrawEvery && p.withdrawEvery !== 1) || (p.guardrailEvery && p.guardrailEvery !== 12)
+      ? `提領每 ${p.withdrawEvery || 1} 個月，護欄每 ${p.guardrailEvery || 12} 個月檢查。預設是每月提領、每 12 個退休月檢查。`
+      : null
   ].filter(Boolean).join('\n');
 }
 

@@ -56,6 +56,8 @@ export const PLAN_LABELS = {
   spendingBasket: '支出籃',
   pathMode: '路徑抽樣',
   bootstrapSeed: '拔靴種子',
-  bootstrapBlock: '拔靴區塊月數'
+  bootstrapBlock: '拔靴區塊月數',
+  withdrawEvery: '提領間隔',
+  guardrailEvery: '護欄檢查間隔'
   fxSeries: '台幣匯率序列'
 };

@@ -196,7 +196,21 @@ export function renderDashboard() {
   renderFxHighlight(cur);
   renderInflationLabel(cur);
   renderBootstrapHighlight(cur);
+  renderFrequencyHighlight(cur);
   renderActiveTab();
+}
+
+function renderFrequencyHighlight(cur) {
+  const node = $('frequencyHighlight');
+  const plan = cur?.plan;
+  if (!node) return;
+  if (!plan || (plan.withdrawEvery === 1 && plan.guardrailEvery === 12)) {
+    node.hidden = true;
+    node.textContent = '';
+    return;
+  }
+  node.textContent = `提領每 ${plan.withdrawEvery} 個月，護欄每 ${plan.guardrailEvery} 個月檢查`;
+  node.hidden = false;
 }
 
 function renderBootstrapHighlight(cur) {
