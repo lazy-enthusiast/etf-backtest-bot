@@ -284,8 +284,8 @@
     .plan-chip { display: none; }
   }
   @media (max-width: 640px) {
-    .kpis, .stat-grid, .two-col { grid-template-columns: 1fr 1fr; }
-    .kpi-hero { grid-column: 1 / -1; }
+    .kpis { grid-template-columns: 1fr; }
+    .stat-grid, .two-col { grid-template-columns: 1fr 1fr; }
     .appbar { padding: 8px 12px; gap: 8px; }
     .brand small { display: none; }
     .dash { padding: 12px 12px 20px; }
