@@ -65,7 +65,6 @@ function describeWithdrawal(p) {
 export function describePlan(p) {
   if (!p || typeof p !== 'object') return '（退休計劃尚未載入）';
   const income = p.otherIncome > 0 ? `其他收入每年 ${money(p.otherIncome, p.currency)}（${p.otherIncomeAge} 歲起）` : '無其他退休收入';
-  const infl = p.inflationMode === 'cpi' ? `美國歷史 CPI（缺月以 ${p.inflationRate}% 替代）` : `固定 ${p.inflationRate}%/年`;
   return [
     `幣別 ${p.currency}；目前 ${p.currentAge} 歲、${p.retireAge} 歲退休、規劃至 ${p.endAge} 歲（所有金額為今日幣值）`,
     `現有投資資產 ${money(p.currentSavings, p.currency)}；每月投入 ${money(p.monthlyContribution, p.currency)}（至退休）；退休後目標年支出 ${money(p.annualSpending, p.currency)}；${income}`,

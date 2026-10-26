@@ -39,7 +39,10 @@ export const DEFAULT_PLAN = {
   fxSpread: 0,
   fxMode: false,
   spendingBasket: null,
-  fxSeries: ''
+  fxSeries: '',
+  pathMode: 'historical',
+  bootstrapSeed: 1,
+  bootstrapBlock: 12
 };
 
 export const HKD_USD_PEG = 7.8;
@@ -83,7 +86,20 @@ export function normalizePlan(plan) {
   p.spendingBasket = parseRateMap(p.spendingBasket);
   if (!Object.keys(p.spendingBasket).length) p.spendingBasket = { [p.currency || 'HKD']: 100 };
   p.fxSeries = typeof p.fxSeries === 'string' ? p.fxSeries : formatFxSeries(p.fxSeries);
+  p.pathMode = p.pathMode === 'bootstrap' ? 'bootstrap' : 'historical';
+  p.bootstrapSeed = Number.isFinite(Number(p.bootstrapSeed)) ? Math.trunc(Number(p.bootstrapSeed)) : 1;
+  p.bootstrapBlock = Math.min(120, Math.max(1, Math.round(Number(p.bootstrapBlock) || 12)));
   return p;
+}
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function formatFxSeries(value) {
@@ -376,6 +392,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
   const glideOn = Boolean(glide && p.glidePath && glide.equityR.length === L);
   const dividendOn = Boolean(dividend && p.dividendTax && dividend.monthlyRate > 0);
   const fxOn = Boolean(fx && !fx.skipped && p.fxMode);
+  const bootstrapOn = p.pathMode === 'bootstrap';
   let eqMin = Infinity;
   let eqMax = -Infinity;
 
@@ -392,13 +409,21 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
     const spendState = { annualSpend: p.annualSpending };
     const yearSpend = new Float64Array(retireYears);
     const funded = new Float64Array(retireYears);
+    const rng = bootstrapOn ? mulberry32((p.bootstrapSeed + s * 997) >>> 0) : null;
+    let blockStart = 0;
+    let blockPos = p.bootstrapBlock;
+    const yearMonths = bootstrapOn ? [] : null;
     let streak = 0;
     let longest = 0;
     let largest = 0;
     yearly[0][s] = balance;
 
     for (let k = 0; k < totalMonths; k++) {
-      const idx = (s + k) % L;
+      if (bootstrapOn && blockPos >= p.bootstrapBlock) {
+        blockStart = Math.floor(rng() * L);
+        blockPos = 0;
+      }
+      const idx = bootstrapOn ? (blockStart + blockPos++) % L : (s + k) % L;
       let equityWeight = null;
       let growth;
       if (glideOn) {
@@ -460,6 +485,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
         if (y >= 0 && y < retireYears) {
           yearSpend[y] += withdraw;
           funded[y] += payable;
+          if (yearMonths && (k - retireMonth) % 12 === 0) yearMonths.push(returns[idx].month);
         }
       }
 
@@ -672,7 +698,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       start: returns[0].month,
       end: returns[L - 1].month,
       months: L,
-      method: circular ? 'circular' : 'rolling',
+      method: p.pathMode === 'bootstrap' ? 'bootstrap' : (circular ? 'circular' : 'rolling'),
       starts
     },
     withdrawalStrategy: p.withdrawalStrategy,
