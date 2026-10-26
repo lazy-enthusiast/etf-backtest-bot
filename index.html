@@ -24,13 +24,12 @@
 
 <header class="appbar">
   <div class="brand">
-    <div class="brand-mark">◐</div>
     <div>退休航道<small>ETF 歷史回測 × AI 退休規劃</small></div>
   </div>
   <div class="plan-chip" id="planChip">—</div>
   <div class="spacer"></div>
   <button class="icon-btn" title="切換深色模式">🌓</button>
-  <button class="icon-btn" id="advisorToggle">💬 AI 顧問</button>
+  <button class="icon-btn" id="advisorToggle">💬 退休顧問</button>
 </header>
 
 <div class="shell">
@@ -147,11 +146,8 @@
     </div>
     <div id="messages"></div>
     <div class="composer">
-      <div id="attachPreview" hidden></div>
       <div class="composer-box">
-        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,application/pdf,.txt,.csv,.md" hidden>
-        <button id="attachBtn" title="附加圖片／PDF／文字檔">📎</button>
-        <textarea id="inputBox" rows="1" placeholder="問問你的退休顧問…（Shift+Enter 換行）"></textarea>
+        <textarea id="inputBox" rows="1" placeholder="問問你的退休顧問…"></textarea>
         <button id="sendBtn">送出</button>
       </div>
     </div>
