@@ -43,5 +43,8 @@ export const PLAN_LABELS = {
   guardrailAdjustPct: '觸發後調整支出%',
   glidePath: '下滑路徑',
   equityTickers: '股票代號',
-  glideEquityEnd: '期末股權重'
+  glideEquityEnd: '期末股權重',
+  dividendTax: '股息稅',
+  dividendYields: '假設殖利率',
+  dividendTaxRates: '註冊地稅率'
 };

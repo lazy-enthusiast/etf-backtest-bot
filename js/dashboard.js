@@ -191,7 +191,19 @@ export function renderDashboard() {
   renderFanChart(cur, c);
   renderPathHighlights(cur);
   renderGlideHighlight(cur);
+  renderDividendHighlight(cur);
   renderActiveTab();
+}
+
+function renderDividendHighlight(cur) {
+  const node = $('dividendHighlight');
+  if (!node) return;
+  if (!cur?.plan?.dividendTax) { node.hidden = true; node.textContent = ''; return; }
+  const cmp = cur.sim?.dividendSpend;
+  node.textContent = cmp
+    ? `股息稅：中位實際提出 ${compact(cmp.withTax)}，未扣稅 ${compact(cmp.withoutTax)}`
+    : '股息稅未套用：請給假設殖利率與註冊地稅率。';
+  node.hidden = false;
 }
 
 function renderGlideHighlight(cur) {

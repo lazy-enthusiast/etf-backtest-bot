@@ -30,6 +30,13 @@ function describeGlide(sim) {
   return `實際股權重 ${pct(g.min, 0)}–${pct(g.max, 0)}（同一條歷史索引，只改該月目標權重；這條成功率不宜與固定權重或其他權重路徑橫比）`;
 }
 
+function describeDividend(sim, plan) {
+  if (!plan?.dividendTax) return null;
+  const cmp = sim?.dividendSpend;
+  if (!cmp) return '股息稅未套用：沒有對得上持倉的假設殖利率與註冊地稅率。';
+  return `股息稅：中位實際提出 ${money(cmp.withTax, plan.currency)}，未扣稅 ${money(cmp.withoutTax, plan.currency)}。可持續支出分位仍是未另扣這筆稅的固定實質口徑。`;
+}
+
 function describeWithdrawal(p) {
   if (p.withdrawalStrategy === 'guardrails') {
     return `護欄法（絕對提領率＝年提領÷資產：>${p.guardrailCeiling}% 砍支出 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%；非相對初始提領率）`;
@@ -47,7 +54,8 @@ export function describePlan(p) {
     `現有投資資產 ${money(p.currentSavings, p.currency)}；每月投入 ${money(p.monthlyContribution, p.currency)}（至退休）；退休後目標年支出 ${money(p.annualSpending, p.currency)}；${income}`,
     `提領規則：${describeWithdrawal(p)}`,
     `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`,
-    p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null
+    p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null,
+    p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null
   ].filter(Boolean).join('\n');
 }
 
@@ -69,6 +77,7 @@ export function describeSim(cur) {
     '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
     describeSpendingBrief(sim, plan),
     describeGlide(sim),
+    describeDividend(sim, plan),
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

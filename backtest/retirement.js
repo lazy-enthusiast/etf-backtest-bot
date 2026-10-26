@@ -28,7 +28,10 @@ export const DEFAULT_PLAN = {
   guardrailAdjustPct: 10,
   glidePath: false,
   equityTickers: [],
-  glideEquityEnd: null
+  glideEquityEnd: null,
+  dividendTax: false,
+  dividendYields: {},
+  dividendTaxRates: {}
 };
 
 const PERCENTILES = [10, 25, 50, 75, 90];
@@ -58,7 +61,26 @@ export function normalizePlan(plan) {
   p.glideEquityEnd = p.glideEquityEnd == null || p.glideEquityEnd === '' || !Number.isFinite(end)
     ? null
     : Math.min(100, Math.max(0, end));
+  p.dividendTax = p.dividendTax === true || p.dividendTax === 'true';
+  p.dividendYields = parseRateMap(p.dividendYields);
+  p.dividendTaxRates = parseRateMap(p.dividendTaxRates);
   return p;
+}
+
+function parseRateMap(value) {
+  const out = {};
+  const entries = value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.entries(value)
+    : String(value || '').split(/[,;\n]+/).map(part => {
+      const cut = part.indexOf(':');
+      return cut < 0 ? null : [part.slice(0, cut), part.slice(cut + 1)];
+    }).filter(Boolean);
+  for (const [key, raw] of entries) {
+    const n = Number(raw);
+    const name = String(key || '').trim().toUpperCase();
+    if (name && Number.isFinite(n) && n >= 0) out[name] = n;
+  }
+  return out;
 }
 
 function normalizeEquityTickers(value) {
@@ -183,6 +205,32 @@ export function buildGlide(assetMonthly, holdings, plan, cpiSeries) {
   };
 }
 
+/**
+ * 價格序列沒有分開的股息。稅額＝資產 × 假設年殖利率／12 × 註冊地稅率。
+ * 模組關閉、或沒有對得上的殖利率與稅率時回傳 null。
+ */
+export function buildDividendTax(holdings, plan) {
+  const p = normalizePlan(plan);
+  if (!p.dividendTax) return null;
+  const list = Array.isArray(holdings)
+    ? holdings.map(h => [h.symbol, h.weight])
+    : Object.entries(holdings || {});
+  const cleaned = list.map(([symbol, weight]) => [String(symbol).toUpperCase(), Number(weight)]);
+  const total = cleaned.reduce((sum, [, weight]) => sum + (Number.isFinite(weight) && weight > 0 ? weight : 0), 0);
+  if (!(total > 0)) return null;
+  let annual = 0;
+  for (const [symbol, weight] of cleaned) {
+    if (!Number.isFinite(weight) || weight <= 0) continue;
+    const domicile = symbol.includes('.') ? symbol.slice(symbol.lastIndexOf('.') + 1) : '';
+    const yieldPct = p.dividendYields[symbol] ?? (domicile ? p.dividendYields[domicile] : undefined);
+    const taxPct = p.dividendTaxRates[symbol] ?? (domicile ? p.dividendTaxRates[domicile] : undefined);
+    if (!Number.isFinite(yieldPct) || !Number.isFinite(taxPct)) continue;
+    annual += (weight / total) * (yieldPct / 100) * (taxPct / 100);
+  }
+  if (!(annual > 0)) return null;
+  return { monthlyRate: annual / 12 };
+}
+
 // 給定一段月報酬，提領期的最大可持續提領率（SWR：期末歸零）與永續提領率（PWR：期末保住實質本金）
 function withdrawalRates(rs) {
   let growth = 1;
@@ -228,7 +276,7 @@ function worseRun(a, b) {
  * 與 runLifePaths 同一條月初現金流、其後報酬的迴圈。
  * keepRows 只給測試對帳；正式摘要算完就丟掉逐月列。
  */
-function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, glide = null, dividend = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -247,9 +295,11 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
   const runs = new Array(starts);
   const totals = new Float64Array(starts);
   const yearSpends = new Array(starts);
+  const yearFunded = new Array(starts);
   const guardStats = new Array(starts);
   const rows = keepRows ? [] : null;
   const glideOn = Boolean(glide && p.glidePath && glide.equityR.length === L);
+  const dividendOn = Boolean(dividend && p.dividendTax && dividend.monthlyRate > 0);
   let eqMin = Infinity;
   let eqMax = -Infinity;
 
@@ -265,6 +315,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
     let retireMonths = 0;
     const spendState = { annualSpend: p.annualSpending };
     const yearSpend = new Float64Array(retireYears);
+    const funded = new Float64Array(retireYears);
     let streak = 0;
     let longest = 0;
     let largest = 0;
@@ -292,6 +343,11 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
       const inflow = contrib + other;
       if (trackLinear) base += inflow;
       balance += inflow;
+      let taxPaid = 0;
+      if (dividendOn && balance > 0) {
+        taxPaid = balance * dividend.monthlyRate;
+        balance -= taxPaid;
+      }
 
       let withdraw = 0;
       if (k >= retireMonth) {
@@ -306,6 +362,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
           } else streak = 0;
         }
         if (trackLinear) perSpend -= 1 / 12;
+        const payable = Math.min(withdraw, Math.max(0, balance));
         balance -= withdraw;
         totalSpent += withdraw;
         targetSpent += targetMonthly;
@@ -314,7 +371,10 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
         if (balance < -1e-6 && depletedAt === null) depletedAt = k;
         if (balance < 0) balance = 0;
         const y = Math.floor((k - retireMonth) / 12);
-        if (y >= 0 && y < retireYears) yearSpend[y] += withdraw;
+        if (y >= 0 && y < retireYears) {
+          yearSpend[y] += withdraw;
+          funded[y] += payable;
+        }
       }
 
       const balanceAfterFlows = balance;
@@ -339,13 +399,15 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
           balance_after_flows: balanceAfterFlows,
           balance_end: balance,
           depleted: depletedAt !== null && k >= depletedAt ? 1 : 0,
-          ...(equityWeight === null ? {} : { equity_weight_actual: equityWeight })
+          ...(equityWeight === null ? {} : { equity_weight_actual: equityWeight }),
+          ...(dividendOn ? { tax_paid: taxPaid } : {})
         });
       }
     }
 
     totals[s] = totalSpent;
     yearSpends[s] = yearSpend;
+    yearFunded[s] = funded;
     guardStats[s] = { longest, largest };
     runs[s] = {
       start: returns[s].month,
@@ -361,12 +423,22 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null } = {})
 
   return {
     runs, yearly, starts, circular, years, rows, totals, yearSpends, guardStats, retireYears,
-    equityWeightRange: glideOn ? { min: eqMin, max: eqMax } : null
+    equityWeightRange: glideOn ? { min: eqMin, max: eqMax } : null,
+    yearFunded
   };
 }
 
-function runLifePaths(p, returns, strategy, glide) {
-  return walkLife(p, returns, strategy, { keepRows: false, glide: p.glidePath ? glide : null });
+function medianFunded(walked) {
+  const sums = walked.yearFunded.map(years => years.reduce((sum, v) => sum + v, 0)).sort((a, b) => a - b);
+  return sums[Math.floor((sums.length - 1) / 2)];
+}
+
+function runLifePaths(p, returns, strategy, glide, dividend) {
+  return walkLife(p, returns, strategy, {
+    keepRows: false,
+    glide: p.glidePath ? glide : null,
+    dividend: p.dividendTax ? dividend : null
+  });
 }
 
 function spendingBriefFromWalk(p, strategy, returns, walked) {
@@ -397,10 +469,14 @@ function spendingBriefFromWalk(p, strategy, returns, walked) {
 }
 
 /** 測試用：逐月列只在呼叫時存在。正式畫面不保留。 */
-export function buildLifeLedger(plan, returns, strategy, glide = null) {
+export function buildLifeLedger(plan, returns, strategy, glide = null, dividend = null) {
   const p = normalizePlan(plan);
   const strat = strategy || p.withdrawalStrategy;
-  const walked = walkLife(p, returns, strat, { keepRows: true, glide: p.glidePath ? glide : null });
+  const walked = walkLife(p, returns, strat, {
+    keepRows: true,
+    glide: p.glidePath ? glide : null,
+    dividend: p.dividendTax ? dividend : null
+  });
   return {
     header: {
       feeRate: p.feeRate,
@@ -427,14 +503,14 @@ export function buildLifeLedger(plan, returns, strategy, glide = null) {
  * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
  * @param returns realMonthlyReturns().returns
  */
-export function simulateRetirement(plan, returns, glide = null) {
+export function simulateRetirement(plan, returns, glide = null, dividend = null) {
   const p = normalizePlan(plan);
   const L = returns.length;
   if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
 
-  const primary = runLifePaths(p, returns, p.withdrawalStrategy, glide);
+  const primary = runLifePaths(p, returns, p.withdrawalStrategy, glide, dividend);
   const needFixedCompare = p.withdrawalStrategy !== 'fixed_real';
-  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real', glide) : primary;
+  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real', glide, dividend) : primary;
   const { runs, yearly, starts, circular } = primary;
 
   const successCount = runs.filter(x => x.success).length;
@@ -469,6 +545,13 @@ export function simulateRetirement(plan, returns, glide = null) {
   const retireValues = runs.map(x => x.balanceAtRetire).filter(Number.isFinite);
   const retireStats = retireValues.length ? summarize(retireValues) : null;
   const netSpendAtRetire = p.annualSpending - (p.otherIncomeAge <= p.retireAge ? p.otherIncome : 0);
+  const spendingBrief = spendingBriefFromWalk(p, p.withdrawalStrategy, returns, primary);
+  let dividendSpend = null;
+  if (p.dividendTax && dividend?.monthlyRate > 0) {
+    const plain = { ...p, dividendTax: false };
+    const without = runLifePaths(plain, returns, p.withdrawalStrategy, glide, null);
+    dividendSpend = { withTax: medianFunded(primary), withoutTax: medianFunded(without) };
+  }
 
   return {
     plan: p,
@@ -504,8 +587,9 @@ export function simulateRetirement(plan, returns, glide = null) {
     worstRuns: sortedRuns.slice(0, 5),
     bands,
     cumWithdrawal: summarize(primary.totals),
-    spendingBrief: spendingBriefFromWalk(p, p.withdrawalStrategy, returns, primary),
+    spendingBrief,
     glide: p.glidePath ? (primary.equityWeightRange || { skipped: true }) : null,
+    dividendSpend,
     byStartYear: runs.filter(x => x.start.endsWith('-01')).map(x => ({
       year: Number(x.start.slice(0, 4)),
       success: x.success,

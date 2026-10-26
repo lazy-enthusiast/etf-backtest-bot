@@ -56,6 +56,11 @@ export function parsePlanBlock(text) {
   if (Array.isArray(obj.equityTickers) || typeof obj.equityTickers === 'string') changes.equityTickers = obj.equityTickers;
   if (obj.glideEquityEnd === null) changes.glideEquityEnd = null;
   else if (obj.glideEquityEnd !== undefined && Number.isFinite(Number(obj.glideEquityEnd))) changes.glideEquityEnd = Number(obj.glideEquityEnd);
+  if (obj.dividendTax === true || obj.dividendTax === false) changes.dividendTax = obj.dividendTax;
+  if (obj.dividendYields && typeof obj.dividendYields === 'object') changes.dividendYields = obj.dividendYields;
+  else if (typeof obj.dividendYields === 'string') changes.dividendYields = obj.dividendYields;
+  if (obj.dividendTaxRates && typeof obj.dividendTaxRates === 'object') changes.dividendTaxRates = obj.dividendTaxRates;
+  else if (typeof obj.dividendTaxRates === 'string') changes.dividendTaxRates = obj.dividendTaxRates;
   if (!Object.keys(changes).length) return null;
   return { note: typeof obj.note === 'string' ? obj.note.slice(0, 80) : '', changes };
 }
@@ -71,6 +76,10 @@ export function formatPlanValue(key, v) {
   if (key === 'glidePath') return v ? '開' : '關';
   if (key === 'equityTickers') return Array.isArray(v) ? v.join('、') : String(v || '');
   if (key === 'glideEquityEnd') return v == null || v === '' ? '維持目前' : `${v}%`;
+  if (key === 'dividendTax') return v ? '開' : '關';
+  if (key === 'dividendYields' || key === 'dividendTaxRates') {
+    return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
+  }
   return String(v);
 }
 

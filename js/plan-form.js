@@ -72,7 +72,7 @@ export function renderPlanForm() {
 
 function renderGlideFields() {
   const box = el('details', 'advanced-plan');
-  box.appendChild(el('summary', '', '進階：下滑路徑（預設關閉）'));
+  box.appendChild(el('summary', '', '進階（預設關閉）'));
   const row = el('label', 'check-row');
   const toggle = el('input');
   toggle.type = 'checkbox';
@@ -91,7 +91,21 @@ function renderGlideFields() {
   end.step = 1;
   end.placeholder = '期末股權重 %，空白＝維持目前';
   end.addEventListener('input', onPlanEdited);
-  box.append(row, tick, end);
+  const taxRow = el('label', 'check-row');
+  const taxToggle = el('input');
+  taxToggle.type = 'checkbox';
+  taxToggle.id = 'plan-dividendTax';
+  taxToggle.addEventListener('change', onPlanEdited);
+  taxRow.append(taxToggle, document.createTextNode(' 股息稅（需另給假設殖利率）'));
+  const yields = el('input');
+  yields.id = 'plan-dividendYields';
+  yields.placeholder = '假設年殖利率，例如 VTI.US:1.6 或 US:1.6';
+  yields.addEventListener('input', onPlanEdited);
+  const rates = el('input');
+  rates.id = 'plan-dividendTaxRates';
+  rates.placeholder = '註冊地稅率 %，例如 US:30, L:15, HK:0';
+  rates.addEventListener('input', onPlanEdited);
+  box.append(row, tick, end, taxRow, yields, rates);
   return box;
 }
 
@@ -124,6 +138,12 @@ export function writePlanForm() {
   }
   const glideEnd = $('plan-glideEquityEnd');
   if (glideEnd && document.activeElement !== glideEnd) glideEnd.value = p.glideEquityEnd == null ? '' : p.glideEquityEnd;
+  const taxToggle = $('plan-dividendTax');
+  if (taxToggle && document.activeElement !== taxToggle) taxToggle.checked = Boolean(p.dividendTax);
+  const yields = $('plan-dividendYields');
+  if (yields && document.activeElement !== yields) yields.value = rateMapText(p.dividendYields);
+  const rates = $('plan-dividendTaxRates');
+  if (rates && document.activeElement !== rates) rates.value = rateMapText(p.dividendTaxRates);
   renderPlanTimeline();
 }
 
@@ -140,7 +160,19 @@ export function readPlanForm() {
   if (tickers) p.equityTickers = tickers.value;
   const glideEnd = $('plan-glideEquityEnd');
   if (glideEnd) p.glideEquityEnd = glideEnd.value === '' ? null : Number(glideEnd.value);
+  const taxToggle = $('plan-dividendTax');
+  if (taxToggle) p.dividendTax = taxToggle.checked;
+  const yields = $('plan-dividendYields');
+  if (yields) p.dividendYields = yields.value;
+  const rates = $('plan-dividendTaxRates');
+  if (rates) p.dividendTaxRates = rates.value;
   return p;
+}
+
+function rateMapText(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return Object.entries(value).map(([k, n]) => `${k}:${n}`).join(', ');
 }
 
 export function renderPlanTimeline() {
