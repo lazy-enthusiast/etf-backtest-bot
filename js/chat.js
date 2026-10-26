@@ -334,6 +334,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
   const query = attachment?.kind === 'text' ? `${text}\n\n【附加檔案：${attachment.filename}】\n${attachment.extractedText}` : text;
   state.isSending = true;
   $('sendBtn').disabled = true;
+  let sawHttp = false;
   try {
     const backtestContext = await buildBacktestContext();
     const backtestHash = await hashText(backtestContext);
@@ -352,6 +353,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
         lastComplexity: Number.isFinite(conv.lastComplexity) ? conv.lastComplexity : undefined
       })
     });
+    sawHttp = true;
     if (res.status === 401) {
       handleUnauthorized();
       throw new Error('密碼錯誤或已失效');
@@ -383,25 +385,25 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
       for (const line of lines) {
         const t = line.trim();
         if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
-        try {
-          const json = JSON.parse(t.slice(6));
-          if (json.type === 'meta') {
-            if (json.history_summary) conv.historySummary = json.history_summary;
-            if (Number.isFinite(json.complexity)) conv.lastComplexity = json.complexity;
-            botMsg.usedModel = json.used_model || conv.model;
-            botMsg.complexity = json.complexity;
-            botMsg.taskTag = json.task_tag || '';
-            botMsg.summarizerRaw = json.raw_summary || '';
-            continue;
-          }
-          const token = json.choices?.[0]?.delta?.content || '';
-          if (token) {
-            acc += token;
-            botMsg.text = acc;
-            const now = Date.now();
-            if (now - lastRender >= 80) { lastRender = now; scheduleRender(); }
-          }
-        } catch (e) {}
+        let json;
+        try { json = JSON.parse(t.slice(6)); } catch (e) { continue; }
+        if (json.error && !json.choices) throw new Error(json.error);
+        if (json.type === 'meta') {
+          if (json.history_summary) conv.historySummary = json.history_summary;
+          if (Number.isFinite(json.complexity)) conv.lastComplexity = json.complexity;
+          botMsg.usedModel = json.used_model || conv.model;
+          botMsg.complexity = json.complexity;
+          botMsg.taskTag = json.task_tag || '';
+          botMsg.summarizerRaw = json.raw_summary || '';
+          continue;
+        }
+        const token = json.choices?.[0]?.delta?.content || '';
+        if (token) {
+          acc += token;
+          botMsg.text = acc;
+          const now = Date.now();
+          if (now - lastRender >= 80) { lastRender = now; scheduleRender(); }
+        }
       }
     }
     if (!acc) throw new Error('模型沒有回傳內容');
@@ -413,11 +415,14 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     if (isFirst) fetchAutoTitle(conv, text, acc);
   } catch (err) {
     let msg = err.message || String(err);
-    if (/Failed to fetch|NetworkError|Load failed|network/i.test(msg)) {
+    const fetchThrew = /Failed to fetch|NetworkError|Load failed/i.test(msg);
+    if (!sawHttp && (fetchThrew || /network/i.test(msg))) {
       const local = ['localhost', '127.0.0.1'].includes(location.hostname);
       msg = local
         ? '無法連上本機 Worker（127.0.0.1:8787）。請先在專案根目錄執行 npm run dev，或改用 GitHub Pages 線上版。'
         : '無法連上 AI Worker（網路中斷、CORS 被擋或 Worker 無回應）。請硬重新整理後重試。';
+    } else if (sawHttp && fetchThrew) {
+      msg = '回覆傳到一半中斷了。請再送一次。';
     }
     conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + msg, time: Date.now() };
     saveConversations();

@@ -50,10 +50,33 @@ function buildAttachmentBlock(attachment) {
   return null;
 }
 
+function safeErrorMessage(err) {
+  const isTimeout = err && err.name === 'AbortError';
+  const raw = isTimeout ? '上游服務逾時，請稍後再試' : ((err && err.message) || 'Worker 處理失敗');
+  return String(raw).replace(/sk-[A-Za-z0-9_\-]+/g, '[redacted]').replace(/Bearer\s+\S+/gi, 'Bearer [redacted]').slice(0, 500);
+}
+
 export default {
   async fetch(request, env, ctx) {
-    const corsHeaders = getCorsHeaders(env, request);
+    let corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Vary': 'Origin',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-App-Auth'
+    };
+    try {
+      corsHeaders = getCorsHeaders(env, request);
+      return await handleRequest(request, env, ctx, corsHeaders);
+    } catch (err) {
+      return new Response(JSON.stringify({ error: safeErrorMessage(err) }), {
+        status: err && err.name === 'AbortError' ? 504 : 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+  }
+};
 
+async function handleRequest(request, env, ctx, corsHeaders) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
@@ -217,193 +240,170 @@ export default {
         });
       }
 
-      const lastSkeleton = skeletonizeLastReply(lastAiResponse);
-      const skipSummarizer = shouldSkipSummarizer({
-        query,
-        historySummary,
-        backtestUnchanged: !!backtestUnchanged,
-        hasAttachment: !!attachment
-      });
-      const searchMem0 = shouldSearchMem0(query, {
-        backtestUnchanged: !!backtestUnchanged,
-        skipSummarizer
-      });
-
-      const attachmentNote = attachment ? `\n【附件】：${attachment.filename || '未命名'}（交由回答模型處理）` : '';
-      const backtestHint = backtestUnchanged
-        ? '【回測】與上輪相同，未重送全文。'
-        : (typeof backtestContext === 'string' && backtestContext
-          ? '【回測】本輪有更新（詳見回答模型脈絡中的回測結果，此處不重複貼全文）。'
-          : '【回測】尚未回測。');
-
-      let newSummary = historySummary || '';
-      let complexity = estimateComplexity(query, Number.isFinite(lastComplexity) ? lastComplexity : 5);
-      let task_tag = skipSummarizer ? 'continue' : '';
-      let rawSummaryContent = skipSummarizer ? '{"skipped":true}' : '';
-      let longTermMemory = '';
-
-      const mem0Promise = mem0Search(env, query, { skip: !searchMem0 });
-
-      if (!skipSummarizer) {
-        const [summaryRes, mem0Text] = await Promise.all([
-          callOpenRouterSync(env, {
-            model: 'deepseek/deepseek-v4-flash',
-            temperature: 0.1,
-            top_p: 0.6,
-            response_format: { type: 'json_object' },
-            messages: [
-              { role: 'system', content: SUMMARIZER_SYSTEM },
-              {
-                role: 'user',
-                content:
-                  `【既有背景】：\n${historySummary || '（無）'}\n\n` +
-                  `【本輪增量】\n` +
-                  `- 用戶意圖：${String(query || '').slice(0, 500)}${attachmentNote}\n` +
-                  `- ${backtestHint}\n` +
-                  `- 上一輪回覆骨架：\n${lastSkeleton}`
-              }
-            ]
-          }),
-          mem0Promise
-        ]);
-        rawSummaryContent = summaryRes?.choices?.[0]?.message?.content || '';
-        const parsed = parseSummaryResponse(rawSummaryContent, historySummary);
-        newSummary = parsed.history_summary;
-        complexity = parsed.complexity;
-        task_tag = parsed.task_tag;
-        longTermMemory = mem0Text;
-      } else {
-        longTermMemory = await mem0Promise;
-      }
-
       // 舊前端若仍送 auto，一律改回預設 DeepSeek（不再依複雜度自動升 Sonnet）
       let selectedModelKey = (!model || model === 'auto') ? DEFAULT_MODEL_KEY : model;
-      const cfg = MODEL_CONFIG[selectedModelKey] || MODEL_CONFIG[DEFAULT_MODEL_KEY];
+      if (!MODEL_CONFIG[selectedModelKey]) selectedModelKey = DEFAULT_MODEL_KEY;
+      const cfg = MODEL_CONFIG[selectedModelKey];
 
-      let backtestText;
-      if (backtestUnchanged) {
-        backtestText = '（與上輪相同，未重送。請依對話背景與上一輪骨架中的數字繼續；若需精確數字請使用者重算。）';
-      } else {
-        backtestText = typeof backtestContext === 'string' ? backtestContext.slice(0, MAX_BACKTEST_CONTEXT_CHARS) : '';
-      }
-      const dynamicContextText =
-        `【長期記憶】：\n${longTermMemory || '（無）'}\n\n` +
-        `【對話背景】：\n${newSummary || '（無）'}\n\n` +
-        `【上一輪回覆（骨架）】：\n${lastSkeleton}\n\n` +
-        `【目前狀態與回測】：\n${backtestText || '（尚未回測）'}`;
-
-      const attachmentBlock = buildAttachmentBlock(attachment);
-      const userMessageContent = attachmentBlock
-        ? [{ type: 'text', text: query }, attachmentBlock]
-        : query;
-
-      const toolMessages = await maybeRunTools(env, cfg, dynamicContextText, query);
-
-      const answerBody = {
-        model: cfg.model,
-        max_tokens: cfg.max_tokens,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              {
-                type: 'text',
-                text: SHARED_CORE_SYSTEM,
-                cache_control: { type: 'ephemeral' }
-              },
-              {
-                type: 'text',
-                text: dynamicContextText
-              }
-            ]
-          },
-          {
-            role: 'user',
-            content: userMessageContent
-          },
-          ...(toolMessages || [])
-        ]
-      };
-
-      if (cfg.temperature !== undefined) answerBody.temperature = cfg.temperature;
-      if (cfg.reasoning) answerBody.reasoning = cfg.reasoning;
-      if (attachment && attachment.mimeType === 'application/pdf') {
-        answerBody.plugins = [{ id: 'file-parser', pdf: { engine: 'native' } }];
-      }
-
-      const stream = await callOpenRouterStream(env, answerBody);
-
-      let fullAnswerText = '';
-      let sseBuffer = '';
-
-      const transformStream = new TransformStream({
-        transform(chunk, controller) {
-          controller.enqueue(chunk);
-          sseBuffer += new TextDecoder().decode(chunk, { stream: true });
-          const lines = sseBuffer.split('\n');
-          sseBuffer = lines.pop();
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
-              try {
-                const data = JSON.parse(trimmed.slice(6));
-                const delta = data.choices?.[0]?.delta?.content;
-                if (delta) fullAnswerText += delta;
-              } catch (e) {}
-            }
-          }
-        },
-        flush() {
-          if (fullAnswerText) {
-            ctx.waitUntil(mem0Add(env, query, fullAnswerText));
-          }
-        }
-      });
-
-      const metaEvent = `data: ${JSON.stringify({
-        type: 'meta',
-        history_summary: newSummary,
-        complexity: complexity,
-        task_tag: task_tag,
-        raw_summary: rawSummaryContent,
-        used_model: selectedModelKey
-      })}\n\n`;
-
-      const tokenStream = stream.pipeThrough(transformStream);
-      const combinedStream = new ReadableStream({
+      // 先把帶 CORS 的 SSE 回應交回瀏覽器，再做摘要／上游。
+      // 否則 Worker 在送出標頭前被中斷時，瀏覽器只看得到 Failed to fetch。
+      const encoder = new TextEncoder();
+      const sseStream = new ReadableStream({
         async start(controller) {
-          controller.enqueue(new TextEncoder().encode(metaEvent));
-          const reader = tokenStream.getReader();
+          const sendJson = (obj) => {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          };
+          let fullAnswerText = '';
           try {
+            controller.enqueue(encoder.encode(': open\n\n'));
+
+            const lastSkeleton = skeletonizeLastReply(lastAiResponse);
+            const skipSummarizer = shouldSkipSummarizer({
+              query,
+              historySummary,
+              backtestUnchanged: !!backtestUnchanged,
+              hasAttachment: !!attachment
+            });
+            const searchMem0 = shouldSearchMem0(query, {
+              backtestUnchanged: !!backtestUnchanged,
+              skipSummarizer
+            });
+            const attachmentNote = attachment ? `\n【附件】：${attachment.filename || '未命名'}（交由回答模型處理）` : '';
+            const backtestHint = backtestUnchanged
+              ? '【回測】與上輪相同，未重送全文。'
+              : (typeof backtestContext === 'string' && backtestContext
+                ? '【回測】本輪有更新（詳見回答模型脈絡中的回測結果，此處不重複貼全文）。'
+                : '【回測】尚未回測。');
+
+            let newSummary = historySummary || '';
+            let complexity = estimateComplexity(query, Number.isFinite(lastComplexity) ? lastComplexity : 5);
+            let task_tag = skipSummarizer ? 'continue' : '';
+            let rawSummaryContent = skipSummarizer ? '{"skipped":true}' : '';
+            let longTermMemory = '';
+
+            const mem0Promise = mem0Search(env, query, { skip: !searchMem0 });
+            if (!skipSummarizer) {
+              const [summaryRes, mem0Text] = await Promise.all([
+                callOpenRouterSync(env, {
+                  model: 'deepseek/deepseek-v4-flash',
+                  temperature: 0.1,
+                  top_p: 0.6,
+                  response_format: { type: 'json_object' },
+                  messages: [
+                    { role: 'system', content: SUMMARIZER_SYSTEM },
+                    {
+                      role: 'user',
+                      content:
+                        `【既有背景】：\n${historySummary || '（無）'}\n\n` +
+                        `【本輪增量】\n` +
+                        `- 用戶意圖：${String(query || '').slice(0, 500)}${attachmentNote}\n` +
+                        `- ${backtestHint}\n` +
+                        `- 上一輪回覆骨架：\n${lastSkeleton}`
+                    }
+                  ]
+                }),
+                mem0Promise
+              ]);
+              rawSummaryContent = summaryRes?.choices?.[0]?.message?.content || '';
+              const parsed = parseSummaryResponse(rawSummaryContent, historySummary);
+              newSummary = parsed.history_summary;
+              complexity = parsed.complexity;
+              task_tag = parsed.task_tag;
+              longTermMemory = mem0Text;
+            } else {
+              longTermMemory = await mem0Promise;
+            }
+
+            let backtestText;
+            if (backtestUnchanged) {
+              backtestText = '（與上輪相同，未重送。請依對話背景與上一輪骨架中的數字繼續；若需精確數字請使用者重算。）';
+            } else {
+              backtestText = typeof backtestContext === 'string' ? backtestContext.slice(0, MAX_BACKTEST_CONTEXT_CHARS) : '';
+            }
+            const dynamicContextText =
+              `【長期記憶】：\n${longTermMemory || '（無）'}\n\n` +
+              `【對話背景】：\n${newSummary || '（無）'}\n\n` +
+              `【上一輪回覆（骨架）】：\n${lastSkeleton}\n\n` +
+              `【目前狀態與回測】：\n${backtestText || '（尚未回測）'}`;
+
+            const attachmentBlock = buildAttachmentBlock(attachment);
+            const userMessageContent = attachmentBlock
+              ? [{ type: 'text', text: query }, attachmentBlock]
+              : query;
+            const toolMessages = await maybeRunTools(env, cfg, dynamicContextText, query);
+            const answerBody = {
+              model: cfg.model,
+              max_tokens: cfg.max_tokens,
+              messages: [
+                {
+                  role: 'system',
+                  content: [
+                    { type: 'text', text: SHARED_CORE_SYSTEM, cache_control: { type: 'ephemeral' } },
+                    { type: 'text', text: dynamicContextText }
+                  ]
+                },
+                { role: 'user', content: userMessageContent },
+                ...(toolMessages || [])
+              ]
+            };
+            if (cfg.temperature !== undefined) answerBody.temperature = cfg.temperature;
+            if (cfg.reasoning) answerBody.reasoning = cfg.reasoning;
+            if (attachment && attachment.mimeType === 'application/pdf') {
+              answerBody.plugins = [{ id: 'file-parser', pdf: { engine: 'native' } }];
+            }
+
+            const upstream = await callOpenRouterStream(env, answerBody);
+            sendJson({
+              type: 'meta',
+              history_summary: newSummary,
+              complexity: complexity,
+              task_tag: task_tag,
+              raw_summary: rawSummaryContent,
+              used_model: selectedModelKey
+            });
+            const reader = upstream.getReader();
+            const decoder = new TextDecoder();
+            let sseBuffer = '';
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
               controller.enqueue(value);
+              sseBuffer += decoder.decode(value, { stream: true });
+              const lines = sseBuffer.split('\n');
+              sseBuffer = lines.pop();
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+                try {
+                  const data = JSON.parse(trimmed.slice(6));
+                  const delta = data.choices?.[0]?.delta?.content;
+                  if (delta) fullAnswerText += delta;
+                } catch (e) {}
+              }
             }
+            if (fullAnswerText) ctx.waitUntil(mem0Add(env, query, fullAnswerText));
+          } catch (err) {
+            try { sendJson({ error: safeErrorMessage(err) }); } catch (e) {}
           } finally {
-            controller.close();
+            try { controller.close(); } catch (e) {}
           }
         }
       });
 
-      return new Response(combinedStream, {
+      return new Response(sseStream, {
         headers: {
           ...corsHeaders,
           'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
           'X-Used-Model': selectedModelKey
         }
       });
 
     } catch (err) {
-      const isTimeout = err.name === 'AbortError';
-      return new Response(JSON.stringify({
-        error: isTimeout ? '上游服務逾時，請稍後再試' : err.message
-      }), {
-        status: isTimeout ? 504 : 500,
+      return new Response(JSON.stringify({ error: safeErrorMessage(err) }), {
+        status: err && err.name === 'AbortError' ? 504 : 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
-  }
-};
+}
