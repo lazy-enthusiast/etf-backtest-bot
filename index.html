@@ -27,67 +27,22 @@
 
 <header class="appbar">
   <div class="brand">
-    <div class="brand-mark">◐</div>
     <div>退休航道<small>ETF 歷史回測 × AI 退休規劃</small></div>
   </div>
   <div class="plan-chip" id="planChip">—</div>
   <div class="spacer"></div>
   <button class="icon-btn" title="切換深色模式">🌓</button>
-  <button class="icon-btn" id="advisorToggle">💬 AI 顧問</button>
+  <button class="icon-btn" id="advisorToggle">💬 退休顧問</button>
 </header>
 
 <div class="shell">
   <!-- ===== 主區 ~2/3：圖表、指標、組合與假設 ===== -->
   <main class="dash">
-    <section class="kpis" id="kpis">
-      <div class="card kpi kpi-hero">
-        <svg class="ring" viewBox="0 0 120 120">
-          <circle class="track" cx="60" cy="60" r="50"></circle>
-          <circle class="meter" id="ringMeter" cx="60" cy="60" r="50" stroke-dasharray="314.16" stroke-dashoffset="314.16"></circle>
-          <text x="60" y="62" text-anchor="middle" id="ringText">—</text>
-          <text x="60" y="80" text-anchor="middle" class="ring-sub">成功率</text>
-        </svg>
-        <div>
-          <div class="label">歷史成功率</div>
-          <div class="sub" id="kpiSuccessSub">—</div>
-          <div class="delta" id="kpiSuccessDelta"></div>
-        </div>
-      </div>
-      <div class="card kpi kpi-emphasis">
-        <div class="label">每月可花金額</div>
-        <div class="value" id="kpiSpend">—</div>
-        <div class="sub" id="kpiSpendSub">95% 歷史成功下的可持續支出</div>
-        <div class="delta" id="kpiSpendDelta"></div>
-      </div>
-      <div class="card kpi kpi-rates">
-        <div class="label">初始提領率</div>
-        <div class="value" id="kpiWithdraw">—</div>
-        <div class="sub" id="kpiWithdrawSub">以退休時中位資產計</div>
-        <div class="rate-row">
-          <div class="rate-pill"><div class="k">安全提領率 SWR</div><div class="v" id="kpiSwr">—</div></div>
-          <div class="rate-pill"><div class="k">永續提領率 PWR</div><div class="v" id="kpiPwr">—</div></div>
-        </div>
-        <div class="delta" id="kpiWithdrawDelta"></div>
-      </div>
-      <div class="card kpi kpi-yield"><div class="label">所需報酬</div><div class="value phase-rates" id="kpiYield">—</div><div class="sub" id="kpiYieldSub">實質報酬。累積到退休時中位資產，退休後允許花完本金。</div><div class="delta" id="kpiYieldDelta"></div><div hidden id="kpiWorst"></div><div hidden id="kpiWorstSub"></div></div>
-    </section>
-
-    <div class="kpi-secondary">
-      <span>退休時資產（中位）<b id="kpiRetire">—</b><span id="kpiRetireSub"></span><span class="delta" id="kpiRetireDelta"></span></span>
-      <span>可持續年支出（95%）<b id="kpiSpendAnnual">—</b></span>
-    </div>
-
-    <section class="card">
-      <h3 class="card-title">📈 資產軌跡 <span class="hint" id="fanHint"></span></h3>
-      <div class="chart-box"><canvas id="fanChart"></canvas></div>
-      <div class="legend-note" id="fanNote"></div>
-    </section>
-
+    <div class="above-tabs">
     <section class="workspace">
-      <section class="card">
+      <section class="card portfolio-card">
         <h3 class="card-title">📦 ETF 組合權重 <span class="hint" id="weightSum"></span></h3>
-        <div class="small muted" id="portfolioName" style="margin: -6px 0 10px;"></div>
-        <div class="small muted" style="margin: -4px 0 8px;">代號須含交易所：美股 VTI.US、倫敦 IGLN.L／VWRD.L、港股 2800.HK（不可寫裸代號；倫敦 ETF 請用 .L，勿用 .US）。</div>
+        <div id="portfolioName" hidden></div>
         <div id="holdings"></div>
         <div class="row" style="margin-top: 4px;">
           <button class="btn">＋ 新增 ETF</button>
@@ -106,7 +61,7 @@
         </details>
       </section>
 
-      <section class="card">
+      <section class="card plan-card">
         <h3 class="card-title">🎯 退休計劃假設 <span class="hint">今日幣值</span></h3>
         <div class="plan-grid" id="planForm"></div>
         <div class="timeline" id="planTimeline"><div class="acc"></div><div class="ret"></div></div>
@@ -114,18 +69,56 @@
       </section>
     </section>
 
+    <div class="kpi-secondary" hidden>
+      <span>退休時資產（中位）<b id="kpiRetire">—</b><span id="kpiRetireSub"></span><span class="delta" id="kpiRetireDelta"></span></span>
+      <span>可持續年支出（95%）<b id="kpiSpendAnnual">—</b></span>
+    </div>
+
+    <section class="card">
+      <h3 class="card-title">📈 資產軌跡 <span class="hint" id="fanHint"></span></h3>
+      <div class="chart-box"><canvas id="fanChart"></canvas></div>
+      <div class="legend-note" id="fanNote" hidden></div>
+    </section>
+
     <div class="calc-bar">
       <button class="btn primary block" id="calcBtn">重新計算</button>
       <div class="status" id="status"></div>
     </div>
+    </div>
 
-    <section class="card">
+    <section class="card results-card">
       <div class="tabs" id="tabs">
-        <button data-tab="scenarios" class="on">歷史情境</button>
+        <button data-tab="overview" class="on">概況</button>
+        <button data-tab="scenarios">歷史情境</button>
         <button data-tab="performance">組合績效</button>
         <button data-tab="assets">資產明細</button>
       </div>
-      <div class="tab-panel" id="tab-scenarios"></div>
+      <div class="tab-panel" id="tab-overview">
+        <dl class="overview-facts" id="kpis">
+          <div>
+            <dt>歷史成功率</dt>
+            <dd id="kpiSuccess">—</dd>
+            <dd class="delta" id="kpiSuccessDelta"></dd>
+          </div>
+          <div>
+            <dt>每月可花金額</dt>
+            <dd id="kpiSpend">—</dd>
+            <dd class="delta" id="kpiSpendDelta"></dd>
+          </div>
+          <div>
+            <dt>初始提領率</dt>
+            <dd id="kpiWithdraw">—</dd>
+            <dd class="overview-extra"><b id="kpiSwr">—</b> SWR · <b id="kpiPwr">—</b> PWR</dd>
+            <dd class="delta" id="kpiWithdrawDelta"></dd>
+          </div>
+          <div>
+            <dt>所需報酬</dt>
+            <dd class="phase-rates" id="kpiYield">—</dd>
+            <dd class="delta" id="kpiYieldDelta"></dd>
+          </div>
+        </dl>
+      </div>
+      <div class="tab-panel" id="tab-scenarios" hidden></div>
       <div class="tab-panel" id="tab-performance" hidden></div>
       <div class="tab-panel" id="tab-assets" hidden></div>
     </section>
@@ -156,11 +149,8 @@
     </div>
     <div id="messages"></div>
     <div class="composer">
-      <div id="attachPreview" hidden></div>
       <div class="composer-box">
-        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp,application/pdf,.txt,.csv,.md" hidden>
-        <button id="attachBtn" title="附加圖片／PDF／文字檔">📎</button>
-        <textarea id="inputBox" rows="1" placeholder="問問你的退休顧問…（Shift+Enter 換行）"></textarea>
+        <textarea id="inputBox" rows="1" placeholder="問問你的退休顧問…"></textarea>
         <button id="sendBtn">送出</button>
       </div>
     </div>

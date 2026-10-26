@@ -21,7 +21,7 @@ export const state = {
   series: new Map(),
   backtestCache: new Map(),
   charts: {},
-  tab: localStorage.getItem(STORE.tab) || 'scenarios',
+  tab: localStorage.getItem(STORE.tab) || 'overview',
   logScale: localStorage.getItem(STORE.logScale) !== '0',
   isSending: false,
   /** 最近一次 AI／手動套用 portfolio／plan 後的執行回執 */
