@@ -36,7 +36,8 @@ export async function recalc({ markPrevious = true, label } = {}) {
     const baselineReturns = plan.feeSplit && !plan.glidePath
       ? meta.retirement.realMonthlyReturns(result.equityMonthly, { ...plan, feeSplit: false }, cpi).returns
       : null;
-    const sim = meta.retirement.simulateRetirement(plan, returns, glide, dividend, baselineReturns);
+    const fx = meta.retirement.buildFx(plan);
+    const sim = meta.retirement.simulateRetirement(plan, returns, glide, dividend, baselineReturns, fx);
     if (seq !== recalcSeq) return null;
     if (markPrevious && state.current) state.previous = state.current;
     state.current = { label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths };

@@ -193,7 +193,21 @@ export function renderDashboard() {
   renderGlideHighlight(cur);
   renderDividendHighlight(cur);
   renderFeeHighlight(cur);
+  renderFxHighlight(cur);
   renderActiveTab();
+}
+
+function renderFxHighlight(cur) {
+  const node = $('fxHighlight');
+  if (!node) return;
+  if (!cur?.plan?.fxMode) { node.hidden = true; node.textContent = ''; return; }
+  if (cur.sim?.fxStatus?.skipped === 'twd') {
+    node.textContent = '台幣支出需要匯率序列，這次沒有套用。';
+  } else if (cur.sim?.fxSpend) {
+    const peg = cur.sim.fxStatus?.twd ? '' : '（港幣為 7.8 聯繫匯率假設）';
+    node.textContent = `匯率：中位實際提出 ${compact(cur.sim.fxSpend.withFx)}，未換算 ${compact(cur.sim.fxSpend.withoutFx)}${peg}`;
+  } else node.textContent = '匯率未套用。';
+  node.hidden = false;
 }
 
 function renderFeeHighlight(cur) {

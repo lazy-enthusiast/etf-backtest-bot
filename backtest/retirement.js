@@ -36,8 +36,13 @@ export const DEFAULT_PLAN = {
   ter: 0,
   turnover: 0,
   turnoverCost: 0,
-  fxSpread: 0
+  fxSpread: 0,
+  fxMode: false,
+  spendingBasket: null,
+  fxSeries: ''
 };
+
+export const HKD_USD_PEG = 7.8;
 
 const PERCENTILES = [10, 25, 50, 75, 90];
 
@@ -74,7 +79,45 @@ export function normalizePlan(plan) {
   p.turnover = Math.max(0, Number(p.turnover) || 0);
   p.turnoverCost = Math.max(0, Number(p.turnoverCost) || 0);
   p.fxSpread = Math.max(0, Number(p.fxSpread) || 0);
+  p.fxMode = p.fxMode === true || p.fxMode === 'true';
+  p.spendingBasket = parseRateMap(p.spendingBasket);
+  if (!Object.keys(p.spendingBasket).length) p.spendingBasket = { [p.currency || 'HKD']: 100 };
+  p.fxSeries = typeof p.fxSeries === 'string' ? p.fxSeries : formatFxSeries(p.fxSeries);
   return p;
+}
+
+function formatFxSeries(value) {
+  if (!Array.isArray(value)) return '';
+  return value.map(row => `${row.month},${row.rate}`).join('\n');
+}
+
+function parseFxSeries(text) {
+  const out = [];
+  for (const line of String(text || '').split(/[\n;]+/)) {
+    const match = line.trim().match(/^(\d{4}-\d{2})(?:-\d{2})?\s*[,=:\s]\s*(\d+(?:\.\d+)?)$/);
+    if (!match) continue;
+    out.push({ month: match[1], rate: Number(match[2]) });
+  }
+  return out;
+}
+
+/**
+ * 關閉時不做換匯。港幣對美元是固定 7.8 的聯繫匯率假設，不是歷史匯率。
+ * 台幣必須有呼叫端傳入的序列；沒有就不套用，也不拿港幣聯繫來充數。
+ */
+export function buildFx(plan) {
+  const p = normalizePlan(plan);
+  if (!p.fxMode) return null;
+  const total = Object.values(p.spendingBasket).reduce((sum, w) => sum + w, 0);
+  const basket = {};
+  for (const [ccy, weight] of Object.entries(p.spendingBasket)) basket[ccy] = weight / total;
+  const twdWeight = basket.TWD || 0;
+  if (twdWeight > 0) {
+    const series = parseFxSeries(p.fxSeries);
+    if (!series.length) return { skipped: 'twd' };
+    return { basket, peg: HKD_USD_PEG, twd: new Map(series.map(row => [row.month, row.rate])), base: series[0].rate };
+  }
+  return { basket, peg: HKD_USD_PEG, twd: null, base: null };
 }
 
 function annualFeeDrag(p) {
@@ -301,7 +344,7 @@ function worseRun(a, b) {
  * 與 runLifePaths 同一條月初現金流、其後報酬的迴圈。
  * keepRows 只給測試對帳；正式摘要算完就丟掉逐月列。
  */
-function walkLife(p, returns, strategy, { keepRows = false, glide = null, dividend = null, feeParts = null } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, glide = null, dividend = null, feeParts = null, fx = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -325,6 +368,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
   const rows = keepRows ? [] : null;
   const glideOn = Boolean(glide && p.glidePath && glide.equityR.length === L);
   const dividendOn = Boolean(dividend && p.dividendTax && dividend.monthlyRate > 0);
+  const fxOn = Boolean(fx && !fx.skipped && p.fxMode);
   let eqMin = Infinity;
   let eqMax = -Infinity;
 
@@ -375,9 +419,19 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
       }
 
       let withdraw = 0;
+      let fxRateUsed = null;
       if (k >= retireMonth) {
         const beforeSpend = spendState.annualSpend;
         withdraw = monthWithdrawal(strategy, p, spendState, balance, k, retireMonth, totalMonths);
+        if (fxOn) {
+          const twdW = fx.basket.TWD || 0;
+          const indexed = twdW > 0 ? fx.twd.get(returns[idx].month) : null;
+          if (!(twdW > 0) || Number.isFinite(indexed)) {
+            const factor = twdW > 0 ? (1 - twdW) + twdW * (indexed / fx.base) : 1;
+            withdraw *= factor;
+            fxRateUsed = twdW > 0 ? indexed : fx.peg;
+          }
+        }
         if (strategy === 'guardrails' && (k - retireMonth) % 12 === 0) {
           const cut = beforeSpend - spendState.annualSpend;
           if (cut > 1e-6) {
@@ -430,7 +484,8 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
             ter_cost: balanceAfterFlows * (1 - (1 - feeParts.ter / 100) ** (1 / 12)),
             turnover_cost: balanceAfterFlows * (1 - (1 - feeParts.turnover / 100) ** (1 / 12)),
             fx_spread: balanceAfterFlows * (1 - (1 - feeParts.fxSpread / 100) ** (1 / 12))
-          } : {})
+          } : {}),
+          ...(fxRateUsed == null ? {} : { fx_rate_used: fxRateUsed })
         });
       }
     }
@@ -463,12 +518,13 @@ function medianFunded(walked) {
   return sums[Math.floor((sums.length - 1) / 2)];
 }
 
-function runLifePaths(p, returns, strategy, glide, dividend) {
+function runLifePaths(p, returns, strategy, glide, dividend, fx) {
   return walkLife(p, returns, strategy, {
     keepRows: false,
     glide: p.glidePath ? glide : null,
     dividend: p.dividendTax ? dividend : null,
-    feeParts: feeSplitParts(p)
+    feeParts: feeSplitParts(p),
+    fx: p.fxMode && fx && !fx.skipped ? fx : null
   });
 }
 
@@ -500,14 +556,15 @@ function spendingBriefFromWalk(p, strategy, returns, walked) {
 }
 
 /** 測試用：逐月列只在呼叫時存在。正式畫面不保留。 */
-export function buildLifeLedger(plan, returns, strategy, glide = null, dividend = null) {
+export function buildLifeLedger(plan, returns, strategy, glide = null, dividend = null, fx = null) {
   const p = normalizePlan(plan);
   const strat = strategy || p.withdrawalStrategy;
   const walked = walkLife(p, returns, strat, {
     keepRows: true,
     glide: p.glidePath ? glide : null,
     dividend: p.dividendTax ? dividend : null,
-    feeParts: feeSplitParts(p)
+    feeParts: feeSplitParts(p),
+    fx: p.fxMode && fx && !fx.skipped ? fx : null
   });
   return {
     header: {
@@ -535,14 +592,14 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
  * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
  * @param returns realMonthlyReturns().returns
  */
-export function simulateRetirement(plan, returns, glide = null, dividend = null, baselineReturns = null) {
+export function simulateRetirement(plan, returns, glide = null, dividend = null, baselineReturns = null, fx = null) {
   const p = normalizePlan(plan);
   const L = returns.length;
   if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
 
-  const primary = runLifePaths(p, returns, p.withdrawalStrategy, glide, dividend);
+  const primary = runLifePaths(p, returns, p.withdrawalStrategy, glide, dividend, fx);
   const needFixedCompare = p.withdrawalStrategy !== 'fixed_real';
-  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real', glide, dividend) : primary;
+  const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real', glide, dividend, fx) : primary;
   const { runs, yearly, starts, circular } = primary;
 
   const successCount = runs.filter(x => x.success).length;
@@ -581,14 +638,25 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
   let dividendSpend = null;
   if (p.dividendTax && dividend?.monthlyRate > 0) {
     const plain = { ...p, dividendTax: false };
-    const without = runLifePaths(plain, returns, p.withdrawalStrategy, glide, null);
+    const without = runLifePaths(plain, returns, p.withdrawalStrategy, glide, null, fx);
     dividendSpend = { withTax: medianFunded(primary), withoutTax: medianFunded(without) };
   }
   let feeSpend = null;
   if (p.feeSplit && !p.glidePath && baselineReturns) {
     const plain = { ...p, feeSplit: false };
-    const without = runLifePaths(plain, baselineReturns, p.withdrawalStrategy, null, dividend);
+    const without = runLifePaths(plain, baselineReturns, p.withdrawalStrategy, null, dividend, fx);
     feeSpend = { withSplit: medianFunded(primary), withoutSplit: medianFunded(without) };
+  }
+  let fxSpend = null;
+  let fxStatus = null;
+  if (p.fxMode) {
+    if (!fx || fx.skipped) fxStatus = { skipped: fx?.skipped || 'missing' };
+    else {
+      const plain = { ...p, fxMode: false };
+      const without = runLifePaths(plain, returns, p.withdrawalStrategy, glide, dividend, null);
+      fxSpend = { withFx: medianFunded(primary), withoutFx: medianFunded(without) };
+      fxStatus = { peg: fx.peg, twd: Boolean(fx.twd) };
+    }
   }
 
   return {
@@ -629,6 +697,8 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
     glide: p.glidePath ? (primary.equityWeightRange || { skipped: true }) : null,
     dividendSpend,
     feeSpend,
+    fxSpend,
+    fxStatus,
     byStartYear: runs.filter(x => x.start.endsWith('-01')).map(x => ({
       year: Number(x.start.slice(0, 4)),
       success: x.success,

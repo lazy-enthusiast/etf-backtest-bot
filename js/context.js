@@ -44,6 +44,15 @@ function describeFeeSplit(sim, plan) {
   return `費用拆分：中位實際提出 ${money(cmp.withSplit, plan.currency)}，未拆分（仍用單一費用率） ${money(cmp.withoutSplit, plan.currency)}`;
 }
 
+function describeFx(sim, plan) {
+  if (!plan?.fxMode) return null;
+  if (sim?.fxStatus?.skipped === 'twd') return '台幣在支出籃裡，但沒有傳入匯率序列，所以這次沒有換算，也沒有拿港幣聯繫來充數。';
+  const cmp = sim?.fxSpend;
+  if (!cmp) return '支出匯率未套用。';
+  const peg = sim.fxStatus?.twd ? '台幣用傳入的匯率序列。' : '港幣部分用 7.8 聯繫匯率假設，匯率不變時支出數字與未換算相同。';
+  return `匯率：中位實際提出 ${money(cmp.withFx, plan.currency)}，未換算 ${money(cmp.withoutFx, plan.currency)}。${peg}`;
+}
+
 function describeWithdrawal(p) {
   if (p.withdrawalStrategy === 'guardrails') {
     return `護欄法（絕對提領率＝年提領÷資產：>${p.guardrailCeiling}% 砍支出 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%；非相對初始提領率）`;
@@ -63,7 +72,8 @@ export function describePlan(p) {
     `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`,
     p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null,
     p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null,
-    p.feeSplit ? `費用拆分：開，並取代單一費用率 ${p.feeRate}%（TER ${p.ter}%、年換手 ${p.turnover}% × 成本 ${p.turnoverCost}%、匯率價差 ${p.fxSpread}%）。` : null
+    p.feeSplit ? `費用拆分：開，並取代單一費用率 ${p.feeRate}%（TER ${p.ter}%、年換手 ${p.turnover}% × 成本 ${p.turnoverCost}%、匯率價差 ${p.fxSpread}%）。` : null,
+    p.fxMode ? '支出匯率：開。港幣對美元是 7.8 的聯繫匯率假設，不是歷史匯率；台幣必須另有匯率序列，不能拿港幣聯繫充數。支出籃預設 100% 計劃幣別。' : null
   ].filter(Boolean).join('\n');
 }
 
@@ -87,6 +97,7 @@ export function describeSim(cur) {
     describeGlide(sim),
     describeDividend(sim, plan),
     describeFeeSplit(sim, plan),
+    describeFx(sim, plan),
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

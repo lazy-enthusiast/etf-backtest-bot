@@ -121,7 +121,22 @@ function renderGlideFields() {
     input.addEventListener('input', onPlanEdited);
     return input;
   });
-  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs);
+  const fxRow = el('label', 'check-row');
+  const fxToggle = el('input');
+  fxToggle.type = 'checkbox';
+  fxToggle.id = 'plan-fxMode';
+  fxToggle.addEventListener('change', onPlanEdited);
+  fxRow.append(fxToggle, document.createTextNode(' 支出匯率（預設關）'));
+  const basket = el('input');
+  basket.id = 'plan-spendingBasket';
+  basket.placeholder = '支出籃，空白＝100% 計劃幣別，例如 HKD:80, TWD:20';
+  basket.addEventListener('input', onPlanEdited);
+  const series = el('textarea');
+  series.id = 'plan-fxSeries';
+  series.rows = 2;
+  series.placeholder = '台幣匯率（每 1 USD），例如 2000-01,32.5。沒有序列就不套用台幣。港幣用 7.8 聯繫匯率假設。';
+  series.addEventListener('input', onPlanEdited);
+  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series);
   return box;
 }
 
@@ -166,6 +181,12 @@ export function writePlanForm() {
     const input = $('plan-' + key);
     if (input && document.activeElement !== input) input.value = p[key] ?? '';
   }
+  const fxToggle = $('plan-fxMode');
+  if (fxToggle && document.activeElement !== fxToggle) fxToggle.checked = Boolean(p.fxMode);
+  const basket = $('plan-spendingBasket');
+  if (basket && document.activeElement !== basket) basket.value = rateMapText(p.spendingBasket);
+  const series = $('plan-fxSeries');
+  if (series && document.activeElement !== series) series.value = p.fxSeries || '';
   renderPlanTimeline();
 }
 
@@ -194,6 +215,12 @@ export function readPlanForm() {
     const input = $('plan-' + key);
     if (input) p[key] = input.value === '' ? 0 : Number(input.value);
   }
+  const fxToggle = $('plan-fxMode');
+  if (fxToggle) p.fxMode = fxToggle.checked;
+  const basket = $('plan-spendingBasket');
+  if (basket) p.spendingBasket = basket.value;
+  const series = $('plan-fxSeries');
+  if (series) p.fxSeries = series.value;
   return p;
 }
 

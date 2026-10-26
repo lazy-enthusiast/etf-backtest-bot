@@ -51,5 +51,8 @@ export const PLAN_LABELS = {
   ter: 'TER',
   turnover: '年換手',
   turnoverCost: '換手成本',
-  fxSpread: '匯率價差'
+  fxSpread: '匯率價差',
+  fxMode: '支出匯率',
+  spendingBasket: '支出籃',
+  fxSeries: '台幣匯率序列'
 };
