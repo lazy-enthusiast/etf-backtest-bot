@@ -46,5 +46,10 @@ export const PLAN_LABELS = {
   glideEquityEnd: '期末股權重',
   dividendTax: '股息稅',
   dividendYields: '假設殖利率',
-  dividendTaxRates: '註冊地稅率'
+  dividendTaxRates: '註冊地稅率',
+  feeSplit: '費用拆分',
+  ter: 'TER',
+  turnover: '年換手',
+  turnoverCost: '換手成本',
+  fxSpread: '匯率價差'
 };

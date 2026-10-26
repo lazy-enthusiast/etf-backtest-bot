@@ -105,7 +105,23 @@ function renderGlideFields() {
   rates.id = 'plan-dividendTaxRates';
   rates.placeholder = '註冊地稅率 %，例如 US:30, L:15, HK:0';
   rates.addEventListener('input', onPlanEdited);
-  box.append(row, tick, end, taxRow, yields, rates);
+  const feeRow = el('label', 'check-row');
+  const feeToggle = el('input');
+  feeToggle.type = 'checkbox';
+  feeToggle.id = 'plan-feeSplit';
+  feeToggle.addEventListener('change', onPlanEdited);
+  feeRow.append(feeToggle, document.createTextNode(' 拆開費用（取代單一費用率）'));
+  const feeInputs = ['ter', 'turnover', 'turnoverCost', 'fxSpread'].map(key => {
+    const input = el('input');
+    input.id = 'plan-' + key;
+    input.type = 'number';
+    input.min = 0;
+    input.step = 0.05;
+    input.placeholder = ({ ter: 'TER %/年', turnover: '年換手 %', turnoverCost: '換手單邊成本 %', fxSpread: '匯率價差 %/年' })[key];
+    input.addEventListener('input', onPlanEdited);
+    return input;
+  });
+  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs);
   return box;
 }
 
@@ -144,6 +160,12 @@ export function writePlanForm() {
   if (yields && document.activeElement !== yields) yields.value = rateMapText(p.dividendYields);
   const rates = $('plan-dividendTaxRates');
   if (rates && document.activeElement !== rates) rates.value = rateMapText(p.dividendTaxRates);
+  const feeToggle = $('plan-feeSplit');
+  if (feeToggle && document.activeElement !== feeToggle) feeToggle.checked = Boolean(p.feeSplit);
+  for (const key of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
+    const input = $('plan-' + key);
+    if (input && document.activeElement !== input) input.value = p[key] ?? '';
+  }
   renderPlanTimeline();
 }
 
@@ -166,6 +188,12 @@ export function readPlanForm() {
   if (yields) p.dividendYields = yields.value;
   const rates = $('plan-dividendTaxRates');
   if (rates) p.dividendTaxRates = rates.value;
+  const feeToggle = $('plan-feeSplit');
+  if (feeToggle) p.feeSplit = feeToggle.checked;
+  for (const key of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
+    const input = $('plan-' + key);
+    if (input) p[key] = input.value === '' ? 0 : Number(input.value);
+  }
   return p;
 }
 

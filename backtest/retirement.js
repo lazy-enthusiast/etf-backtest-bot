@@ -31,7 +31,12 @@ export const DEFAULT_PLAN = {
   glideEquityEnd: null,
   dividendTax: false,
   dividendYields: {},
-  dividendTaxRates: {}
+  dividendTaxRates: {},
+  feeSplit: false,
+  ter: 0,
+  turnover: 0,
+  turnoverCost: 0,
+  fxSpread: 0
 };
 
 const PERCENTILES = [10, 25, 50, 75, 90];
@@ -64,7 +69,27 @@ export function normalizePlan(plan) {
   p.dividendTax = p.dividendTax === true || p.dividendTax === 'true';
   p.dividendYields = parseRateMap(p.dividendYields);
   p.dividendTaxRates = parseRateMap(p.dividendTaxRates);
+  p.feeSplit = p.feeSplit === true || p.feeSplit === 'true';
+  p.ter = Math.max(0, Number(p.ter) || 0);
+  p.turnover = Math.max(0, Number(p.turnover) || 0);
+  p.turnoverCost = Math.max(0, Number(p.turnoverCost) || 0);
+  p.fxSpread = Math.max(0, Number(p.fxSpread) || 0);
   return p;
+}
+
+function annualFeeDrag(p) {
+  if (!p.feeSplit) return p.feeRate;
+  const turnoverDrag = (p.turnover / 100) * p.turnoverCost;
+  return Math.min(99, p.ter + turnoverDrag + p.fxSpread);
+}
+
+function feeSplitParts(p) {
+  if (!p.feeSplit) return null;
+  return {
+    ter: p.ter,
+    turnover: (p.turnover / 100) * p.turnoverCost,
+    fxSpread: p.fxSpread
+  };
 }
 
 function parseRateMap(value) {
@@ -116,7 +141,7 @@ function summarize(values, qs = PERCENTILES) {
 export function realMonthlyReturns(equityMonthly, plan, cpiSeries) {
   const p = normalizePlan(plan);
   const cpi = new Map((cpiSeries || []).map(([d, v]) => [d.slice(0, 7), v]));
-  const feeFactor = (1 - p.feeRate / 100) ** (1 / 12);
+  const feeFactor = (1 - annualFeeDrag(p) / 100) ** (1 / 12);
   const fixedInflation = (1 + p.inflationRate / 100) ** (1 / 12);
   const returns = [];
   let cpiFallbackMonths = 0;
@@ -182,7 +207,7 @@ export function buildGlide(assetMonthly, holdings, plan, cpiSeries) {
     equityR[i - 1] = eq;
     restR[i - 1] = rest;
   }
-  const feeFactor = (1 - p.feeRate / 100) ** (1 / 12);
+  const feeFactor = (1 - annualFeeDrag(p) / 100) ** (1 / 12);
   const fixedInflation = (1 + p.inflationRate / 100) ** (1 / 12);
   const cpi = new Map((cpiSeries || []).map(([d, v]) => [String(d).slice(0, 7), v]));
   const inflation = new Float64Array(n);
@@ -276,7 +301,7 @@ function worseRun(a, b) {
  * 與 runLifePaths 同一條月初現金流、其後報酬的迴圈。
  * keepRows 只給測試對帳；正式摘要算完就丟掉逐月列。
  */
-function walkLife(p, returns, strategy, { keepRows = false, glide = null, dividend = null } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, glide = null, dividend = null, feeParts = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -400,7 +425,12 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
           balance_end: balance,
           depleted: depletedAt !== null && k >= depletedAt ? 1 : 0,
           ...(equityWeight === null ? {} : { equity_weight_actual: equityWeight }),
-          ...(dividendOn ? { tax_paid: taxPaid } : {})
+          ...(dividendOn ? { tax_paid: taxPaid } : {}),
+          ...(feeParts ? {
+            ter_cost: balanceAfterFlows * (1 - (1 - feeParts.ter / 100) ** (1 / 12)),
+            turnover_cost: balanceAfterFlows * (1 - (1 - feeParts.turnover / 100) ** (1 / 12)),
+            fx_spread: balanceAfterFlows * (1 - (1 - feeParts.fxSpread / 100) ** (1 / 12))
+          } : {})
         });
       }
     }
@@ -437,7 +467,8 @@ function runLifePaths(p, returns, strategy, glide, dividend) {
   return walkLife(p, returns, strategy, {
     keepRows: false,
     glide: p.glidePath ? glide : null,
-    dividend: p.dividendTax ? dividend : null
+    dividend: p.dividendTax ? dividend : null,
+    feeParts: feeSplitParts(p)
   });
 }
 
@@ -475,7 +506,8 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
   const walked = walkLife(p, returns, strat, {
     keepRows: true,
     glide: p.glidePath ? glide : null,
-    dividend: p.dividendTax ? dividend : null
+    dividend: p.dividendTax ? dividend : null,
+    feeParts: feeSplitParts(p)
   });
   return {
     header: {
@@ -503,7 +535,7 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
  * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
  * @param returns realMonthlyReturns().returns
  */
-export function simulateRetirement(plan, returns, glide = null, dividend = null) {
+export function simulateRetirement(plan, returns, glide = null, dividend = null, baselineReturns = null) {
   const p = normalizePlan(plan);
   const L = returns.length;
   if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
@@ -552,6 +584,12 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null)
     const without = runLifePaths(plain, returns, p.withdrawalStrategy, glide, null);
     dividendSpend = { withTax: medianFunded(primary), withoutTax: medianFunded(without) };
   }
+  let feeSpend = null;
+  if (p.feeSplit && !p.glidePath && baselineReturns) {
+    const plain = { ...p, feeSplit: false };
+    const without = runLifePaths(plain, baselineReturns, p.withdrawalStrategy, null, dividend);
+    feeSpend = { withSplit: medianFunded(primary), withoutSplit: medianFunded(without) };
+  }
 
   return {
     plan: p,
@@ -590,6 +628,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null)
     spendingBrief,
     glide: p.glidePath ? (primary.equityWeightRange || { skipped: true }) : null,
     dividendSpend,
+    feeSpend,
     byStartYear: runs.filter(x => x.start.endsWith('-01')).map(x => ({
       year: Number(x.start.slice(0, 4)),
       success: x.success,

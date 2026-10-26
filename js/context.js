@@ -37,6 +37,13 @@ function describeDividend(sim, plan) {
   return `股息稅：中位實際提出 ${money(cmp.withTax, plan.currency)}，未扣稅 ${money(cmp.withoutTax, plan.currency)}。可持續支出分位仍是未另扣這筆稅的固定實質口徑。`;
 }
 
+function describeFeeSplit(sim, plan) {
+  if (!plan?.feeSplit) return null;
+  const cmp = sim?.feeSpend;
+  if (!cmp) return '費用拆分已取代單一費用率。與未拆分的支出對照只在未同時開啟下滑路徑時計算。';
+  return `費用拆分：中位實際提出 ${money(cmp.withSplit, plan.currency)}，未拆分（仍用單一費用率） ${money(cmp.withoutSplit, plan.currency)}`;
+}
+
 function describeWithdrawal(p) {
   if (p.withdrawalStrategy === 'guardrails') {
     return `護欄法（絕對提領率＝年提領÷資產：>${p.guardrailCeiling}% 砍支出 ${p.guardrailAdjustPct}%、<${p.guardrailFloor}% 加 ${p.guardrailAdjustPct}%；非相對初始提領率）`;
@@ -55,7 +62,8 @@ export function describePlan(p) {
     `提領規則：${describeWithdrawal(p)}`,
     `通膨：${infl}；費用＋成本 ${p.feeRate}%/年`,
     p.glidePath ? `下滑路徑：開；股票代號 ${(p.equityTickers || []).join('、') || '（未填）'}；期末股權重 ${p.glideEquityEnd == null ? '維持目前' : `${p.glideEquityEnd}%`}。同一歷史索引只改該月目標權重，成功率不宜與固定權重橫比。` : null,
-    p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null
+    p.dividendTax ? '股息稅：開。價格沒有分開的股息，稅額只用假設殖利率另扣；沒給對得上的殖利率與稅率就不扣。' : null,
+    p.feeSplit ? `費用拆分：開，並取代單一費用率 ${p.feeRate}%（TER ${p.ter}%、年換手 ${p.turnover}% × 成本 ${p.turnoverCost}%、匯率價差 ${p.fxSpread}%）。` : null
   ].filter(Boolean).join('\n');
 }
 
@@ -78,6 +86,7 @@ export function describeSim(cur) {
     describeSpendingBrief(sim, plan),
     describeGlide(sim),
     describeDividend(sim, plan),
+    describeFeeSplit(sim, plan),
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

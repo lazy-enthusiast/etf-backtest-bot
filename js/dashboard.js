@@ -192,7 +192,19 @@ export function renderDashboard() {
   renderPathHighlights(cur);
   renderGlideHighlight(cur);
   renderDividendHighlight(cur);
+  renderFeeHighlight(cur);
   renderActiveTab();
+}
+
+function renderFeeHighlight(cur) {
+  const node = $('feeHighlight');
+  if (!node) return;
+  if (!cur?.plan?.feeSplit) { node.hidden = true; node.textContent = ''; return; }
+  const cmp = cur.sim?.feeSpend;
+  node.textContent = cmp
+    ? `費用拆分：中位實際提出 ${compact(cmp.withSplit)}，未拆分 ${compact(cmp.withoutSplit)}`
+    : '費用拆分已取代單一費用率。';
+  node.hidden = false;
 }
 
 function renderDividendHighlight(cur) {
