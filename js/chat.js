@@ -388,6 +388,10 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
         let json;
         try { json = JSON.parse(t.slice(6)); } catch (e) { continue; }
         if (json.error && !json.choices) throw new Error(json.error);
+        if (json.type === 'status' && json.text && !acc) {
+          bubble.textContent = json.text;
+          continue;
+        }
         if (json.type === 'meta') {
           if (json.history_summary) conv.historySummary = json.history_summary;
           if (Number.isFinite(json.complexity)) conv.lastComplexity = json.complexity;
@@ -415,8 +419,8 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     if (isFirst) fetchAutoTitle(conv, text, acc);
   } catch (err) {
     let msg = err.message || String(err);
-    const fetchThrew = /Failed to fetch|NetworkError|Load failed/i.test(msg);
-    if (!sawHttp && (fetchThrew || /network/i.test(msg))) {
+    const fetchThrew = /Failed to fetch|NetworkError|Load failed|network error/i.test(msg);
+    if (!sawHttp && fetchThrew) {
       const local = ['localhost', '127.0.0.1'].includes(location.hostname);
       msg = local
         ? '無法連上本機 Worker（127.0.0.1:8787）。請先在專案根目錄執行 npm run dev，或改用 GitHub Pages 線上版。'

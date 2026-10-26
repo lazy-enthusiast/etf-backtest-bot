@@ -253,9 +253,14 @@ async function handleRequest(request, env, ctx, corsHeaders) {
           const sendJson = (obj) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
           };
+          // 等待摘要／模型時若長時間沒有位元組，瀏覽器會把串流讀成 network error。
+          const ping = setInterval(() => {
+            try { controller.enqueue(encoder.encode(': ping\n\n')); } catch (e) { clearInterval(ping); }
+          }, 5000);
           let fullAnswerText = '';
           try {
-            controller.enqueue(encoder.encode(': open\n\n'));
+            controller.enqueue(encoder.encode(`: open ${' '.repeat(2048)}\n\n`));
+            sendJson({ type: 'status', text: '正在整理脈絡…' });
 
             const lastSkeleton = skeletonizeLastReply(lastAiResponse);
             const skipSummarizer = shouldSkipSummarizer({
@@ -352,7 +357,9 @@ async function handleRequest(request, env, ctx, corsHeaders) {
               answerBody.plugins = [{ id: 'file-parser', pdf: { engine: 'native' } }];
             }
 
+            sendJson({ type: 'status', text: '正在生成回覆…' });
             const upstream = await callOpenRouterStream(env, answerBody);
+            clearInterval(ping);
             sendJson({
               type: 'meta',
               history_summary: newSummary,
@@ -385,6 +392,7 @@ async function handleRequest(request, env, ctx, corsHeaders) {
           } catch (err) {
             try { sendJson({ error: safeErrorMessage(err) }); } catch (e) {}
           } finally {
+            clearInterval(ping);
             try { controller.close(); } catch (e) {}
           }
         }
