@@ -36,6 +36,7 @@
 <div class="shell">
   <!-- ===== 主區 ~2/3：圖表、指標、組合與假設 ===== -->
   <main class="dash">
+    <div class="above-tabs">
     <section class="workspace">
       <section class="card portfolio-card">
         <h3 class="card-title">📦 ETF 組合權重 <span class="hint" id="weightSum"></span></h3>
@@ -81,6 +82,7 @@
       <button class="btn primary block" id="calcBtn">重新計算</button>
       <div class="status" id="status"></div>
     </div>
+    </div>
 
     <section class="card results-card">
       <div class="tabs" id="tabs">
@@ -90,38 +92,29 @@
         <button data-tab="assets">資產明細</button>
       </div>
       <div class="tab-panel" id="tab-overview">
-        <section class="kpis" id="kpis">
-          <div class="card kpi kpi-hero">
-            <svg class="ring" viewBox="0 0 120 120">
-              <circle class="track" cx="60" cy="60" r="50"></circle>
-              <circle class="meter" id="ringMeter" cx="60" cy="60" r="50" stroke-dasharray="314.16" stroke-dashoffset="314.16"></circle>
-              <text x="60" y="62" text-anchor="middle" id="ringText">—</text>
-              <text x="60" y="80" text-anchor="middle" class="ring-sub">成功率</text>
-            </svg>
-            <div>
-              <div class="label">歷史成功率</div>
-              <div class="sub" id="kpiSuccessSub">—</div>
-              <div class="delta" id="kpiSuccessDelta"></div>
-            </div>
+        <dl class="overview-facts" id="kpis">
+          <div>
+            <dt>歷史成功率</dt>
+            <dd id="kpiSuccess">—</dd>
+            <dd class="delta" id="kpiSuccessDelta"></dd>
           </div>
-          <div class="card kpi kpi-emphasis">
-            <div class="label">每月可花金額</div>
-            <div class="value" id="kpiSpend">—</div>
-            <div class="sub" id="kpiSpendSub">95% 歷史成功下的可持續支出</div>
-            <div class="delta" id="kpiSpendDelta"></div>
+          <div>
+            <dt>每月可花金額</dt>
+            <dd id="kpiSpend">—</dd>
+            <dd class="delta" id="kpiSpendDelta"></dd>
           </div>
-          <div class="card kpi kpi-rates">
-            <div class="label">初始提領率</div>
-            <div class="value" id="kpiWithdraw">—</div>
-            <div class="sub" id="kpiWithdrawSub">以退休時中位資產計</div>
-            <div class="rate-row">
-              <div class="rate-pill"><div class="k">安全提領率 SWR</div><div class="v" id="kpiSwr">—</div></div>
-              <div class="rate-pill"><div class="k">永續提領率 PWR</div><div class="v" id="kpiPwr">—</div></div>
-            </div>
-            <div class="delta" id="kpiWithdrawDelta"></div>
+          <div>
+            <dt>初始提領率</dt>
+            <dd id="kpiWithdraw">—</dd>
+            <dd class="overview-extra"><b id="kpiSwr">—</b> SWR · <b id="kpiPwr">—</b> PWR</dd>
+            <dd class="delta" id="kpiWithdrawDelta"></dd>
           </div>
-          <div class="card kpi kpi-yield"><div class="label">所需報酬</div><div class="value phase-rates" id="kpiYield">—</div><div class="sub" id="kpiYieldSub">實質報酬。累積到退休時中位資產，退休後允許花完本金。</div><div class="delta" id="kpiYieldDelta"></div><div hidden id="kpiWorst"></div><div hidden id="kpiWorstSub"></div></div>
-        </section>
+          <div>
+            <dt>所需報酬</dt>
+            <dd class="phase-rates" id="kpiYield">—</dd>
+            <dd class="delta" id="kpiYieldDelta"></dd>
+          </div>
+        </dl>
       </div>
       <div class="tab-panel" id="tab-scenarios" hidden></div>
       <div class="tab-panel" id="tab-performance" hidden></div>

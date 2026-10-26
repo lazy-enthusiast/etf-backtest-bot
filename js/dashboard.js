@@ -118,7 +118,10 @@ export function renderDashboard() {
     meter.style.stroke = c[tone];
     meter.setAttribute('stroke-dashoffset', String(314.16 * (1 - sim.successRate)));
   }
-  setText('ringText', pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0));
+  const successText = pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0);
+  setText('ringText', successText);
+  const successEl = setText('kpiSuccess', successText);
+  if (successEl) successEl.className = tone;
   const successSub = $('kpiSuccessSub');
   if (successSub) {
     successSub.innerHTML = '';
@@ -262,14 +265,17 @@ export function renderFanChart(cur, c) {
 
 const TAB_RENDERERS = { scenarios: renderScenarios, performance: renderPerformance, assets: renderAssets };
 
+const TAB_NAMES = ['overview', 'scenarios', 'performance', 'assets'];
+
 export function renderActiveTab() {
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
-  ['overview', 'scenarios', 'performance', 'assets'].forEach(t => {
+  const active = TAB_NAMES.includes(state.tab) ? state.tab : 'overview';
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === active));
+  TAB_NAMES.forEach(t => {
     const panel = $('tab-' + t);
-    if (panel) panel.hidden = t !== state.tab;
+    if (panel) panel.hidden = t !== active;
   });
   if (!state.current) return;
-  TAB_RENDERERS[state.tab]?.();
+  TAB_RENDERERS[active]?.();
 }
 
 export function statBox(k, v, p, neg) {
