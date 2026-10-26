@@ -75,6 +75,7 @@ function bindUi() {
       renderActiveTab();
     });
   });
+  renderActiveTab();
 
   document.addEventListener('click', () => $('convMenu')?.querySelector('.menu')?.remove());
 

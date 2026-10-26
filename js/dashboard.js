@@ -260,14 +260,16 @@ export function renderFanChart(cur, c) {
   setText('fanNote', `以 ${h.start} ~ ${h.end} 每個起始月份各模擬一次（${intFmt.format(h.starts)} 次，${method}）。通膨：${infl}；費用 ${plan.feeRate}%/年。色帶為各年齡資產的 P10–P90 與 P25–P75。`);
 }
 
+const TAB_RENDERERS = { scenarios: renderScenarios, performance: renderPerformance, assets: renderAssets };
+
 export function renderActiveTab() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === state.tab));
-  ['scenarios', 'performance', 'assets'].forEach(t => {
+  ['overview', 'scenarios', 'performance', 'assets'].forEach(t => {
     const panel = $('tab-' + t);
     if (panel) panel.hidden = t !== state.tab;
   });
   if (!state.current) return;
-  ({ scenarios: renderScenarios, performance: renderPerformance, assets: renderAssets })[state.tab]();
+  TAB_RENDERERS[state.tab]?.();
 }
 
 export function statBox(k, v, p, neg) {
