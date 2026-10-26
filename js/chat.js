@@ -539,7 +539,7 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     } else if (sawHttp && fetchThrew) {
       msg = `回覆傳到一半中斷了：${raw}`;
     }
-    const errorMsg = { role: 'error', text: msg, pending: false, time: Date.now() };
+    const errorMsg = { role: 'error', text: '連線失敗：' + msg, pending: false, time: Date.now() };
     const idx = conv.messages.lastIndexOf(botMsg);
     if (idx >= 0) conv.messages[idx] = errorMsg;
     else conv.messages.push(errorMsg);
