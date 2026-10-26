@@ -97,12 +97,36 @@ export function renderDashboard() {
   }
   setDelta('kpiWithdrawDelta', initRate, prev?.initialWithdrawalRate, x => pct(x), false);
 
-  const worst = sim.worstRuns[0];
-  $('kpiWorst').textContent = worst ? worst.start : '—';
-  $('kpiWorstSub').textContent = worst
-    ? (worst.success ? `即使最差也撐到 ${plan.endAge} 歲，期末 ${compact(worst.endBalance)}` : `${worst.depletedAge.toFixed(1)} 歲資產耗盡`)
-    : '';
-  $('kpiWorst').style.color = worst && !worst.success ? 'var(--bad)' : '';
+  // 所需年化獲利 ≈ 淨目標年支出 ÷ 參考資產：達此％則「收益≈支出」（永續、不計本金侵蝕的簡化口徑）
+  const otherAtRetire = plan.otherIncomeAge <= plan.retireAge ? plan.otherIncome : 0;
+  const netSpend = Math.max(0, plan.annualSpending - otherAtRetire);
+  const nestEgg = atRetire?.p50;
+  const refAssets = (nestEgg != null && nestEgg > 0) ? nestEgg : (plan.currentSavings > 0 ? plan.currentSavings : null);
+  const requiredYield = refAssets > 0 ? netSpend / refAssets : null;
+  const portCagr = cur.result?.stats?.cagr;
+  $('kpiYield').textContent = Number.isFinite(requiredYield) ? pct(requiredYield) : '—';
+  $('kpiYield').style.color = '';
+  if (Number.isFinite(requiredYield) && Number.isFinite(portCagr)) {
+    if (requiredYield > portCagr) $('kpiYield').style.color = 'var(--bad)';
+    else if (requiredYield > portCagr * 0.85) $('kpiYield').style.color = 'var(--warn)';
+  }
+  const yieldBasis = (nestEgg != null && nestEgg > 0)
+    ? `目標年支出 ÷ 退休時中位資產 ${compact(nestEgg)}`
+    : (plan.currentSavings > 0 ? `目標年支出 ÷ 現有資產 ${compact(plan.currentSavings)}` : '—');
+  const cagrNote = Number.isFinite(portCagr) ? ` · 組合歷史 CAGR ${pct(portCagr)}` : '';
+  $('kpiYieldSub').textContent = Number.isFinite(requiredYield)
+    ? `${yieldBasis}${cagrNote} · 達此％可用收益支撐開銷（簡化、不計本金侵蝕）`
+    : '無法計算（缺資產或支出）';
+  const prevYield = (() => {
+    if (!prev || !state.previous) return null;
+    const pp = state.previous.plan;
+    const other = pp.otherIncomeAge <= pp.retireAge ? pp.otherIncome : 0;
+    const spend = Math.max(0, pp.annualSpending - other);
+    const egg = prev.balanceAtRetire?.p50;
+    const ref = (egg != null && egg > 0) ? egg : (pp.currentSavings > 0 ? pp.currentSavings : null);
+    return ref > 0 ? spend / ref : null;
+  })();
+  setDelta('kpiYieldDelta', requiredYield, prevYield, x => pct(x), false);
 
   renderFanChart(cur, c);
   renderActiveTab();
