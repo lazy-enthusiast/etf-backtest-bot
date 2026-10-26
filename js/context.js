@@ -11,6 +11,7 @@ function describeWithdrawal(p) {
 }
 
 export function describePlan(p) {
+  if (!p || typeof p !== 'object') return '（退休計劃尚未載入）';
   const income = p.otherIncome > 0 ? `其他收入每年 ${money(p.otherIncome, p.currency)}（${p.otherIncomeAge} 歲起）` : '無其他退休收入';
   const infl = p.inflationMode === 'cpi' ? `美國歷史 CPI（缺月以 ${p.inflationRate}% 替代）` : `固定 ${p.inflationRate}%/年`;
   return [
@@ -75,6 +76,9 @@ function currentStateObject() {
   const p = state.plan;
   const pf = state.portfolio;
   const cur = state.current;
+  if (!p || typeof p !== 'object' || !pf) {
+    return { plan_loaded: !!(p && typeof p === 'object'), portfolio_loaded: !!pf };
+  }
   return {
     age: p.currentAge,
     retirement_age: p.retireAge,
@@ -93,13 +97,13 @@ function currentStateObject() {
     guardrail_floor_abs_pct: p.guardrailFloor,
     guardrail_adjust_pct: p.guardrailAdjustPct,
     current_portfolio: {
-      name: pf.name,
-      holdings: pf.holdings,
-      rebalance: pf.rebalance,
+      name: pf.name || '',
+      holdings: pf.holdings || {},
+      rebalance: pf.rebalance || 'annual',
       start: pf.start || null,
       end: pf.end || null
     },
-    last_backtest: cur ? {
+    last_backtest: cur && cur.result && cur.sim ? {
       period_start: cur.result.period.start,
       period_end: cur.result.period.end,
       years: Number(cur.result.period.years.toFixed(1)),
@@ -163,6 +167,7 @@ export function buildApplyReceipt({ portfolio, plan, cur } = {}) {
 }
 
 export async function buildBacktestContext() {
+  try {
   const parts = [];
   parts.push(
     '【已確認事實｜本系統】\n' +
@@ -181,31 +186,50 @@ export async function buildBacktestContext() {
     }).join('、');
     parts.push('【可回測代號】Yahoo 可解析代號皆可即時抓取；下列為對照表＋本地長歷史建議（括號＝含替代序列最早年）：' + listed);
 
-    const hist = holdingsHistoryLines(meta, state.portfolio.holdings);
+    const hist = holdingsHistoryLines(meta, state.portfolio?.holdings);
     if (hist.length) parts.push('【持倉歷史起點】\n' + hist.join('\n'));
   } catch (e) {
     parts.push('【可回測代號】載入失敗');
   }
 
-  parts.push('【目前狀態】\n' + JSON.stringify(currentStateObject()));
-  parts.push('【退休計劃（說明）】\n' + describePlan(state.plan));
+  try {
+    parts.push('【目前狀態】\n' + JSON.stringify(currentStateObject()));
+    parts.push('【退休計劃（說明）】\n' + describePlan(state.plan));
+  } catch (e) {
+    parts.push('（計劃狀態暫時無法整理：' + (e.message || e) + '）');
+  }
 
   if (state.lastApplyReceipt) {
-    parts.push('【最近一次套用回執】\n' + JSON.stringify(state.lastApplyReceipt));
+    try {
+      parts.push('【最近一次套用回執】\n' + JSON.stringify(state.lastApplyReceipt));
+    } catch (e) {
+      parts.push('（套用回執無法整理）');
+    }
   }
 
   const cur = state.current;
   if (cur) {
-    parts.push('【退休模擬結果】\n' + describeSim(cur));
-    parts.push('【組合回測】\n' + describeBacktest(cur.portfolio.name, cur.result, false));
+    try {
+      parts.push('【退休模擬結果】\n' + describeSim(cur));
+      parts.push('【組合回測】\n' + describeBacktest(cur.portfolio?.name || '組合', cur.result, false));
+    } catch (e) {
+      parts.push('（本輪模擬結果無法整理：' + (e.message || e) + '）');
+    }
   } else {
     parts.push('（尚未完成計算）');
   }
   const prev = state.previous;
-  if (prev) {
-    parts.push(`【上一版，供比較】\n退休年齡 ${prev.plan.retireAge}、年支出 ${money(prev.plan.annualSpending)}、每月投入 ${money(prev.plan.monthlyContribution)}；成功率 ${pct(prev.sim.successRate, 1)}；95% 可持續年支出 ${money(prev.sim.sustainableSpending.p95)}\n` + describeBacktest(prev.portfolio.name, prev.result, true));
+  if (prev?.plan && prev?.sim && prev?.result && prev?.portfolio) {
+    try {
+      parts.push(`【上一版，供比較】\n退休年齡 ${prev.plan.retireAge}、年支出 ${money(prev.plan.annualSpending)}、每月投入 ${money(prev.plan.monthlyContribution)}；成功率 ${pct(prev.sim.successRate, 1)}；95% 可持續年支出 ${money(prev.sim.sustainableSpending.p95)}\n` + describeBacktest(prev.portfolio.name, prev.result, true));
+    } catch (e) {
+      parts.push('（上一版無法整理）');
+    }
   }
   let text = parts.join('\n\n');
   if (text.length > 11800) text = text.slice(0, 11800) + '\n…（已截斷）';
   return text;
+  } catch (e) {
+    return '（回測脈絡暫時無法整理：' + (e && e.message ? e.message : String(e)) + '。請仍依使用者的問題回答。）';
+  }
 }

@@ -153,28 +153,40 @@ export function formatTime(ts) {
 }
 
 export function renderMarkdown(container, text) {
-  container.innerHTML = DOMPurify.sanitize(marked.parse(text));
-  container.querySelectorAll('pre code.language-portfolio').forEach(code => {
-    const pf = parsePortfolioBlock(code.textContent);
-    if (pf) code.parentElement.replaceWith(buildPortfolioCard(pf));
-  });
-  container.querySelectorAll('pre code.language-plan').forEach(code => {
-    const plan = parsePlanBlock(code.textContent);
-    if (plan) code.parentElement.replaceWith(buildPlanCard(plan));
-  });
-  container.querySelectorAll('pre code').forEach(code => {
-    const lang = (code.className.match(/language-(\w+)/) || [])[1] || 'code';
-    if (!['portfolio', 'plan'].includes(lang) && hljs.getLanguage(lang)) hljs.highlightElement(code);
-    const pre = code.parentElement;
-    const box = el('div', 'code-box');
-    const head = el('div', 'code-head');
-    head.appendChild(el('span', '', lang));
-    const copy = el('button', '', '複製');
-    copy.onclick = () => navigator.clipboard.writeText(code.innerText).then(() => { copy.textContent = '✓ 已複製'; setTimeout(() => { copy.textContent = '複製'; }, 1200); });
-    head.appendChild(copy);
-    pre.replaceWith(box);
-    box.append(head, pre);
-  });
+  const source = String(text ?? '');
+  try {
+    container.innerHTML = DOMPurify.sanitize(marked.parse(source));
+    container.querySelectorAll('pre code.language-portfolio').forEach(code => {
+      try {
+        const pf = parsePortfolioBlock(code.textContent);
+        if (pf && code.parentElement) code.parentElement.replaceWith(buildPortfolioCard(pf));
+      } catch (e) {}
+    });
+    container.querySelectorAll('pre code.language-plan').forEach(code => {
+      try {
+        const plan = parsePlanBlock(code.textContent);
+        if (plan && code.parentElement) code.parentElement.replaceWith(buildPlanCard(plan));
+      } catch (e) {}
+    });
+    container.querySelectorAll('pre code').forEach(code => {
+      try {
+        const lang = (code.className.match(/language-(\w+)/) || [])[1] || 'code';
+        if (!['portfolio', 'plan'].includes(lang) && hljs.getLanguage(lang)) hljs.highlightElement(code);
+        const pre = code.parentElement;
+        if (!pre) return;
+        const box = el('div', 'code-box');
+        const head = el('div', 'code-head');
+        head.appendChild(el('span', '', lang));
+        const copy = el('button', '', '複製');
+        copy.onclick = () => navigator.clipboard.writeText(code.innerText).then(() => { copy.textContent = '✓ 已複製'; setTimeout(() => { copy.textContent = '複製'; }, 1200); });
+        head.appendChild(copy);
+        pre.replaceWith(box);
+        box.append(head, pre);
+      } catch (e) {}
+    });
+  } catch (e) {
+    container.textContent = source;
+  }
 }
 
 export function welcomeEl() {
@@ -192,11 +204,14 @@ export function welcomeEl() {
 export function buildMessageEl(m, conv) {
   const wrap = el('div', 'msg ' + m.role);
   const bubble = el('div', 'bubble');
-  if (m.role === 'bot') renderMarkdown(bubble, m.text || '');
-  else bubble.textContent = m.text;
   if (m.pending) {
-    const wait = el('div', 'wait-status', '正在連線…');
-    bubble.appendChild(wait);
+    bubble.appendChild(document.createTextNode(m.text || '思考中…'));
+    bubble.appendChild(el('div', 'wait-status', '正在連線…'));
+  } else if (m.role === 'bot') {
+    try { renderMarkdown(bubble, m.text || ''); }
+    catch (e) { bubble.textContent = m.text || ''; }
+  } else {
+    bubble.textContent = m.text ?? '';
   }
   wrap.appendChild(bubble);
   if (m.attachmentName) wrap.appendChild(el('div', 'attach-tag', '📎 ' + m.attachmentName));
@@ -228,14 +243,28 @@ export function buildMessageEl(m, conv) {
 
 export function renderMessages() {
   const box = $('messages');
-  box.innerHTML = '';
+  if (!box) return;
   const conv = getActiveConv();
   if (!conv) return;
-  $('convSelect').value = conv.id;
-  if ($('modelSelect').querySelector(`option[value="${conv.model}"]`)) $('modelSelect').value = conv.model;
-  updateAdvSettingsSummary();
-  if (!conv.messages.length) box.appendChild(welcomeEl());
-  conv.messages.forEach(m => box.appendChild(buildMessageEl(m, conv)));
+  try {
+    if ($('convSelect')) $('convSelect').value = conv.id;
+    if ($('modelSelect')?.querySelector(`option[value="${conv.model}"]`)) $('modelSelect').value = conv.model;
+    updateAdvSettingsSummary();
+  } catch (e) {}
+  const frag = document.createDocumentFragment();
+  if (!conv.messages.length) frag.appendChild(welcomeEl());
+  conv.messages.forEach(m => {
+    try {
+      frag.appendChild(buildMessageEl(m, conv));
+    } catch (e) {
+      const wrap = el('div', 'msg ' + (m.role || 'bot'));
+      const fallback = el('div', 'bubble', m.pending ? '思考中…' : (m.text || '（這則訊息無法顯示）'));
+      if (m.pending) fallback.appendChild(el('div', 'wait-status', '正在連線…'));
+      wrap.appendChild(fallback);
+      frag.appendChild(wrap);
+    }
+  });
+  box.replaceChildren(frag);
   box.scrollTop = box.scrollHeight;
 }
 
@@ -300,7 +329,8 @@ export async function resendLastQuery(conv) {
 
 export function lastBotText(conv) {
   for (let i = conv.messages.length - 1; i >= 0; i--) {
-    if (conv.messages[i].role === 'bot' && conv.messages[i].text) return conv.messages[i].text;
+    const m = conv.messages[i];
+    if (m.role === 'bot' && m.text && !m.pending && m.text !== '思考中…') return m.text;
   }
   return '';
 }
@@ -327,23 +357,75 @@ export async function sendMessage(overrideText) {
   await doSend(conv, text, attachment, lastAi, isFirst);
 }
 
+function explainError(value, fallback) {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (value && typeof value === 'object') {
+    if (typeof value.message === 'string' && value.message.trim()) return value.message.trim();
+    try { return JSON.stringify(value); } catch (e) { /* ignore */ }
+  }
+  return fallback;
+}
+
+function paintFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+async function waitUntilVisible(node) {
+  const start = performance.now();
+  while (node && performance.now() - start < 500) {
+    const rect = node.getBoundingClientRect();
+    const onScreen = rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight && rect.right > 0 && rect.left < window.innerWidth;
+    if (onScreen) return;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  }
+}
+
+const MIN_THINKING_MS = 450;
+
+function holdThinking(since) {
+  const wait = MIN_THINKING_MS - (performance.now() - since);
+  return wait > 0 ? new Promise(resolve => setTimeout(resolve, wait)) : Promise.resolve();
+}
+
 export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
   const botMsg = { role: 'bot', text: '思考中…', pending: true, time: Date.now() };
   conv.messages.push(botMsg);
-  renderMessages();
-  const box = $('messages');
-  const bubble = box.lastElementChild?.querySelector('.bubble');
-  const waitEl = bubble?.querySelector('.wait-status');
-  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-  const query = attachment?.kind === 'text' ? `${text}\n\n【附加檔案：${attachment.filename}】\n${attachment.extractedText}` : text;
+  toggleAdvisor(true);
   state.isSending = true;
-  $('sendBtn').disabled = true;
+  const sendBtn = $('sendBtn');
+  if (sendBtn) sendBtn.disabled = true;
+  let bubble = null;
+  let waitEl = null;
+  let thinkingShownAt = performance.now();
   let sawHttp = false;
+  let authFailed = false;
   try {
-    const backtestContext = await buildBacktestContext();
-    const backtestHash = await hashText(backtestContext);
-    const backtestUnchanged = !!(conv.lastBacktestHash && conv.lastBacktestHash === backtestHash);
+    try { renderMessages(); }
+    catch (e) {
+      const box = $('messages');
+      if (box) box.appendChild(buildMessageEl(botMsg, conv));
+    }
+    const box = $('messages');
+    bubble = box?.lastElementChild?.querySelector('.bubble') || null;
+    waitEl = bubble?.querySelector('.wait-status') || null;
+    if (bubble) {
+      try { bubble.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+      void bubble.offsetHeight;
+    }
+    await paintFrame();
+    await waitUntilVisible(bubble || box);
+    thinkingShownAt = performance.now();
+
+    const query = attachment?.kind === 'text' ? `${text}\n\n【附加檔案：${attachment.filename}】\n${attachment.extractedText}` : text;
+    let backtestContext = '';
+    try {
+      backtestContext = await buildBacktestContext();
+    } catch (e) {
+      backtestContext = '（回測脈絡暫時無法整理：' + explainError(e && e.message, String(e)) + '。請仍依使用者的問題回答。）';
+    }
+    let backtestHash = '';
+    try { backtestHash = await hashText(backtestContext); } catch (e) { backtestHash = ''; }
+    const backtestUnchanged = !!(backtestHash && conv.lastBacktestHash && conv.lastBacktestHash === backtestHash);
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
@@ -360,14 +442,24 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     });
     sawHttp = true;
     if (res.status === 401) {
-      handleUnauthorized();
-      throw new Error('密碼錯誤或已失效');
+      authFailed = true;
+      throw new Error('密碼錯誤或已失效（HTTP 401）');
     }
     if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try { msg = (await res.json()).error || msg; } catch (e) {}
-      throw new Error(msg);
+      let detail = `HTTP ${res.status}`;
+      const raw = await res.text().catch(() => '');
+      if (raw) {
+        try {
+          const body = JSON.parse(raw);
+          detail = explainError(body.error ?? body.message ?? body, detail);
+        } catch (e) {
+          detail = raw.slice(0, 300);
+        }
+        if (!detail.includes(String(res.status))) detail = `${detail}（HTTP ${res.status}）`;
+      }
+      throw new Error(detail);
     }
+    if (!res.body) throw new Error(`Worker 沒有回傳串流內容（HTTP ${res.status}）`);
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
@@ -379,7 +471,10 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
       if (pending) return;
       pending = true;
       requestAnimationFrame(() => {
-        if (bubble) renderMarkdown(bubble, acc);
+        if (bubble) {
+          try { renderMarkdown(bubble, acc); }
+          catch (e) { bubble.textContent = acc; }
+        }
         if (box) box.scrollTop = box.scrollHeight;
         pending = false;
       });
@@ -396,9 +491,12 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
         if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
         let json;
         try { json = JSON.parse(t.slice(6)); } catch (e) { continue; }
-        if (json.error && !json.choices) throw new Error(json.error);
+        if (json.error && !json.choices) throw new Error(explainError(json.error, 'Worker 回傳錯誤'));
         if (json.type === 'status' && json.text && !acc) {
-          if (waitEl) waitEl.textContent = json.text;
+          if (!waitEl && bubble) {
+            waitEl = el('div', 'wait-status', json.text);
+            bubble.appendChild(waitEl);
+          } else if (waitEl) waitEl.textContent = json.text;
           continue;
         }
         if (json.type === 'meta') {
@@ -426,24 +524,31 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     conv.lastBacktestHash = backtestHash;
     saveConversations();
     renderMessages();
-    await maybeAutoApplyControls(botMsg);
+    try { await maybeAutoApplyControls(botMsg); } catch (e) { console.error(e); }
     if (isFirst) fetchAutoTitle(conv, text, acc);
   } catch (err) {
-    let msg = err.message || String(err);
-    const fetchThrew = /Failed to fetch|NetworkError|Load failed|network error/i.test(msg);
+    await holdThinking(thinkingShownAt);
+    const raw = explainError(err && err.message, String(err || '未知錯誤'));
+    const fetchThrew = /Failed to fetch|NetworkError|Load failed|network error/i.test(raw);
+    let msg = raw;
     if (!sawHttp && fetchThrew) {
       const local = ['localhost', '127.0.0.1'].includes(location.hostname);
       msg = local
         ? '無法連上本機 Worker（127.0.0.1:8787）。請先在專案根目錄執行 npm run dev，或改用 GitHub Pages 線上版。'
-        : '無法連上 AI Worker（網路中斷、CORS 被擋或 Worker 無回應）。請硬重新整理後重試。';
+        : `無法連上 AI Worker：${raw}`;
     } else if (sawHttp && fetchThrew) {
-      msg = '回覆傳到一半中斷了。請再送一次。';
+      msg = `回覆傳到一半中斷了：${raw}`;
     }
-    conv.messages[conv.messages.length - 1] = { role: 'error', text: '連線失敗：' + msg, pending: false, time: Date.now() };
-    saveConversations();
-    renderMessages();
+    const errorMsg = { role: 'error', text: msg, pending: false, time: Date.now() };
+    const idx = conv.messages.lastIndexOf(botMsg);
+    if (idx >= 0) conv.messages[idx] = errorMsg;
+    else conv.messages.push(errorMsg);
+    if (bubble && bubble.isConnected) bubble.textContent = errorMsg.text;
+    try { saveConversations(); } catch (e) {}
+    try { renderMessages(); } catch (e) {}
+    if (authFailed) handleUnauthorized();
   } finally {
     state.isSending = false;
-    $('sendBtn').disabled = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
