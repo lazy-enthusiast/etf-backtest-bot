@@ -188,6 +188,10 @@
   .kpi-rates .rate-pill .k { font-size: 11px; color: var(--muted); }
   .kpi-rates .rate-pill .v { font-size: 15px; font-weight: 700; margin-top: 2px; }
   .path-highlights { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; white-space: pre-line; }
+  button.linkish { border: none; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+  #exportPaths { margin-top: 8px; }
+  #pathViewer { margin-top: 8px; }
+  #pathViewer .tbl-wrap { max-height: 320px; overflow: auto; }
   .advanced-plan { margin-top: 8px; font-size: 13px; color: var(--muted); }
   .advanced-plan summary { cursor: pointer; }
   .advanced-plan input[type="text"], .advanced-plan input:not([type="checkbox"]), .advanced-plan textarea { width: 100%; margin-top: 6px; box-sizing: border-box; }

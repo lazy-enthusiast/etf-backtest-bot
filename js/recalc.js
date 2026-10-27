@@ -41,7 +41,10 @@ export async function recalc({ markPrevious = true, label } = {}) {
     const sim = meta.retirement.simulateRetirement(plan, returns, glide, dividend, baselineReturns, fx, dragInfo);
     if (seq !== recalcSeq) return null;
     if (markPrevious && state.current) state.previous = state.current;
-    state.current = { label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths };
+    state.current = {
+      label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths,
+      series: returns, glide, dividend, fx, taxDrag: dragInfo
+    };
     renderDashboard();
     setStatus(`已更新 · 歷史 ${sim.history.start} ~ ${sim.history.end} · ${intFmt.format(sim.history.starts)} 個起始月份`);
     return state.current;

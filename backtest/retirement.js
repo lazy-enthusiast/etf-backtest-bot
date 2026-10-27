@@ -472,7 +472,7 @@ function resolveTaxDrag(taxDrag) {
   return { annual, active: Boolean(taxDrag.active) || annual > 0 };
 }
 
-function walkLife(p, returns, strategy, { keepRows = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -526,6 +526,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
     yearly[0][s] = balance;
 
     for (let k = 0; k < totalMonths; k++) {
+      let guardrailHit = 0;
       if (bootstrapOn && blockPos >= p.bootstrapBlock) {
         blockStart = Math.floor(rng() * L);
         blockPos = 0;
@@ -575,6 +576,7 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
         if (strategy === 'guardrails' && (k - retireMonth) % p.guardrailEvery === 0) {
           const cut = beforeSpend - spendState.annualSpend;
           if (cut > 1e-6) {
+            guardrailHit = 1;
             streak += 1;
             if (streak > longest) longest = streak;
             if (cut > largest) largest = cut;
@@ -626,7 +628,8 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
             turnover_cost: balanceAfterFlows * (1 - (1 - feeParts.turnover / 100) ** (1 / 12)),
             fx_spread: balanceAfterFlows * (1 - (1 - feeParts.fxSpread / 100) ** (1 / 12))
           } : {}),
-          ...(fxRateUsed == null ? {} : { fx_rate_used: fxRateUsed })
+          ...(fxRateUsed == null ? {} : { fx_rate_used: fxRateUsed }),
+          ...(markGuardrail ? { guardrail_hit: guardrailHit } : {})
         });
       }
     }
@@ -653,6 +656,74 @@ function walkLife(p, returns, strategy, { keepRows = false, glide = null, divide
     equityWeightRange: glideOn ? { min: eqMin, max: eqMax } : null,
     yearFunded
   };
+}
+
+function lowestWithdrawal(years) {
+  if (!years?.length) return null;
+  let min = years[0];
+  for (let i = 1; i < years.length; i++) if (years[i] < min) min = years[i];
+  return min;
+}
+
+export function formatPathCsv(summaries) {
+  const lines = ['起始年月,結束年齡,成功,耗盡年齡,期末資產,最低年提領'];
+  for (const row of summaries || []) {
+    lines.push([
+      row.start,
+      row.endAge,
+      row.success ? '1' : '0',
+      row.ruinAge == null ? '' : row.ruinAge,
+      row.ending,
+      row.lowestWithdrawal
+    ].join(','));
+  }
+  return lines.join('\n');
+}
+
+/** 單一歷史起點的年齡表。只在呼叫時組出來，不寫入儲存。 */
+export function buildPathYears(plan, returns, startMonth, glide = null, dividend = null, fx = null, taxDrag = null) {
+  const p = normalizePlan(plan);
+  const walked = walkLife(p, returns, p.withdrawalStrategy, {
+    keepRows: true,
+    markGuardrail: true,
+    glide: p.glidePath ? glide : null,
+    dividend: p.dividendTax ? dividend : null,
+    feeParts: feeSplitParts(p),
+    fx: p.fxMode && fx && !fx.skipped ? fx : null,
+    taxDrag
+  });
+  const rows = walked.rows.filter(row => row.start_month === startMonth);
+  if (!rows.length) return null;
+  const years = [];
+  let open = null;
+  let prevEnd = p.currentSavings;
+  for (const row of rows) {
+    const age = p.currentAge + Math.floor(row.k / 12);
+    if (!open || open.age !== age) {
+      open = {
+        age,
+        startBalance: row.k === 0 ? p.currentSavings : prevEnd,
+        withdrawal: 0,
+        guardrail: false,
+        growth: 1,
+        endBalance: 0
+      };
+      years.push(open);
+    }
+    open.withdrawal += row.withdrawal;
+    if (row.guardrail_hit) open.guardrail = true;
+    open.growth *= 1 + row.real_return;
+    open.endBalance = row.balance_end;
+    prevEnd = row.balance_end;
+  }
+  return years.map(year => ({
+    age: year.age,
+    startBalance: year.startBalance,
+    withdrawal: year.withdrawal,
+    guardrail: year.guardrail,
+    yearReturn: year.growth - 1,
+    endBalance: year.endBalance
+  }));
 }
 
 function medianFunded(walked) {
@@ -836,6 +907,14 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       worstStart: returns[worstSwrStart].month
     },
     worstRuns: sortedRuns.slice(0, 5),
+    pathSummaries: runs.map((run, s) => ({
+      start: run.start,
+      endAge: p.endAge,
+      success: run.success,
+      ruinAge: run.depletedAge,
+      ending: run.endBalance,
+      lowestWithdrawal: lowestWithdrawal(primary.yearSpends[s])
+    })),
     bands,
     cumWithdrawal: summarize(primary.totals),
     spendingBrief,
