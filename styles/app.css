@@ -127,13 +127,32 @@
   .timeline-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
   /* ===== Portfolio editor ===== */
-  .holding { display: grid; grid-template-columns: minmax(0, 1fr) 76px 26px; gap: 6px; align-items: center; margin-bottom: 8px; }
-  .holding .bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-top: -4px; }
+  .fold > summary { cursor: pointer; display: block; list-style: none; line-height: 1.45; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold-title { font-size: 15px; font-weight: 700; }
+  .fold > summary .fold-title::before { content: '▸ '; color: var(--muted); font-weight: 400; }
+  .fold[open] > summary .fold-title::before { content: '▾ '; }
+  .fold-brief { font-size: 14px; font-weight: 400; color: var(--text); }
+  .fold[open] > summary .fold-brief { display: none; }
+  .fold:not([open]) > summary .hint { display: none; }
+  .fold-body { margin-top: 10px; }
+  .holding { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; min-width: 0; }
+  .holding-line { display: grid; grid-template-columns: minmax(6.5em, 1fr) 2.8em 4.8em 4.6em 1.6em; gap: 4px; align-items: center; width: 100%; min-width: 0; }
+  .holding-line:has(.tax-other:not([hidden])) { grid-template-columns: minmax(5.2em, 1fr) 2.5em 4.6em 4.2em 3.6em 1.6em; }
+  .holding .bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
   .holding .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-  .holding input { width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 9px; outline: none; }
-  .holding input:focus { border-color: var(--accent); }
-  .holding .sym { text-transform: uppercase; font-weight: 600; }
-  .holding .w { text-align: right; }
+  .holding input,
+  .holding select { box-sizing: border-box; width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 4px; outline: none; min-width: 0; }
+  .holding input:focus,
+  .holding select:focus { border-color: var(--accent); }
+  .holding .sym { width: 100%; text-transform: uppercase; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .holding .w { width: 100%; text-align: right; }
+  .holding .tax-dom,
+  .holding .tax-yield,
+  .holding .tax-other { width: 100%; min-width: 0; padding: 0 4px; }
+  .holding .tax-yield,
+  .holding .tax-other { text-align: right; }
+  .holding .x-btn { width: 100%; padding: 0; }
   .x-btn { border: none; background: none; color: var(--faint); font-size: 15px; border-radius: 6px; height: 26px; }
   .x-btn:hover { color: var(--bad); background: var(--bad-soft); }
   .row { display: flex; align-items: center; gap: 8px; }
@@ -182,6 +201,10 @@
   .kpi-rates .rate-pill .k { font-size: 11px; color: var(--muted); }
   .kpi-rates .rate-pill .v { font-size: 15px; font-weight: 700; margin-top: 2px; }
   .path-highlights { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; white-space: pre-line; }
+  button.linkish { border: none; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+  #exportPaths { margin-top: 8px; }
+  #pathViewer { margin-top: 8px; }
+  #pathViewer .tbl-wrap { max-height: 320px; overflow: auto; }
   .advanced-plan { margin-top: 8px; font-size: 13px; color: var(--muted); }
   .advanced-plan summary { cursor: pointer; }
   .advanced-plan input[type="text"], .advanced-plan input:not([type="checkbox"]), .advanced-plan textarea { width: 100%; margin-top: 6px; box-sizing: border-box; }

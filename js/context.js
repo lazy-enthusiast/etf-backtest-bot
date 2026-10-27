@@ -28,7 +28,21 @@ function describeGlide(sim) {
   const g = sim?.glide;
   if (!g) return null;
   if (g.skipped || !Number.isFinite(g.min)) return '下滑路徑未套用：需要同時標示股票代號與其他持倉，且價格月序對得上。';
-  return `實際股權重 ${pct(g.min, 0)}–${pct(g.max, 0)}（同一條歷史索引，只改該月目標權重；這條成功率不宜與固定權重或其他權重路徑橫比）`;
+  const range = `實際股權重 ${pct(g.min, 0)}–${pct(g.max, 0)}（同一條歷史索引，只改該月目標權重）`;
+  const cmp = sim.glideCompare;
+  if (!cmp) return range;
+  const side = (name, row) => `${name}成功率 ${pct(row.successRate, 0)}、期末中位 ${money(row.endBalanceP50)}、最差最低年支出 ${money(row.worstMinSpend)}`;
+  return `${range}。${cmp.label}。${side('固定權重', cmp.flat)}；${side('下滑', cmp.glide)}`;
+}
+
+function describeTaxDrag(cur) {
+  const drag = cur?.sim?.taxDrag;
+  if (!drag) return null;
+  const pre = cur.result?.stats?.cagr;
+  const tail = Number.isFinite(pre)
+    ? `，稅後 CAGR ${pct(pre - drag.annual, 2)}（稅前 ${pct(pre, 2)}）`
+    : '';
+  return `估計：年化稅負拖累 ${(drag.annual * 100).toFixed(2)}%${tail}`;
 }
 
 function describeDividend(sim, plan) {
@@ -106,6 +120,7 @@ export function describeSim(cur) {
     '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
     describeSpendingBrief(sim, plan),
     describeGlide(sim),
+    describeTaxDrag(cur),
     describeDividend(sim, plan),
     describeFeeSplit(sim, plan),
     describeFx(sim, plan),

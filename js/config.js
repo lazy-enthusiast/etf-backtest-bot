@@ -44,6 +44,8 @@ export const PLAN_LABELS = {
   glidePath: '下滑路徑',
   equityTickers: '股票代號',
   glideEquityEnd: '期末股權重',
+  glideStockStart: '起始股權重',
+  glideBondFloor: '債券下限',
   dividendTax: '股息稅',
   dividendYields: '假設殖利率',
   dividendTaxRates: '註冊地稅率',
@@ -59,5 +61,10 @@ export const PLAN_LABELS = {
   bootstrapBlock: '拔靴區塊月數',
   withdrawEvery: '提領間隔',
   guardrailEvery: '護欄檢查間隔',
+  cashBucketYears: '現金桶年數',
+  spendingCurve: '支出曲線',
+  lumpSums: '一次性支出',
+  otherIncomeSegments: '分段其他收入',
+  compareBootstrap: '歷史與拔靴並列',
   fxSeries: '台幣匯率序列'
 };

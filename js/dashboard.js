@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv, effectiveSampleNote, fxStressAmounts } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -134,6 +134,15 @@ export function renderDashboard() {
     successSub.append(pill, document.createTextNode(successNote));
   }
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
+  const sample = $('sampleWarning');
+  if (sample) {
+    sample.textContent = effectiveSampleNote(sim.history, {
+      pathMode: plan.pathMode,
+      bootstrapBlock: plan.bootstrapBlock,
+      successRate: sim.successRate
+    });
+    sample.hidden = false;
+  }
 
   const atRetire = sim.balanceAtRetire;
   setText('kpiRetire', atRetire ? compact(atRetire.p50) : '—');
@@ -195,13 +204,20 @@ export function renderDashboard() {
   renderFanChart(cur, c);
   renderPathHighlights(cur);
   renderGlideHighlight(cur);
+  renderTaxHighlight(cur);
   renderDividendHighlight(cur);
+  renderCurveHighlight(cur);
+  renderCashHighlight(cur);
   renderFeeHighlight(cur);
+  renderFxStress(cur);
   renderFxHighlight(cur);
   renderInflationLabel(cur);
+  renderDualEngine(cur);
   renderBootstrapHighlight(cur);
   renderFrequencyHighlight(cur);
+  renderPathActions(cur);
   renderActiveTab();
+  if (state.selectedPath) openPath(state.selectedPath);
 }
 
 function renderFrequencyHighlight(cur) {
@@ -214,6 +230,16 @@ function renderFrequencyHighlight(cur) {
     return;
   }
   node.textContent = `提領每 ${plan.withdrawEvery} 個月，護欄每 ${plan.guardrailEvery} 個月檢查`;
+  node.hidden = false;
+}
+
+function renderDualEngine(cur) {
+  const node = $('dualEngine');
+  const cmp = cur?.sim?.bootstrapCompare;
+  if (!node) return;
+  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
+  const tag = cmp.robust ? '，穩健' : '';
+  node.textContent = `估計：歷史成功率 ${pct(cmp.historical, 1)}，拔靴成功率 ${pct(cmp.bootstrap, 1)}${tag}`;
   node.hidden = false;
 }
 
@@ -233,6 +259,19 @@ function renderInflationLabel(cur) {
   node.hidden = false;
 }
 
+function renderFxStress(cur) {
+  const node = $('fxStress');
+  if (!node) return;
+  const stress = fxStressAmounts(cur?.sim?.sustainableSpending?.p95);
+  if (!stress) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = [
+    `估計：港幣與美元掛鉤，這是壓力測試，不是預測。`,
+    `若美元兌港幣下跌 10%，實質可花 ${compact(stress.down10)}。`,
+    `若美元兌港幣下跌 20%，實質可花 ${compact(stress.down20)}。`
+  ].join('\n');
+  node.hidden = false;
+}
+
 function renderFxHighlight(cur) {
   const node = $('fxHighlight');
   if (!node) return;
@@ -246,6 +285,25 @@ function renderFxHighlight(cur) {
   node.hidden = false;
 }
 
+function renderCurveHighlight(cur) {
+  const node = $('curveHighlight');
+  const cmp = cur?.sim?.curveCompare;
+  if (!node) return;
+  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
+  const side = (name, row) => `${name} 成功率 ${pct(row.successRate, 0)}、期末中位 ${compact(row.endBalanceP50)}、最差最低年支出 ${compact(row.worstMinSpend)}`;
+  node.textContent = `${cmp.label}：${cmp.note}。${side('固定', cmp.flat)}；${side('此曲線', cmp.shaped)}`;
+  node.hidden = false;
+}
+
+function renderCashHighlight(cur) {
+  const node = $('cashHighlight');
+  const cmp = cur?.sim?.cashCompare;
+  if (!node) return;
+  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = `${cmp.label}：現金桶規則。最差路徑最低年提領 之前 ${compact(cmp.before)}、之後 ${compact(cmp.after)}`;
+  node.hidden = false;
+}
+
 function renderFeeHighlight(cur) {
   const node = $('feeHighlight');
   if (!node) return;
@@ -254,6 +312,18 @@ function renderFeeHighlight(cur) {
   node.textContent = cmp
     ? `費用拆分：中位實際提出 ${compact(cmp.withSplit)}，未拆分 ${compact(cmp.withoutSplit)}`
     : '費用拆分已取代單一費用率。';
+  node.hidden = false;
+}
+
+function renderTaxHighlight(cur) {
+  const node = $('taxDragHighlight');
+  if (!node) return;
+  const drag = cur?.sim?.taxDrag;
+  if (!drag) { node.hidden = true; node.textContent = ''; return; }
+  const pre = cur.result?.stats?.cagr;
+  let text = `估計：年化稅負拖累 ${(drag.annual * 100).toFixed(2)}%`;
+  if (Number.isFinite(pre)) text += `，稅後 CAGR ${pct(pre - drag.annual, 2)}（稅前 ${pct(pre, 2)}）`;
+  node.textContent = text;
   node.hidden = false;
 }
 
@@ -270,23 +340,99 @@ function renderDividendHighlight(cur) {
 
 function renderGlideHighlight(cur) {
   const node = $('glideHighlight');
-  const glide = cur?.sim?.glide;
   if (!node) return;
-  if (!glide) { node.hidden = true; node.textContent = ''; return; }
-  node.textContent = glide.skipped || !Number.isFinite(glide.min)
-    ? '下滑路徑未套用：請同時標示股票代號與其他持倉。'
-    : `實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`;
+  const parts = [];
+  const glide = cur?.sim?.glide;
+  if (glide && !glide.skipped && Number.isFinite(glide.min)) {
+    parts.push(`實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`);
+  } else if (cur?.plan?.glidePath && glide?.skipped) {
+    parts.push('下滑路徑未套用：請同時標示股票代號與其他持倉。');
+  }
+  const cmp = cur?.sim?.glideCompare;
+  if (cmp) {
+    const side = (name, row) => `${name} 成功率 ${pct(row.successRate, 0)}、期末中位 ${compact(row.endBalanceP50)}、最差路徑最低年支出 ${compact(row.worstMinSpend)}`;
+    parts.push(`${cmp.label}。${side('固定權重', cmp.flat)}；${side('下滑', cmp.glide)}`);
+  }
+  if (!parts.length) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = parts.join('\n');
   node.hidden = false;
+}
+
+function renderPathActions(cur) {
+  const exp = $('exportPaths');
+  if (!exp) return;
+  exp.hidden = !cur?.sim?.pathSummaries?.length;
+  exp.onclick = exportPaths;
+}
+
+function exportPaths() {
+  const csv = formatPathCsv(state.current?.sim?.pathSummaries);
+  if (!csv) return;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'retirement-paths.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+export function openPath(start) {
+  const cur = state.current;
+  const box = $('pathViewer');
+  if (!box || !cur?.series || !start) return;
+  state.selectedPath = start;
+  const years = buildPathYears(cur.plan, cur.series, start, cur.glide, cur.dividend, cur.fx, cur.taxDrag);
+  box.innerHTML = '';
+  if (!years) { box.hidden = true; return; }
+  box.hidden = false;
+  box.appendChild(el('div', 'section-h', `${start} 起的路徑`));
+  const brief = cur.sim?.spendingBrief;
+  const tight = brief?.worstStart === start ? brief.tightest : null;
+  if (tight) {
+    const i = years.findIndex(y => y.age === tight.age);
+    const around = [years[i - 1], years[i], years[i + 1]].filter(Boolean);
+    const near = around.map(y => `${y.age}歲 ${pct(y.yearReturn, 1)}`).join('、');
+    box.appendChild(el('p', 'path-highlights', `最緊的一年：${tight.age} 歲實質支出 ${compact(tight.spending)}。附近報酬 ${near}`));
+  }
+  box.appendChild(table(
+    ['年齡', '年初資產', '提領額', '護欄是否觸發', '當年報酬', '年末資產'],
+    years.map(y => {
+      const mark = tight && y.age === tight.age;
+      return [
+        mark ? { text: String(y.age), title: '最緊的一年' } : String(y.age),
+        compact(y.startBalance),
+        compact(y.withdrawal),
+        y.guardrail ? '是' : '否',
+        { text: pct(y.yearReturn, 1), neg: y.yearReturn < 0, title: mark ? '最緊的一年' : '' },
+        compact(y.endBalance)
+      ];
+    })
+  ));
 }
 
 function renderPathHighlights(cur) {
   const node = $('pathHighlights');
   const brief = cur?.sim?.spendingBrief;
   if (!node) return;
-  if (!brief?.tightest) { node.hidden = true; node.textContent = ''; return; }
-  const lines = [`最緊的一年：${brief.tightest.age} 歲實質支出 ${compact(brief.tightest.spending)}`];
-  if (brief.guardrail) lines.push(`護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`);
-  node.textContent = lines.join('\n');
+  node.innerHTML = '';
+  if (!brief?.tightest) { node.hidden = true; return; }
+  const btn = el('button', 'linkish', brief.worstStart);
+  btn.type = 'button';
+  btn.onclick = () => {
+    state.tab = 'overview';
+    renderActiveTab();
+    openPath(brief.worstStart);
+  };
+  node.append(
+    document.createTextNode('最差起點 '),
+    btn,
+    document.createTextNode(`：最緊的一年 ${brief.tightest.age} 歲實質支出 ${compact(brief.tightest.spending)}`)
+  );
+  if (brief.guardrail) {
+    node.append(document.createTextNode(`\n護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`));
+  }
   node.hidden = false;
 }
 
@@ -389,7 +535,9 @@ export function table(headers, rows, className = 'tbl') {
     const tr = t.insertRow();
     cells.forEach(c => {
       const td = tr.insertCell();
-      if (c && typeof c === 'object') {
+      if (c && typeof c === 'object' && c.node) {
+        td.appendChild(c.node);
+      } else if (c && typeof c === 'object') {
         td.textContent = c.text;
         if (c.neg) td.classList.add('neg');
         if (c.bg) td.style.background = c.bg;
@@ -399,6 +547,17 @@ export function table(headers, rows, className = 'tbl') {
   });
   wrap.appendChild(t);
   return wrap;
+}
+
+function pathStartButton(start) {
+  const btn = el('button', 'linkish', start);
+  btn.type = 'button';
+  btn.onclick = () => {
+    state.tab = 'overview';
+    renderActiveTab();
+    openPath(start);
+  };
+  return btn;
 }
 
 export function renderScenarios() {
@@ -457,7 +616,7 @@ export function renderScenarios() {
 
   box.appendChild(el('div', 'section-h', '最差的 5 個起始時點'));
   box.appendChild(table(['起始月份', '結果', '退休時資產', '期末資產'], sim.worstRuns.map(r => [
-    r.start,
+    { node: pathStartButton(r.start) },
     { text: r.success ? `成功（撐到 ${plan.endAge} 歲）` : `${r.depletedAge.toFixed(1)} 歲耗盡`, neg: !r.success },
     Number.isFinite(r.balanceAtRetire) ? money(r.balanceAtRetire) : '—',
     money(r.endBalance)
@@ -484,13 +643,20 @@ export function renderPerformance() {
     statBox('CAGR', pct(s.cagr, 2), ps && `上一版 ${pct(ps.cagr, 2)}`, s.cagr < 0),
     statBox('年化波動', pct(s.volatility, 2), ps && `上一版 ${pct(ps.volatility, 2)}`),
     statBox('最大回撤', pct(s.maxDrawdown, 2), `${s.peakDate} → ${s.troughDate}`, true),
-    statBox('Sharpe (rf=0)', num2(s.sharpe), ps && `上一版 ${num2(ps.sharpe)}`),
-    statBox('Sortino', num2(s.sortino)),
-    statBox('Calmar', num2(s.calmar)),
     statBox('累積倍數', `${growth >= 100 ? intFmt.format(growth) : growth.toFixed(1)}x`),
     statBox('回撤回復', s.recoveryDate || '尚未回復')
   );
   box.appendChild(grid);
+  const advanced = el('details', 'advanced-stats');
+  advanced.appendChild(el('summary', '', '進階'));
+  const advancedGrid = el('div', 'stat-grid');
+  advancedGrid.append(
+    statBox('Sharpe (rf=0)', num2(s.sharpe), ps && `上一版 ${num2(ps.sharpe)}`),
+    statBox('Sortino', num2(s.sortino)),
+    statBox('Calmar', num2(s.calmar))
+  );
+  advanced.appendChild(advancedGrid);
+  box.appendChild(advanced);
 
   const toggle = el('div', 'toggle-line');
   toggle.appendChild(el('b', '', '淨值曲線'));
@@ -548,6 +714,13 @@ export function renderPerformance() {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: item => `${item.parsed.y.toFixed(2)}%${years[item.dataIndex].partial ? '（不完整年度）' : ''}` } } }
     }
   });
+  const yearTable = el('details');
+  yearTable.appendChild(el('summary', '', '逐年報酬表'));
+  yearTable.appendChild(table(['年', '報酬'], years.map(y => [
+    y.partial ? `${y.year}*` : String(y.year),
+    { text: pct(y.return, 2), neg: y.return < 0 }
+  ])));
+  box.appendChild(yearTable);
 }
 
 export function renderAssets() {

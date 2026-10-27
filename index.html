@@ -41,31 +41,45 @@
     <div class="above-tabs">
     <section class="workspace">
       <section class="card portfolio-card">
-        <h3 class="card-title">📦 ETF 組合權重 <span class="hint" id="weightSum"></span></h3>
-        <div id="portfolioName" hidden></div>
-        <div id="holdings"></div>
-        <div class="row" style="margin-top: 4px;">
-          <button class="btn">＋ 新增 ETF</button>
-          <span class="spacer"></span>
-          <div class="input-wrap" style="height: 34px; width: 130px;">
-            <select id="rebalance" title="再平衡頻率"></select>
+        <details class="fold" id="portfolioFold">
+          <summary>
+            <span class="fold-title">📦 ETF 組合權重<span class="hint" id="weightSum"></span></span>
+            <span class="fold-brief" id="portfolioBrief"></span>
+          </summary>
+          <div class="fold-body">
+            <div id="portfolioName" hidden></div>
+            <div id="holdings"></div>
+            <div class="row" style="margin-top: 4px;">
+              <button class="btn">＋ 新增 ETF</button>
+              <span class="spacer"></span>
+              <div class="input-wrap" style="height: 34px; width: 130px;">
+                <select id="rebalance" title="再平衡頻率"></select>
+              </div>
+            </div>
+            <details class="adv">
+              <summary>進階：限定回測期間</summary>
+              <div class="plan-grid">
+                <div class="field"><label for="btStart">起始日</label><div class="input-wrap"><input type="date" id="btStart"></div></div>
+                <div class="field"><label for="btEnd">結束日</label><div class="input-wrap"><input type="date" id="btEnd"></div></div>
+              </div>
+              <div class="small muted" style="margin-top: 6px;">留空 = 用所有資產共同可用的最長歷史（退休模擬越長越好）。</div>
+            </details>
           </div>
-        </div>
-        <details class="adv">
-          <summary>進階：限定回測期間</summary>
-          <div class="plan-grid">
-            <div class="field"><label for="btStart">起始日</label><div class="input-wrap"><input type="date" id="btStart"></div></div>
-            <div class="field"><label for="btEnd">結束日</label><div class="input-wrap"><input type="date" id="btEnd"></div></div>
-          </div>
-          <div class="small muted" style="margin-top: 6px;">留空 = 用所有資產共同可用的最長歷史（退休模擬越長越好）。</div>
         </details>
       </section>
 
       <section class="card plan-card">
-        <h3 class="card-title">🎯 退休計劃假設 <span class="hint">今日幣值</span></h3>
-        <div class="plan-grid" id="planForm"></div>
-        <div class="timeline" id="planTimeline"><div class="acc"></div><div class="ret"></div></div>
-        <div class="timeline-labels" id="planTimelineLabels"></div>
+        <details class="fold" id="planFold">
+          <summary>
+            <span class="fold-title">🎯 退休計劃假設</span>
+            <span class="fold-brief" id="planBrief"></span>
+          </summary>
+          <div class="fold-body">
+            <div class="plan-grid" id="planForm"></div>
+            <div class="timeline" id="planTimeline"><div class="acc"></div><div class="ret"></div></div>
+            <div class="timeline-labels" id="planTimelineLabels"></div>
+          </div>
+        </details>
       </section>
     </section>
 
@@ -98,6 +112,7 @@
           <div>
             <dt>歷史成功率</dt>
             <dd id="kpiSuccess">—</dd>
+            <dd class="overview-extra" id="sampleWarning" hidden></dd>
             <dd class="delta" id="kpiSuccessDelta"></dd>
           </div>
           <div>
@@ -118,11 +133,18 @@
           </div>
         </dl>
         <p class="path-highlights" id="pathHighlights" hidden></p>
+        <button type="button" class="btn" id="exportPaths" hidden>匯出全部路徑 CSV</button>
+        <div id="pathViewer" hidden></div>
         <p class="path-highlights" id="inflationLabel" hidden></p>
         <p class="path-highlights" id="glideHighlight" hidden></p>
+        <p class="path-highlights" id="taxDragHighlight" hidden></p>
         <p class="path-highlights" id="dividendHighlight" hidden></p>
+        <p class="path-highlights" id="curveHighlight" hidden></p>
+        <p class="path-highlights" id="cashHighlight" hidden></p>
         <p class="path-highlights" id="feeHighlight" hidden></p>
+        <p class="path-highlights" id="fxStress" hidden></p>
         <p class="path-highlights" id="fxHighlight" hidden></p>
+        <p class="path-highlights" id="dualEngine" hidden></p>
         <p class="path-highlights" id="bootstrapHighlight" hidden></p>
         <p class="path-highlights" id="frequencyHighlight" hidden></p>
       </div>

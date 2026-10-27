@@ -32,15 +32,22 @@ export async function recalc({ markPrevious = true, label } = {}) {
     const cpi = plan.inflationMode === 'cpi' ? await loadCpi(meta) : null;
     const { returns, cpiFallbackMonths } = meta.retirement.realMonthlyReturns(result.equityMonthly, plan, cpi);
     const glide = meta.retirement.buildGlide(result.assetMonthly, pf.holdings, plan, cpi);
-    const dividend = meta.retirement.buildDividendTax(pf.holdings, plan);
+    const dragInfo = meta.retirement.annualTaxDrag(pf.holdings, pf.holdingTax);
+    const dividend = dragInfo?.fraction > 0 ? null : meta.retirement.buildDividendTax(pf.holdings, plan);
     const baselineReturns = plan.feeSplit && !plan.glidePath
       ? meta.retirement.realMonthlyReturns(result.equityMonthly, { ...plan, feeSplit: false }, cpi).returns
       : null;
     const fx = meta.retirement.buildFx(plan);
-    const sim = meta.retirement.simulateRetirement(plan, returns, glide, dividend, baselineReturns, fx);
+    const cashSleeve = plan.cashBucketYears
+      ? (plan.glidePath && glide ? glide : meta.retirement.buildGlide(result.assetMonthly, pf.holdings, { ...plan, glidePath: true }, cpi))
+      : null;
+    const sim = meta.retirement.simulateRetirement(plan, returns, glide, dividend, baselineReturns, fx, dragInfo, cashSleeve);
     if (seq !== recalcSeq) return null;
     if (markPrevious && state.current) state.previous = state.current;
-    state.current = { label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths };
+    state.current = {
+      label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths,
+      series: returns, glide, dividend, fx, taxDrag: dragInfo
+    };
     renderDashboard();
     setStatus(`已更新 · 歷史 ${sim.history.start} ~ ${sim.history.end} · ${intFmt.format(sim.history.starts)} 個起始月份`);
     return state.current;

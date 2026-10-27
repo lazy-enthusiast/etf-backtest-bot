@@ -137,6 +137,16 @@ function renderGlideFields() {
   end.placeholder = '期末股權重 %，空白＝維持目前';
   bindNumericInput(end, { integer: false, min: 0, max: 100, step: 1 });
   end.addEventListener('input', onPlanEdited);
+  const start = el('input');
+  start.id = 'plan-glideStockStart';
+  start.placeholder = '起始股權重 %，空白＝目前權重';
+  bindNumericInput(start, { integer: false, min: 0, max: 100, step: 1 });
+  start.addEventListener('input', onPlanEdited);
+  const floor = el('input');
+  floor.id = 'plan-glideBondFloor';
+  floor.placeholder = '債券下限 %，空白＝不設';
+  bindNumericInput(floor, { integer: false, min: 0, max: 100, step: 1 });
+  floor.addEventListener('input', onPlanEdited);
   const taxRow = el('label', 'check-row');
   const taxToggle = el('input');
   taxToggle.type = 'checkbox';
@@ -180,6 +190,41 @@ function renderGlideFields() {
   series.rows = 2;
   series.placeholder = '台幣匯率（每 1 USD），例如 2000-01,32.5。沒有序列就不套用台幣。港幣用 7.8 聯繫匯率假設。';
   series.addEventListener('input', onPlanEdited);
+  const curve = el('select');
+  curve.id = 'plan-spendingCurve';
+  curve.title = '支出曲線。固定以外會跟固定結果並列，不取代成功率。';
+  for (const [value, label] of [['flat', '支出：固定'], ['declining', '支出：75歲後每年−1%'], ['u_shape', '支出：先降後升']]) {
+    const opt = el('option');
+    opt.value = value;
+    opt.textContent = label;
+    curve.appendChild(opt);
+  }
+  curve.addEventListener('change', onPlanEdited);
+  const cashRow = el('label', 'check-row');
+  const cashToggle = el('input');
+  cashToggle.type = 'checkbox';
+  cashToggle.id = 'plan-cashBucket';
+  cashToggle.addEventListener('change', onPlanEdited);
+  cashRow.append(cashToggle, document.createTextNode(' 現金桶（概念建議，預設關）'));
+  const cashYears = el('input');
+  cashYears.id = 'plan-cashBucketYears';
+  cashYears.placeholder = '年數，開啟後空白＝3';
+  bindNumericInput(cashYears, { integer: true, min: 1, step: 1 });
+  cashYears.addEventListener('input', onPlanEdited);
+  const lumps = el('input');
+  lumps.id = 'plan-lumpSums';
+  lumps.placeholder = '一次性支出，例如 70:200000';
+  lumps.addEventListener('input', onPlanEdited);
+  const segments = el('input');
+  segments.id = 'plan-otherIncomeSegments';
+  segments.placeholder = '分段收入，例如 60-65:120000, 65-:80000';
+  segments.addEventListener('input', onPlanEdited);
+  const dualRow = el('label', 'check-row');
+  const dualToggle = el('input');
+  dualToggle.type = 'checkbox';
+  dualToggle.id = 'plan-compareBootstrap';
+  dualToggle.addEventListener('change', onPlanEdited);
+  dualRow.append(dualToggle, document.createTextNode(' 歷史與拔靴成功率並列（預設只看歷史）'));
   const bootRow = el('label', 'check-row');
   const bootToggle = el('input');
   bootToggle.type = 'checkbox';
@@ -206,7 +251,7 @@ function renderGlideFields() {
   guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
   bindNumericInput(guardrailEvery, { integer: true, min: 1, max: 12, step: 1 });
   guardrailEvery.addEventListener('input', onPlanEdited);
-  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block, withdrawEvery, guardrailEvery);
+  box.append(row, tick, start, end, floor, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, curve, cashRow, cashYears, lumps, segments, dualRow, bootRow, seed, block, withdrawEvery, guardrailEvery);
   return box;
 }
 
@@ -239,6 +284,10 @@ export function writePlanForm() {
   }
   const glideEnd = $('plan-glideEquityEnd');
   if (glideEnd && document.activeElement !== glideEnd) glideEnd.value = p.glideEquityEnd == null ? '' : p.glideEquityEnd;
+  const glideStart = $('plan-glideStockStart');
+  if (glideStart && document.activeElement !== glideStart) glideStart.value = p.glideStockStart == null ? '' : p.glideStockStart;
+  const bondFloor = $('plan-glideBondFloor');
+  if (bondFloor && document.activeElement !== bondFloor) bondFloor.value = p.glideBondFloor == null ? '' : p.glideBondFloor;
   const taxToggle = $('plan-dividendTax');
   if (taxToggle && document.activeElement !== taxToggle) taxToggle.checked = Boolean(p.dividendTax);
   const yields = $('plan-dividendYields');
@@ -257,6 +306,18 @@ export function writePlanForm() {
   if (basket && document.activeElement !== basket) basket.value = rateMapText(p.spendingBasket);
   const series = $('plan-fxSeries');
   if (series && document.activeElement !== series) series.value = p.fxSeries || '';
+  const curve = $('plan-spendingCurve');
+  if (curve && document.activeElement !== curve) curve.value = p.spendingCurve || 'flat';
+  const cashToggle = $('plan-cashBucket');
+  if (cashToggle && document.activeElement !== cashToggle) cashToggle.checked = p.cashBucketYears != null && p.cashBucketYears !== false;
+  const cashYears = $('plan-cashBucketYears');
+  if (cashYears && document.activeElement !== cashYears) cashYears.value = p.cashBucketYears == null ? '' : p.cashBucketYears;
+  const lumps = $('plan-lumpSums');
+  if (lumps && document.activeElement !== lumps) lumps.value = eventText(p.lumpSums, row => `${row.age}:${row.amount}`);
+  const segments = $('plan-otherIncomeSegments');
+  if (segments && document.activeElement !== segments) segments.value = eventText(p.otherIncomeSegments, row => `${row.fromAge}-${row.toAge ?? ''}:${row.amount}`);
+  const dualToggle = $('plan-compareBootstrap');
+  if (dualToggle && document.activeElement !== dualToggle) dualToggle.checked = Boolean(p.compareBootstrap);
   const bootToggle = $('plan-pathMode');
   if (bootToggle && document.activeElement !== bootToggle) bootToggle.checked = p.pathMode === 'bootstrap';
   const seed = $('plan-bootstrapSeed');
@@ -283,6 +344,10 @@ export function readPlanForm() {
   if (tickers) p.equityTickers = tickers.value;
   const glideEnd = $('plan-glideEquityEnd');
   if (glideEnd) p.glideEquityEnd = readInputNumber(glideEnd.value);
+  const glideStart = $('plan-glideStockStart');
+  if (glideStart) p.glideStockStart = readInputNumber(glideStart.value);
+  const bondFloor = $('plan-glideBondFloor');
+  if (bondFloor) p.glideBondFloor = readInputNumber(bondFloor.value);
   const taxToggle = $('plan-dividendTax');
   if (taxToggle) p.dividendTax = taxToggle.checked;
   const yields = $('plan-dividendYields');
@@ -301,6 +366,23 @@ export function readPlanForm() {
   if (basket) p.spendingBasket = basket.value;
   const series = $('plan-fxSeries');
   if (series) p.fxSeries = series.value;
+  const curve = $('plan-spendingCurve');
+  if (curve) p.spendingCurve = curve.value;
+  const cashToggle = $('plan-cashBucket');
+  const cashYears = $('plan-cashBucketYears');
+  if (cashToggle) {
+    if (!cashToggle.checked) p.cashBucketYears = null;
+    else {
+      const n = cashYears ? readInputNumber(cashYears.value) : null;
+      p.cashBucketYears = n == null ? true : n;
+    }
+  }
+  const lumps = $('plan-lumpSums');
+  if (lumps) p.lumpSums = retirement.parseLumpSums(lumps.value);
+  const segments = $('plan-otherIncomeSegments');
+  if (segments) p.otherIncomeSegments = retirement.parseIncomeSegments(segments.value);
+  const dualToggle = $('plan-compareBootstrap');
+  if (dualToggle) p.compareBootstrap = dualToggle.checked;
   const bootToggle = $('plan-pathMode');
   if (bootToggle) p.pathMode = bootToggle.checked ? 'bootstrap' : 'historical';
   const seed = $('plan-bootstrapSeed');
@@ -312,6 +394,13 @@ export function readPlanForm() {
   const guardrailEvery = $('plan-guardrailEvery');
   if (guardrailEvery && readInputNumber(guardrailEvery.value) != null) p.guardrailEvery = readInputNumber(guardrailEvery.value);
   return p;
+}
+
+function eventText(value, format) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.map(format).join(', ');
 }
 
 function rateMapText(value) {
@@ -331,6 +420,19 @@ export function renderPlanTimeline() {
     .forEach(t => $('planTimelineLabels').appendChild(el('span', '', t)));
   const strat = ({ fixed_real: '固定', guardrails: '護欄', vpw: 'VPW' })[p.withdrawalStrategy] || '固定';
   $('planChip').textContent = `${p.currentAge} 歲 · ${p.retireAge} 歲退休 · 至 ${p.endAge} 歲 · ${strat} · 年支出 ${money(p.annualSpending)}`;
+  const brief = $('planBrief');
+  if (brief) brief.textContent = planBriefText(p);
+}
+
+export function formatWan(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return (Math.round((n / 10000) * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
+}
+
+export function planBriefText(p) {
+  if (!p) return '';
+  return `現時${p.currentAge}歲，退休年齡${p.retireAge}歲，起始本金$${formatWan(p.currentSavings)}萬，每月投入$${formatWan(p.monthlyContribution)}萬，年支出$${formatWan(p.annualSpending)}萬`;
 }
 
 const recalcPlanOnly = debounce(() => recalc({ markPrevious: false }), 350);

@@ -7,6 +7,7 @@ import { writePortfolioForm, readPortfolioForm } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
 import { saveConversations } from './chat.js';
 import { migrateHoldingSymbol } from '../backtest/symbols.js';
+import { parseHoldingWeight } from '../backtest/retirement.js';
 import { buildApplyReceipt } from './context.js';
 
 function toggleAdvisor(force) {
@@ -19,17 +20,29 @@ export function parsePortfolioBlock(text) {
   try { obj = JSON.parse(text); } catch (e) { return null; }
   if (!obj || typeof obj.holdings !== 'object' || obj.holdings === null) return null;
   const holdings = {};
-  for (const [symbol, weight] of Object.entries(obj.holdings)) {
-    const w = Number(weight);
+  const holdingTax = {};
+  for (const [symbol, raw] of Object.entries(obj.holdings)) {
+    const parsed = parseHoldingWeight(raw);
     // 僅對 mapping 已知美股裸代號補 .US；VWRD／IGLN 等保持原樣由 validate 攔截
     const s = migrateHoldingSymbol(symbol, state.usBareKeys);
-    if (s && Number.isFinite(w) && w > 0) holdings[s] = (holdings[s] || 0) + w;
+    if (s && Number.isFinite(parsed.weight) && parsed.weight > 0) {
+      holdings[s] = (holdings[s] || 0) + parsed.weight;
+      if (parsed.tax) holdingTax[s] = parsed.tax;
+    }
+  }
+  if (obj.holdingTax && typeof obj.holdingTax === 'object') {
+    for (const [symbol, raw] of Object.entries(obj.holdingTax)) {
+      const s = migrateHoldingSymbol(symbol, state.usBareKeys);
+      const parsed = parseHoldingWeight({ weight: 1, ...raw });
+      if (s && parsed.tax) holdingTax[s] = parsed.tax;
+    }
   }
   if (!Object.keys(holdings).length) return null;
   const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
   return {
     name: String(obj.name || 'AI 建議組合').slice(0, 40),
     holdings,
+    ...(Object.keys(holdingTax).length ? { holdingTax } : {}),
     rebalance: REBALANCE_LABELS[obj.rebalance] ? obj.rebalance : 'annual',
     start: isDate(obj.start) ? obj.start : '',
     end: isDate(obj.end) ? obj.end : ''
@@ -52,10 +65,20 @@ export function parsePlanBlock(text) {
   for (const k of ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
-  if (obj.glidePath === true || obj.glidePath === false) changes.glidePath = obj.glidePath;
+  if (obj.glidePath && typeof obj.glidePath === 'object') {
+    const g = obj.glidePath;
+    if (g.enabled === true || g.enabled === false) changes.glidePath = g.enabled;
+    if (g.stockStart != null && Number.isFinite(Number(g.stockStart))) changes.glideStockStart = Number(g.stockStart);
+    if (g.stockEnd != null && Number.isFinite(Number(g.stockEnd))) changes.glideEquityEnd = Number(g.stockEnd);
+    if (g.bondFloor != null && Number.isFinite(Number(g.bondFloor))) changes.glideBondFloor = Number(g.bondFloor);
+  } else if (obj.glidePath === true || obj.glidePath === false) changes.glidePath = obj.glidePath;
   if (Array.isArray(obj.equityTickers) || typeof obj.equityTickers === 'string') changes.equityTickers = obj.equityTickers;
   if (obj.glideEquityEnd === null) changes.glideEquityEnd = null;
   else if (obj.glideEquityEnd !== undefined && Number.isFinite(Number(obj.glideEquityEnd))) changes.glideEquityEnd = Number(obj.glideEquityEnd);
+  if (obj.glideStockStart === null) changes.glideStockStart = null;
+  else if (obj.glideStockStart !== undefined && Number.isFinite(Number(obj.glideStockStart))) changes.glideStockStart = Number(obj.glideStockStart);
+  if (obj.glideBondFloor === null) changes.glideBondFloor = null;
+  else if (obj.glideBondFloor !== undefined && Number.isFinite(Number(obj.glideBondFloor))) changes.glideBondFloor = Number(obj.glideBondFloor);
   if (obj.dividendTax === true || obj.dividendTax === false) changes.dividendTax = obj.dividendTax;
   if (obj.dividendYields && typeof obj.dividendYields === 'object') changes.dividendYields = obj.dividendYields;
   else if (typeof obj.dividendYields === 'string') changes.dividendYields = obj.dividendYields;
@@ -68,6 +91,13 @@ export function parsePlanBlock(text) {
   if (obj.pathMode === 'historical' || obj.pathMode === 'bootstrap') changes.pathMode = obj.pathMode;
   if (obj.bootstrapSeed !== undefined && Number.isFinite(Number(obj.bootstrapSeed))) changes.bootstrapSeed = Math.trunc(Number(obj.bootstrapSeed));
   if (obj.bootstrapBlock !== undefined && Number.isFinite(Number(obj.bootstrapBlock))) changes.bootstrapBlock = Number(obj.bootstrapBlock);
+  if (obj.spendingCurve === 'flat' || obj.spendingCurve === 'declining' || obj.spendingCurve === 'u_shape') changes.spendingCurve = obj.spendingCurve;
+  if (Array.isArray(obj.lumpSums) || typeof obj.lumpSums === 'string') changes.lumpSums = obj.lumpSums;
+  if (Array.isArray(obj.otherIncomeSegments) || typeof obj.otherIncomeSegments === 'string') changes.otherIncomeSegments = obj.otherIncomeSegments;
+  if (obj.compareBootstrap === true || obj.compareBootstrap === false) changes.compareBootstrap = obj.compareBootstrap;
+  if (obj.cashBucketYears === null || obj.cashBucketYears === false) changes.cashBucketYears = null;
+  else if (obj.cashBucketYears === true) changes.cashBucketYears = true;
+  else if (obj.cashBucketYears !== undefined && Number.isFinite(Number(obj.cashBucketYears))) changes.cashBucketYears = Number(obj.cashBucketYears);
   for (const k of ['withdrawEvery', 'guardrailEvery']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
@@ -88,12 +118,16 @@ export function formatPlanValue(key, v) {
   if (key.endsWith('Age')) return `${v} 歲`;
   if (key === 'glidePath') return v ? '開' : '關';
   if (key === 'equityTickers') return Array.isArray(v) ? v.join('、') : String(v || '');
-  if (key === 'glideEquityEnd') return v == null || v === '' ? '維持目前' : `${v}%`;
+  if (key === 'glideEquityEnd' || key === 'glideStockStart' || key === 'glideBondFloor') return v == null || v === '' ? '維持目前' : `${v}%`;
   if (key === 'dividendTax') return v ? '開' : '關';
   if (key === 'feeSplit' || key === 'fxMode') return v ? '開' : '關';
   if (key === 'spendingBasket') return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
   if (key === 'pathMode') return v === 'bootstrap' ? '拔靴' : '歷史起點';
   if (key === 'withdrawEvery' || key === 'guardrailEvery') return `${v} 個月`;
+  if (key === 'cashBucketYears') return v == null || v === false ? '關' : (v === true ? '3 年' : `${v} 年`);
+  if (key === 'spendingCurve') return ({ flat: '固定', declining: '75歲後遞減', u_shape: '先降後升' })[v] || v;
+  if (key === 'compareBootstrap') return v ? '開' : '關';
+  if (key === 'lumpSums' || key === 'otherIncomeSegments') return Array.isArray(v) ? `${v.length} 段` : String(v || '');
   if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
   if (key === 'dividendYields' || key === 'dividendTaxRates') {
     return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
