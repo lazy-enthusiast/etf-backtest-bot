@@ -756,6 +756,33 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
 const PHASE_RATE_FLOOR = -0.20;
 const PHASE_RATE_CAP = 0.30;
 
+export const REQUIRED_RETURN_LABEL = '所需報酬（名目）';
+
+function toNominalAnnual(real, inflationRatePct) {
+  if (!Number.isFinite(real)) return real;
+  const inflation = (Number(inflationRatePct) || 0) / 100;
+  return (1 + real) * (1 + inflation) - 1;
+}
+
+function formatPhaseRate(annual, flag, belowLabel) {
+  if (flag === 'above_cap') return '超過 30%';
+  if (flag === 'below_zero') return belowLabel;
+  if (!Number.isFinite(annual)) return null;
+  return `${(annual * 100).toFixed(1)}%`;
+}
+
+/** 給儀表板與對話脈絡共用的短句。兩段都掛在同一個名目標籤下。 */
+export function formatRequiredPhaseReturns(phases) {
+  if (!phases) return null;
+  const parts = [];
+  const accum = formatPhaseRate(phases.accumulationAnnual, phases.flags?.accumulation, '0% 以下');
+  const withdraw = formatPhaseRate(phases.withdrawalAnnual, phases.flags?.withdrawal, '低於 0%');
+  if (accum) parts.push(`至退休 ${accum}`);
+  if (withdraw) parts.push(`退休後 ${withdraw}`);
+  if (!parts.length) return null;
+  return `${REQUIRED_RETURN_LABEL}：${parts.join('、')}`;
+}
+
 function accumulateToNestEgg(savings, contribution, months, annual) {
   const g = (1 + annual) ** (1 / 12);
   let balance = savings;
@@ -797,10 +824,12 @@ function solvePhaseRate(scoreAt, scale) {
 }
 
 /**
- * 累積期與提領期各自需要的實質年化報酬（今日幣值）。
+ * 累積期與提領期各自需要的名目年化報酬。
+ * 現金流是今日幣值，先解實質年化，再換成名目：(1 + 實質) × (1 + 通膨) − 1。
+ * 通膨用計劃的 inflationRate（%/年）。固定與 CPI 模式都用這個假設；這兩段沒有另走 CPI 路徑。
  * 累積：現有資產＋每月投入，月初入帳後再增值，長到 nestEgg。
  * 提領：由該資產（已退休則用現有資產）支付年支出至終點，其他收入自 otherIncomeAge 起每月加入，允許花完本金。
- * 年化為 null 表示這一段不適用，或利率落在搜尋邊界外（見 flags：below_zero / above_cap）。
+ * 年化為 null 表示這一段不適用，或實質利率落在搜尋邊界外（見 flags：below_zero / above_cap）。
  */
 export function requiredPhaseReturns(plan, { nestEgg = null, alreadyRetired = false } = {}) {
   const p = normalizePlan(plan);
@@ -829,8 +858,8 @@ export function requiredPhaseReturns(plan, { nestEgg = null, alreadyRetired = fa
   }
 
   return {
-    accumulationAnnual: accumulation.annual,
-    withdrawalAnnual: withdrawal.annual,
+    accumulationAnnual: toNominalAnnual(accumulation.annual, p.inflationRate),
+    withdrawalAnnual: toNominalAnnual(withdrawal.annual, p.inflationRate),
     flags: {
       accumulation: accumulation.flag,
       withdrawal: withdrawal.flag

@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { pct, num2, money, compact } from './dom.js';
-import { inflationLabel } from '../backtest/retirement.js';
+import { inflationLabel, requiredPhaseReturns, formatRequiredPhaseReturns } from '../backtest/retirement.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 
 function shortSnippet(snippet, tightAge) {
@@ -81,6 +81,12 @@ export function describePlan(p) {
   ].filter(Boolean).join('\n');
 }
 
+function describeRequiredReturn(plan, sim) {
+  const nestEgg = sim.balanceAtRetire?.p50;
+  const alreadyRetired = plan.retireAge <= plan.currentAge || !Number.isFinite(nestEgg);
+  return formatRequiredPhaseReturns(requiredPhaseReturns(plan, { nestEgg, alreadyRetired }));
+}
+
 export function describeSim(cur) {
   const { sim, plan } = cur;
   const h = sim.history;
@@ -92,6 +98,7 @@ export function describeSim(cur) {
     `提領規則 ${describeWithdrawal(plan)}；成功率 ${pct(sim.successRate, 1)}` +
       (plan.withdrawalStrategy !== 'fixed_real' ? `（對照固定實質 ${pct(sim.successRateFixedReal, 1)}）` : ''),
     sim.balanceAtRetire ? `退休時資產：中位 ${money(sim.balanceAtRetire.p50)}、P10 ${money(sim.balanceAtRetire.p10)}、P90 ${money(sim.balanceAtRetire.p90)}；以中位數計初始淨提領率 ${pct(sim.initialWithdrawalRate, 2)}` : '已在退休期',
+    describeRequiredReturn(plan, sim),
     `期末資產（${plan.endAge} 歲）：中位 ${money(sim.endBalance.p50)}、P10 ${money(sim.endBalance.p10)}、最差 ${money(sim.endBalance.min)}`,
     `可持續年支出（固定實質口徑）：100% 歷史成功 ${money(sim.sustainableSpending.p100)}、95% ${money(sim.sustainableSpending.p95)}、90% ${money(sim.sustainableSpending.p90)}、中位 ${money(sim.sustainableSpending.p50)}（目前目標 ${money(plan.annualSpending)}）`,
     flex ? `實際／目標累積提領比：P10 ${pct(flex.spendRatio.p10, 0)}、中位 ${pct(flex.spendRatio.p50, 0)}、P90 ${pct(flex.spendRatio.p90, 0)}；達目標九成的月份占比中位 ${pct(flex.coverageRate.p50, 0)}` : null,

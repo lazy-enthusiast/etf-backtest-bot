@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns, inflationLabel } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -97,8 +97,8 @@ function renderPhaseYield(phases, cagr) {
     return;
   }
   const assumption = accumText
-    ? '實質報酬。累積：現有資產＋每月投入，長到退休時中位資產。提領：由該資產支付淨支出至終點，允許花完本金。'
-    : '實質報酬。提領：由現有資產支付淨支出至終點，允許花完本金。';
+    ? '名目報酬。累積：現有資產＋每月投入，長到退休時中位資產。提領：由該資產支付淨支出至終點，允許花完本金。'
+    : '名目報酬。提領：由現有資產支付淨支出至終點，允許花完本金。';
   subEl.append(document.createTextNode(assumption));
   if (Number.isFinite(cagr)) {
     subEl.append(document.createElement('br'), document.createTextNode(`對照組合歷史名目 CAGR ${pct(cagr)}（口徑不同，僅供參考）`));
@@ -177,7 +177,8 @@ export function renderDashboard() {
   }
   setDelta('kpiWithdrawDelta', initRate, prev?.initialWithdrawalRate, x => pct(x), false);
 
-  // 所需報酬分兩段：累積到退休時中位資產，以及退休後花到終點（允許花完本金）。不是支出÷資產。
+  // 所需報酬（名目）分兩段：累積到退休時中位資產，以及退休後花到終點（允許花完本金）。不是支出÷資產。
+  setText('kpiYieldLabel', REQUIRED_RETURN_LABEL);
   const nestEgg = atRetire?.p50;
   const alreadyRetired = plan.retireAge <= plan.currentAge || !Number.isFinite(nestEgg);
   const phases = requiredPhaseReturns(plan, { nestEgg, alreadyRetired });
