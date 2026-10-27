@@ -201,6 +201,20 @@ function summarize(values, qs = PERCENTILES) {
  * @param equityMonthly  runBacktest().equityMonthly
  * @param cpiSeries      [['YYYY-MM-DD', 指數], ...]（月度），inflationMode = 'fixed' 時可省略
  */
+/** N 個重疊起點，有效樣本約為月數／60；拔靴模式改用區塊長度。 */
+export function effectiveSampleNote(history, { pathMode = 'historical', bootstrapBlock = 12, successRate = null } = {}) {
+  const starts = Math.max(0, Number(history?.starts) || 0);
+  const months = Math.max(0, Number(history?.months) || 0);
+  const block = pathMode === 'bootstrap'
+    ? Math.min(120, Math.max(1, Math.round(Number(bootstrapBlock) || 12)))
+    : 60;
+  const rounded = Math.round((months / block) * 10) / 10;
+  const shown = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  let text = `${starts} 個起始月高度重疊，有效獨立樣本估計約 ${shown}`;
+  if (successRate === 1) text += '。資訊量有限';
+  return text;
+}
+
 export function inflationLabel(plan, cpiFallbackMonths = 0) {
   const p = normalizePlan(plan);
   if (p.inflationMode === 'fixed') return `通膨：固定 ${p.inflationRate}%`;

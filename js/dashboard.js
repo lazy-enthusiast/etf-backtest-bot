@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv, effectiveSampleNote } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -134,6 +134,15 @@ export function renderDashboard() {
     successSub.append(pill, document.createTextNode(successNote));
   }
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
+  const sample = $('sampleWarning');
+  if (sample) {
+    sample.textContent = effectiveSampleNote(sim.history, {
+      pathMode: plan.pathMode,
+      bootstrapBlock: plan.bootstrapBlock,
+      successRate: sim.successRate
+    });
+    sample.hidden = false;
+  }
 
   const atRetire = sim.balanceAtRetire;
   setText('kpiRetire', atRetire ? compact(atRetire.p50) : '—');
