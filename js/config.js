@@ -58,6 +58,6 @@ export const PLAN_LABELS = {
   bootstrapSeed: '拔靴種子',
   bootstrapBlock: '拔靴區塊月數',
   withdrawEvery: '提領間隔',
-  guardrailEvery: '護欄檢查間隔'
+  guardrailEvery: '護欄檢查間隔',
   fxSeries: '台幣匯率序列'
 };

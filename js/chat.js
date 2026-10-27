@@ -14,7 +14,8 @@ function toggleAdvisor(force) {
 }
 
 export let MODEL_NAMES = {};
-export let conversations = loadJSON(STORE.conversations, []).filter(c => c && c.id && Array.isArray(c.messages));
+const storedConversations = loadJSON(STORE.conversations, []);
+export let conversations = (Array.isArray(storedConversations) ? storedConversations : []).filter(c => c && c.id && Array.isArray(c.messages));
 export let activeId = localStorage.getItem(STORE.activeConv);
 export let pendingAttachment = null;
 

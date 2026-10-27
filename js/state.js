@@ -3,10 +3,16 @@ import { loadJSON, saveJSON } from './storage.js';
 import { migrateHoldings } from '../backtest/symbols.js';
 
 // 啟動時不自動裸→.US（未知／倫敦代號會被誤標）；美股遷移等 meta 載入後再做。
-const rawPortfolio = loadJSON(STORE.portfolio, DEFAULT_PORTFOLIO);
-const migratedHoldings = migrateHoldings(rawPortfolio.holdings || DEFAULT_PORTFOLIO.holdings, null);
+const loadedPortfolio = loadJSON(STORE.portfolio, DEFAULT_PORTFOLIO);
+const rawPortfolio = loadedPortfolio && typeof loadedPortfolio === 'object' && !Array.isArray(loadedPortfolio)
+  ? loadedPortfolio
+  : { ...DEFAULT_PORTFOLIO };
+const sourceHoldings = rawPortfolio.holdings && typeof rawPortfolio.holdings === 'object'
+  ? rawPortfolio.holdings
+  : DEFAULT_PORTFOLIO.holdings;
+const migratedHoldings = migrateHoldings(sourceHoldings, null);
 const portfolio = { ...DEFAULT_PORTFOLIO, ...rawPortfolio, holdings: migratedHoldings };
-if (JSON.stringify(rawPortfolio.holdings) !== JSON.stringify(migratedHoldings)) {
+if (rawPortfolio.holdings && JSON.stringify(rawPortfolio.holdings) !== JSON.stringify(migratedHoldings)) {
   saveJSON(STORE.portfolio, portfolio);
 }
 

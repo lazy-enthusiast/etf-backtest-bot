@@ -8,6 +8,7 @@ import { renderPlanForm, writePlanForm } from './plan-form.js';
 import { writePortfolioForm, addHoldingRow, onPortfolioEdited } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
 import { migrateHoldings, usBareKeysFromMapping } from '../backtest/symbols.js';
+import { normalizePlan } from '../backtest/retirement.js';
 import { renderDashboard, renderActiveTab } from './dashboard.js';
 import {
   loadModels, newConversation, getActiveConv, renderConvSelect, renderMessages,
@@ -97,7 +98,14 @@ async function init() {
   syncClose();
 
   const meta = await loadMeta().catch(err => { setStatus('載入資料失敗：' + err.message, true); return null; });
-  state.plan = meta ? meta.retirement.normalizePlan(loadJSON(STORE.plan, {})) : loadJSON(STORE.plan, {});
+  const savedPlan = loadJSON(STORE.plan, {});
+  const planInput = savedPlan && typeof savedPlan === 'object' && !Array.isArray(savedPlan) ? savedPlan : {};
+  try {
+    state.plan = normalizePlan(planInput);
+  } catch (err) {
+    console.error('計劃讀取失敗，保留本機原檔', err);
+    state.plan = normalizePlan({});
+  }
   writePlanForm();
 
   if (meta) {
