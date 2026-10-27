@@ -7,6 +7,7 @@ import { writePortfolioForm, readPortfolioForm } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
 import { saveConversations } from './chat.js';
 import { migrateHoldingSymbol } from '../backtest/symbols.js';
+import { parseHoldingWeight } from '../backtest/retirement.js';
 import { buildApplyReceipt } from './context.js';
 
 function toggleAdvisor(force) {
@@ -19,17 +20,29 @@ export function parsePortfolioBlock(text) {
   try { obj = JSON.parse(text); } catch (e) { return null; }
   if (!obj || typeof obj.holdings !== 'object' || obj.holdings === null) return null;
   const holdings = {};
-  for (const [symbol, weight] of Object.entries(obj.holdings)) {
-    const w = Number(weight);
+  const holdingTax = {};
+  for (const [symbol, raw] of Object.entries(obj.holdings)) {
+    const parsed = parseHoldingWeight(raw);
     // 僅對 mapping 已知美股裸代號補 .US；VWRD／IGLN 等保持原樣由 validate 攔截
     const s = migrateHoldingSymbol(symbol, state.usBareKeys);
-    if (s && Number.isFinite(w) && w > 0) holdings[s] = (holdings[s] || 0) + w;
+    if (s && Number.isFinite(parsed.weight) && parsed.weight > 0) {
+      holdings[s] = (holdings[s] || 0) + parsed.weight;
+      if (parsed.tax) holdingTax[s] = parsed.tax;
+    }
+  }
+  if (obj.holdingTax && typeof obj.holdingTax === 'object') {
+    for (const [symbol, raw] of Object.entries(obj.holdingTax)) {
+      const s = migrateHoldingSymbol(symbol, state.usBareKeys);
+      const parsed = parseHoldingWeight({ weight: 1, ...raw });
+      if (s && parsed.tax) holdingTax[s] = parsed.tax;
+    }
   }
   if (!Object.keys(holdings).length) return null;
   const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
   return {
     name: String(obj.name || 'AI 建議組合').slice(0, 40),
     holdings,
+    ...(Object.keys(holdingTax).length ? { holdingTax } : {}),
     rebalance: REBALANCE_LABELS[obj.rebalance] ? obj.rebalance : 'annual',
     start: isDate(obj.start) ? obj.start : '',
     end: isDate(obj.end) ? obj.end : ''

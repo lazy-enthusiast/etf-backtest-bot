@@ -195,6 +195,7 @@ export function renderDashboard() {
   renderFanChart(cur, c);
   renderPathHighlights(cur);
   renderGlideHighlight(cur);
+  renderTaxHighlight(cur);
   renderDividendHighlight(cur);
   renderFeeHighlight(cur);
   renderFxHighlight(cur);
@@ -254,6 +255,18 @@ function renderFeeHighlight(cur) {
   node.textContent = cmp
     ? `費用拆分：中位實際提出 ${compact(cmp.withSplit)}，未拆分 ${compact(cmp.withoutSplit)}`
     : '費用拆分已取代單一費用率。';
+  node.hidden = false;
+}
+
+function renderTaxHighlight(cur) {
+  const node = $('taxDragHighlight');
+  if (!node) return;
+  const drag = cur?.sim?.taxDrag;
+  if (!drag) { node.hidden = true; node.textContent = ''; return; }
+  const pre = cur.result?.stats?.cagr;
+  let text = `估計：年化稅負拖累 ${(drag.annual * 100).toFixed(2)}%`;
+  if (Number.isFinite(pre)) text += `，稅後 CAGR ${pct(pre - drag.annual, 2)}（稅前 ${pct(pre, 2)}）`;
+  node.textContent = text;
   node.hidden = false;
 }
 

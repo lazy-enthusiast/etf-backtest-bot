@@ -31,6 +31,16 @@ function describeGlide(sim) {
   return `實際股權重 ${pct(g.min, 0)}–${pct(g.max, 0)}（同一條歷史索引，只改該月目標權重；這條成功率不宜與固定權重或其他權重路徑橫比）`;
 }
 
+function describeTaxDrag(cur) {
+  const drag = cur?.sim?.taxDrag;
+  if (!drag) return null;
+  const pre = cur.result?.stats?.cagr;
+  const tail = Number.isFinite(pre)
+    ? `，稅後 CAGR ${pct(pre - drag.annual, 2)}（稅前 ${pct(pre, 2)}）`
+    : '';
+  return `估計：年化稅負拖累 ${(drag.annual * 100).toFixed(2)}%${tail}`;
+}
+
 function describeDividend(sim, plan) {
   if (!plan?.dividendTax) return null;
   const cmp = sim?.dividendSpend;
@@ -106,6 +116,7 @@ export function describeSim(cur) {
     '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
     describeSpendingBrief(sim, plan),
     describeGlide(sim),
+    describeTaxDrag(cur),
     describeDividend(sim, plan),
     describeFeeSplit(sim, plan),
     describeFx(sim, plan),

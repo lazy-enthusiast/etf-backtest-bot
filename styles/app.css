@@ -134,6 +134,12 @@
   .holding input:focus { border-color: var(--accent); }
   .holding .sym { text-transform: uppercase; font-weight: 600; }
   .holding .w { text-align: right; }
+  .holding .tax-line { grid-column: 1 / -1; display: flex; gap: 6px; }
+  .holding .tax-line select,
+  .holding .tax-line input { height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: 0 8px; }
+  .holding .tax-dom { flex: 1.1; min-width: 0; }
+  .holding .tax-yield,
+  .holding .tax-other { flex: 0.8; min-width: 0; width: auto; }
   .x-btn { border: none; background: none; color: var(--faint); font-size: 15px; border-radius: 6px; height: 26px; }
   .x-btn:hover { color: var(--bad); background: var(--bad-soft); }
   .row { display: flex; align-items: center; gap: 8px; }

@@ -5,7 +5,7 @@ import { saveJSON } from './storage.js';
 import { normalizeSymbol, holdingSymbolError, SYMBOL_HINT } from '../backtest/symbols.js';
 import { bindNumericInput, readInputNumber } from './numeric-input.js';
 
-export function addHoldingRow(symbol, weight) {
+export function addHoldingRow(symbol, weight, tax) {
   const row = el('div', 'holding');
   const sym = el('input', 'sym');
   sym.setAttribute('list', 'symbolList');
@@ -20,10 +20,35 @@ export function addHoldingRow(symbol, weight) {
   const x = el('button', 'x-btn', '✕');
   x.title = '移除';
   x.onclick = () => { row.remove(); onPortfolioEdited(); };
+  const taxLine = el('div', 'tax-line');
+  const dom = el('select', 'tax-dom');
+  dom.title = '估計：註冊地稅率。不選則不扣稅。';
+  for (const [value, label] of [['', '不計稅'], ['IE', 'IE 15%'], ['US', 'US 30%'], ['other', '其他']]) {
+    const opt = el('option');
+    opt.value = value;
+    opt.textContent = label;
+    dom.appendChild(opt);
+  }
+  const domicile = String(tax?.taxDomicile || '').toUpperCase();
+  dom.value = domicile === 'IE' || domicile === 'US' ? domicile : (domicile ? 'other' : '');
+  const yieldInput = el('input', 'tax-yield');
+  yieldInput.placeholder = '殖利率%';
+  yieldInput.title = '估計：假設年殖利率。空白則這檔不扣稅。';
+  bindNumericInput(yieldInput, { integer: false, min: 0, step: 0.1 });
+  if (tax && Number.isFinite(Number(tax.dividendYield))) yieldInput.value = tax.dividendYield;
+  const other = el('input', 'tax-other');
+  other.placeholder = '稅率%';
+  other.title = '其他註冊地稅率，空白＝30%';
+  bindNumericInput(other, { integer: false, min: 0, step: 1 });
+  if (tax && Number.isFinite(Number(tax.otherTaxRate))) other.value = tax.otherTaxRate;
+  const syncOther = () => { other.hidden = dom.value !== 'other'; };
+  syncOther();
+  dom.addEventListener('change', () => { syncOther(); onPortfolioEdited(); });
+  taxLine.append(dom, yieldInput, other);
   const bar = el('div', 'bar');
   bar.appendChild(el('span'));
-  row.append(sym, w, x, bar);
-  [sym, w].forEach(i => i.addEventListener('input', onPortfolioEdited));
+  row.append(sym, w, x, taxLine, bar);
+  [sym, w, yieldInput, other].forEach(i => i.addEventListener('input', onPortfolioEdited));
   sym.addEventListener('change', () => {
     sym.value = normalizeSymbol(sym.value);
     onPortfolioEdited();
@@ -34,7 +59,7 @@ export function addHoldingRow(symbol, weight) {
 
 export function writePortfolioForm(pf) {
   $('holdings').innerHTML = '';
-  Object.entries(pf.holdings).forEach(([s, w]) => addHoldingRow(s, w));
+  Object.entries(pf.holdings).forEach(([s, w]) => addHoldingRow(s, w, pf.holdingTax?.[s]));
   $('rebalance').value = pf.rebalance || 'annual';
   $('btStart').value = pf.start || '';
   $('btEnd').value = pf.end || '';
@@ -45,14 +70,26 @@ export function writePortfolioForm(pf) {
 
 export function readPortfolioForm() {
   const holdings = {};
+  const holdingTax = {};
   document.querySelectorAll('#holdings .holding').forEach(row => {
     const s = normalizeSymbol(row.querySelector('.sym').value);
     const w = readInputNumber(row.querySelector('.w').value);
     if (s && w > 0) holdings[s] = (holdings[s] || 0) + w;
+    const domicile = row.querySelector('.tax-dom')?.value || '';
+    const y = readInputNumber(row.querySelector('.tax-yield')?.value);
+    if (s && domicile && y != null) {
+      const meta = { taxDomicile: domicile, dividendYield: y };
+      if (domicile === 'other') {
+        const rate = readInputNumber(row.querySelector('.tax-other')?.value);
+        meta.otherTaxRate = rate == null ? 30 : rate;
+      }
+      holdingTax[s] = meta;
+    }
   });
   return {
     name: $('portfolioName')?.textContent || '自訂組合',
     holdings,
+    holdingTax,
     rebalance: $('rebalance').value,
     start: $('btStart').value,
     end: $('btEnd').value
