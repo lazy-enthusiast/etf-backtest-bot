@@ -20,7 +20,7 @@ AI 對話邏輯在 Cloudflare Worker，經 Vercel proxy 呼叫 OpenRouter（換�
   - index-mapping.json：ETF → 延伸歷史的替代序列（共同基金／指數／合成），依優先順序
   - cli.js：終端機回測（可加 --withdraw 做提領測試）
 - data/ → 僅長歷史合成序列與 CPI（提交進 git）；一般 ETF 不放這裡
-- docs/ → 本機心法（METHODOLOGY／CONTRACTS／WORK_LOG）；`docs/*.md` 已 gitignore，勿提交
+- docs/ → 心法（METHODOLOGY／CONTRACTS／WORK_LOG）。`.gitignore` 仍忽略 `docs/*.md`；只有使用者明確要求發布時才 `git add -f` 這三份 markdown，不要連帶 secrets
 - scripts/dev.js → 本機一鍵：靜態前端（127.0.0.1:5173）+ wrangler dev；允許 index.html、styles/、js/、backtest/、data/
 - worker/ → Cloudflare Worker（邏輯層）
   - src/index.js：薄路由（含 GET /api/series）
@@ -68,7 +68,8 @@ Proxy 持有：
 - AI 回覆中的 ```portfolio 區塊：{ name, holdings: { "VTI.US": 權重% }, rebalance, start?, end? }（鍵須含交易所後綴）
 - AI 回覆中的 ```plan 區塊：只列要改的計劃欄位（currentAge、retireAge、endAge、currentSavings、monthlyContribution、annualSpending、otherIncome、otherIncomeAge、inflationMode、inflationRate、feeRate、currency、withdrawalStrategy、guardrailCeiling／Floor／AdjustPct）+ 可選 note
   格式定義在 brain.js 的 SHARED_CORE_SYSTEM，解析在 js/ai-controls.js 的 parsePortfolioBlock()／parsePlanBlock()
-- 單組 portfolio／plan 會自動寫入左側可編輯表單並重算；左側參數仍可手動改後按「重新計算」
+- 單組 portfolio／plan 會自動寫入主區上方可編輯表單並重算；參數仍可手動改後按「重新計算」（該列黏在分頁條上方，不蓋分頁內容）
+- 儀表板由上而下：組合權重與退休假設 → 資產軌跡 → 重新計算 → 互斥分頁（預設概況；歷史情境／組合績效／資產明細會換掉概況）。概況只顯示四個短數字。頂列無側邊圖示；開啟對話的按鈕是「退休顧問」。作曲區無附件、placeholder 無 Shift+Enter。窄螢幕 input／select／textarea ≥16px
 - engine.js 的 runBacktest() 與 retirement.js 的 simulateRetirement() 輸出 shape（前端 describe*／render* 依賴）
 
 ## 模型池
