@@ -63,5 +63,8 @@ export const PLAN_LABELS = {
   guardrailEvery: '護欄檢查間隔',
   cashBucketYears: '現金桶年數',
   spendingCurve: '支出曲線',
+  lumpSums: '一次性支出',
+  otherIncomeSegments: '分段其他收入',
+  compareBootstrap: '歷史與拔靴並列',
   fxSeries: '台幣匯率序列'
 };

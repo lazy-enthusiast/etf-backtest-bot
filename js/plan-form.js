@@ -211,6 +211,20 @@ function renderGlideFields() {
   cashYears.placeholder = '年數，開啟後空白＝3';
   bindNumericInput(cashYears, { integer: true, min: 1, step: 1 });
   cashYears.addEventListener('input', onPlanEdited);
+  const lumps = el('input');
+  lumps.id = 'plan-lumpSums';
+  lumps.placeholder = '一次性支出，例如 70:200000';
+  lumps.addEventListener('input', onPlanEdited);
+  const segments = el('input');
+  segments.id = 'plan-otherIncomeSegments';
+  segments.placeholder = '分段收入，例如 60-65:120000, 65-:80000';
+  segments.addEventListener('input', onPlanEdited);
+  const dualRow = el('label', 'check-row');
+  const dualToggle = el('input');
+  dualToggle.type = 'checkbox';
+  dualToggle.id = 'plan-compareBootstrap';
+  dualToggle.addEventListener('change', onPlanEdited);
+  dualRow.append(dualToggle, document.createTextNode(' 歷史與拔靴成功率並列（預設只看歷史）'));
   const bootRow = el('label', 'check-row');
   const bootToggle = el('input');
   bootToggle.type = 'checkbox';
@@ -237,7 +251,7 @@ function renderGlideFields() {
   guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
   bindNumericInput(guardrailEvery, { integer: true, min: 1, max: 12, step: 1 });
   guardrailEvery.addEventListener('input', onPlanEdited);
-  box.append(row, tick, start, end, floor, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, curve, cashRow, cashYears, bootRow, seed, block, withdrawEvery, guardrailEvery);
+  box.append(row, tick, start, end, floor, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, curve, cashRow, cashYears, lumps, segments, dualRow, bootRow, seed, block, withdrawEvery, guardrailEvery);
   return box;
 }
 
@@ -298,6 +312,12 @@ export function writePlanForm() {
   if (cashToggle && document.activeElement !== cashToggle) cashToggle.checked = p.cashBucketYears != null && p.cashBucketYears !== false;
   const cashYears = $('plan-cashBucketYears');
   if (cashYears && document.activeElement !== cashYears) cashYears.value = p.cashBucketYears == null ? '' : p.cashBucketYears;
+  const lumps = $('plan-lumpSums');
+  if (lumps && document.activeElement !== lumps) lumps.value = eventText(p.lumpSums, row => `${row.age}:${row.amount}`);
+  const segments = $('plan-otherIncomeSegments');
+  if (segments && document.activeElement !== segments) segments.value = eventText(p.otherIncomeSegments, row => `${row.fromAge}-${row.toAge ?? ''}:${row.amount}`);
+  const dualToggle = $('plan-compareBootstrap');
+  if (dualToggle && document.activeElement !== dualToggle) dualToggle.checked = Boolean(p.compareBootstrap);
   const bootToggle = $('plan-pathMode');
   if (bootToggle && document.activeElement !== bootToggle) bootToggle.checked = p.pathMode === 'bootstrap';
   const seed = $('plan-bootstrapSeed');
@@ -357,6 +377,12 @@ export function readPlanForm() {
       p.cashBucketYears = n == null ? true : n;
     }
   }
+  const lumps = $('plan-lumpSums');
+  if (lumps) p.lumpSums = retirement.parseLumpSums(lumps.value);
+  const segments = $('plan-otherIncomeSegments');
+  if (segments) p.otherIncomeSegments = retirement.parseIncomeSegments(segments.value);
+  const dualToggle = $('plan-compareBootstrap');
+  if (dualToggle) p.compareBootstrap = dualToggle.checked;
   const bootToggle = $('plan-pathMode');
   if (bootToggle) p.pathMode = bootToggle.checked ? 'bootstrap' : 'historical';
   const seed = $('plan-bootstrapSeed');
@@ -368,6 +394,13 @@ export function readPlanForm() {
   const guardrailEvery = $('plan-guardrailEvery');
   if (guardrailEvery && readInputNumber(guardrailEvery.value) != null) p.guardrailEvery = readInputNumber(guardrailEvery.value);
   return p;
+}
+
+function eventText(value, format) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.map(format).join(', ');
 }
 
 function rateMapText(value) {
@@ -387,6 +420,20 @@ export function renderPlanTimeline() {
     .forEach(t => $('planTimelineLabels').appendChild(el('span', '', t)));
   const strat = ({ fixed_real: '固定', guardrails: '護欄', vpw: 'VPW' })[p.withdrawalStrategy] || '固定';
   $('planChip').textContent = `${p.currentAge} 歲 · ${p.retireAge} 歲退休 · 至 ${p.endAge} 歲 · ${strat} · 年支出 ${money(p.annualSpending)}`;
+  const brief = $('planBrief');
+  if (brief) brief.textContent = planBriefText(p);
+}
+
+export function formatWan(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return String(Math.round((n / 10000) * 100) / 100);
+}
+
+export function planBriefText(p) {
+  if (!p) return '';
+  const cur = p.currency || '$';
+  return `現時${p.currentAge}歲，退休年齡${p.retireAge}歲，起始本金${cur}${formatWan(p.currentSavings)}萬，每月投入${cur}${formatWan(p.monthlyContribution)}萬，年支出${cur}${formatWan(p.annualSpending)}萬`;
 }
 
 const recalcPlanOnly = debounce(() => recalc({ markPrevious: false }), 350);

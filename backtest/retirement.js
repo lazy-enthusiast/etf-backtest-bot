@@ -33,6 +33,9 @@ export const DEFAULT_PLAN = {
   glideBondFloor: null,
   cashBucketYears: null,
   spendingCurve: 'flat',
+  lumpSums: [],
+  otherIncomeSegments: [],
+  compareBootstrap: false,
   dividendTax: false,
   dividendYields: {},
   dividendTaxRates: {},
@@ -123,7 +126,50 @@ export function normalizePlan(plan) {
     p.cashBucketYears = Number.isFinite(years) && years > 0 ? years : null;
   }
   p.spendingCurve = p.spendingCurve === 'declining' || p.spendingCurve === 'u_shape' ? p.spendingCurve : 'flat';
+  p.lumpSums = normalizeLumpSums(p.lumpSums);
+  p.otherIncomeSegments = normalizeIncomeSegments(p.otherIncomeSegments);
+  p.compareBootstrap = p.compareBootstrap === true || p.compareBootstrap === 'true';
   return p;
+}
+
+export function parseLumpSums(value) {
+  if (Array.isArray(value)) return value;
+  const out = [];
+  for (const part of String(value || '').split(/[,;\n]+/)) {
+    const match = part.trim().match(/^(\d+(?:\.\d+)?)\s*[:：]\s*(\d+(?:\.\d+)?)$/);
+    if (match) out.push({ age: Number(match[1]), amount: Number(match[2]) });
+  }
+  return out;
+}
+
+export function parseIncomeSegments(value) {
+  if (Array.isArray(value)) return value;
+  const out = [];
+  for (const part of String(value || '').split(/[,;\n]+/)) {
+    const match = part.trim().match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)?\s*[:：]\s*(\d+(?:\.\d+)?)$/);
+    if (!match) continue;
+    out.push({
+      fromAge: Number(match[1]),
+      toAge: match[2] == null || match[2] === '' ? null : Number(match[2]),
+      amount: Number(match[3])
+    });
+  }
+  return out;
+}
+
+function normalizeLumpSums(value) {
+  return parseLumpSums(value).map(row => ({
+    age: Math.round(Number(row?.age) || 0),
+    amount: Math.max(0, Number(row?.amount) || 0)
+  })).filter(row => row.age > 0 && row.amount > 0);
+}
+
+function normalizeIncomeSegments(value) {
+  return parseIncomeSegments(value).map(row => ({
+    fromAge: Math.round(Number(row?.fromAge) || 0),
+    toAge: row?.toAge == null || row?.toAge === '' || !Number.isFinite(Number(row.toAge)) ? null : Math.round(Number(row.toAge)),
+    amount: Math.max(0, Number(row?.amount) || 0)
+  })).filter(row => row.amount > 0);
 }
 
 function mulberry32(seed) {
@@ -643,10 +689,22 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
       if (taxMonthly) growth -= taxMonthly;
       const realReturn = growth - 1;
       const contrib = k < retireMonth ? contribution : 0;
-      const other = k >= incomeMonth ? income : 0;
+      let other = k >= incomeMonth ? income : 0;
+      if (p.otherIncomeSegments.length) {
+        const age = p.currentAge + k / 12;
+        for (const seg of p.otherIncomeSegments) {
+          if (age + 1e-9 >= seg.fromAge && (seg.toAge == null || age < seg.toAge - 1e-9)) other += seg.amount / 12;
+        }
+      }
       const inflow = contrib + other;
       if (trackLinear) base += inflow;
       balance += inflow;
+      if (p.lumpSums.length) {
+        for (const lump of p.lumpSums) {
+          if (k === (lump.age - p.currentAge) * 12) balance -= lump.amount;
+        }
+        if (balance < 0) balance = 0;
+      }
       let taxPaid = 0;
       if (dividendOn && balance > 0) {
         taxPaid = balance * dividend.monthlyRate;
@@ -1020,6 +1078,19 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       shaped: headlineOf(curved)
     };
   }
+  let bootstrapCompare = null;
+  if (p.compareBootstrap) {
+    const otherMode = p.pathMode === 'bootstrap' ? 'historical' : 'bootstrap';
+    const otherWalk = runLifePaths({ ...p, pathMode: otherMode, compareBootstrap: false }, returns, p.withdrawalStrategy, glide, dividend, fx, tax);
+    const otherRate = otherWalk.runs.filter(x => x.success).length / otherWalk.runs.length;
+    const historical = p.pathMode === 'bootstrap' ? otherRate : successCount / starts;
+    const bootstrap = p.pathMode === 'bootstrap' ? successCount / starts : otherRate;
+    bootstrapCompare = {
+      historical,
+      bootstrap,
+      robust: Math.abs(historical - bootstrap) <= 0.05 + 1e-12
+    };
+  }
   let dividendSpend = null;
   if (p.dividendTax && dividend?.monthlyRate > 0) {
     const plain = { ...p, dividendTax: false };
@@ -1091,6 +1162,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
     ...(glideCompare ? { glideCompare } : {}),
     ...(cashCompare ? { cashCompare } : {}),
     ...(curveCompare ? { curveCompare } : {}),
+    ...(bootstrapCompare ? { bootstrapCompare } : {}),
     dividendSpend,
     feeSpend,
     fxSpend,

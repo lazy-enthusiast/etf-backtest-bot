@@ -212,6 +212,7 @@ export function renderDashboard() {
   renderFxStress(cur);
   renderFxHighlight(cur);
   renderInflationLabel(cur);
+  renderDualEngine(cur);
   renderBootstrapHighlight(cur);
   renderFrequencyHighlight(cur);
   renderPathActions(cur);
@@ -229,6 +230,16 @@ function renderFrequencyHighlight(cur) {
     return;
   }
   node.textContent = `提領每 ${plan.withdrawEvery} 個月，護欄每 ${plan.guardrailEvery} 個月檢查`;
+  node.hidden = false;
+}
+
+function renderDualEngine(cur) {
+  const node = $('dualEngine');
+  const cmp = cur?.sim?.bootstrapCompare;
+  if (!node) return;
+  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
+  const tag = cmp.robust ? '，穩健' : '';
+  node.textContent = `歷史成功率 ${pct(cmp.historical, 1)}，拔靴成功率 ${pct(cmp.bootstrap, 1)}${tag}`;
   node.hidden = false;
 }
 
@@ -632,13 +643,20 @@ export function renderPerformance() {
     statBox('CAGR', pct(s.cagr, 2), ps && `上一版 ${pct(ps.cagr, 2)}`, s.cagr < 0),
     statBox('年化波動', pct(s.volatility, 2), ps && `上一版 ${pct(ps.volatility, 2)}`),
     statBox('最大回撤', pct(s.maxDrawdown, 2), `${s.peakDate} → ${s.troughDate}`, true),
-    statBox('Sharpe (rf=0)', num2(s.sharpe), ps && `上一版 ${num2(ps.sharpe)}`),
-    statBox('Sortino', num2(s.sortino)),
-    statBox('Calmar', num2(s.calmar)),
     statBox('累積倍數', `${growth >= 100 ? intFmt.format(growth) : growth.toFixed(1)}x`),
     statBox('回撤回復', s.recoveryDate || '尚未回復')
   );
   box.appendChild(grid);
+  const advanced = el('details', 'advanced-stats');
+  advanced.appendChild(el('summary', '', '進階'));
+  const advancedGrid = el('div', 'stat-grid');
+  advancedGrid.append(
+    statBox('Sharpe (rf=0)', num2(s.sharpe), ps && `上一版 ${num2(ps.sharpe)}`),
+    statBox('Sortino', num2(s.sortino)),
+    statBox('Calmar', num2(s.calmar))
+  );
+  advanced.appendChild(advancedGrid);
+  box.appendChild(advanced);
 
   const toggle = el('div', 'toggle-line');
   toggle.appendChild(el('b', '', '淨值曲線'));
@@ -696,6 +714,13 @@ export function renderPerformance() {
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: item => `${item.parsed.y.toFixed(2)}%${years[item.dataIndex].partial ? '（不完整年度）' : ''}` } } }
     }
   });
+  const yearTable = el('details');
+  yearTable.appendChild(el('summary', '', '逐年報酬表'));
+  yearTable.appendChild(table(['年', '報酬'], years.map(y => [
+    y.partial ? `${y.year}*` : String(y.year),
+    { text: pct(y.return, 2), neg: y.return < 0 }
+  ])));
+  box.appendChild(yearTable);
 }
 
 export function renderAssets() {
