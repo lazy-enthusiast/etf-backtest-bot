@@ -5,67 +5,97 @@ import { saveJSON } from './storage.js';
 import * as retirement from '../backtest/retirement.js';
 import { recalc } from './recalc.js';
 
+const COMPACT_LABEL = {
+  currentSavings: '現有資產',
+  monthlyContribution: '每月投入',
+  annualSpending: '年支出目標',
+  guardrailCeiling: '護欄上限',
+  guardrailFloor: '護欄下限',
+  guardrailAdjustPct: '觸發調整',
+  otherIncome: '其他收入',
+  otherIncomeAge: '收入年齡'
+};
+
+const PLAN_ROWS = [
+  { cols: 4, keys: ['currentAge', 'retireAge', 'endAge', 'currency'] },
+  { cols: 3, keys: ['currentSavings', 'monthlyContribution', 'annualSpending'] },
+  { cols: 1, keys: ['withdrawalStrategy'] },
+  { cols: 3, keys: ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct'], guardrail: true },
+  { cols: 2, keys: ['otherIncome', 'otherIncomeAge'] },
+  { cols: 1, keys: ['inflationMode'] },
+  { cols: 2, keys: ['inflationRate', 'feeRate'] }
+];
+
+function buildPlanField(f) {
+  const field = el('div', 'field' + (f.guardrail ? ' guardrail-only' : ''));
+  if (f.guardrail) field.dataset.guardrail = '1';
+  const shown = COMPACT_LABEL[f.key] || f.label;
+  const label = el('label', '', shown);
+  label.htmlFor = 'plan-' + f.key;
+  if (shown !== f.label) label.title = f.label;
+  if (f.guardrail && f.key === 'guardrailCeiling') {
+    label.title = '絕對提領率＝年提領額÷當下資產（例如 6＝6%）';
+  }
+  field.appendChild(label);
+
+  if (f.type === 'inflation') {
+    const seg = el('div', 'seg');
+    seg.id = 'plan-inflationMode';
+    [['cpi', '美國歷史 CPI'], ['fixed', '固定通膨假設']].forEach(([value, text]) => {
+      const b = el('button', '', text);
+      b.type = 'button';
+      b.dataset.value = value;
+      b.onclick = () => { state.plan.inflationMode = value; writePlanForm(); onPlanEdited(); };
+      seg.appendChild(b);
+    });
+    field.appendChild(seg);
+  } else if (f.type === 'withdrawal') {
+    const seg = el('div', 'seg');
+    seg.id = 'plan-withdrawalStrategy';
+    WITHDRAWAL_OPTIONS.forEach(({ value, label: text }) => {
+      const b = el('button', '', text);
+      b.type = 'button';
+      b.dataset.value = value;
+      b.title = retirement.WITHDRAWAL_STRATEGIES[value] || text;
+      b.onclick = () => { state.plan.withdrawalStrategy = value; writePlanForm(); onPlanEdited(); };
+      seg.appendChild(b);
+    });
+    field.appendChild(seg);
+  } else {
+    const wrap = el('div', 'input-wrap');
+    let input;
+    if (f.type === 'currency') {
+      input = el('select');
+      CURRENCIES.forEach(c => { const o = el('option', '', c); o.value = c; input.appendChild(o); });
+    } else {
+      input = el('input');
+      input.type = 'number';
+      input.step = f.step;
+      input.min = 0;
+      input.inputMode = 'decimal';
+    }
+    input.id = 'plan-' + f.key;
+    input.addEventListener('input', onPlanEdited);
+    input.addEventListener('change', onPlanEdited);
+    wrap.appendChild(input);
+    if (f.unit !== undefined || f.money) {
+      const unit = el('span', 'unit', f.money ? '' : f.unit);
+      unit.dataset.money = f.money ? f.unit : '';
+      wrap.appendChild(unit);
+    }
+    field.appendChild(wrap);
+  }
+  return field;
+}
+
 export function renderPlanForm() {
   const form = $('planForm');
   form.innerHTML = '';
-  for (const f of PLAN_FIELDS) {
-    const field = el('div', 'field' + (f.wide ? ' wide' : '') + (f.guardrail ? ' guardrail-only' : ''));
-    if (f.guardrail) field.dataset.guardrail = '1';
-    const label = el('label', '', f.label);
-    label.htmlFor = 'plan-' + f.key;
-    if (f.guardrail && f.key === 'guardrailCeiling') {
-      label.title = '絕對提領率＝年提領額÷當下資產（例如 6＝6%），不是相對初始提領率 +6%';
-    }
-    field.appendChild(label);
-
-    if (f.type === 'inflation') {
-      const seg = el('div', 'seg');
-      seg.id = 'plan-inflationMode';
-      [['cpi', '美國歷史 CPI'], ['fixed', '固定通膨假設']].forEach(([value, text]) => {
-        const b = el('button', '', text);
-        b.type = 'button';
-        b.dataset.value = value;
-        b.onclick = () => { state.plan.inflationMode = value; writePlanForm(); onPlanEdited(); };
-        seg.appendChild(b);
-      });
-      field.appendChild(seg);
-    } else if (f.type === 'withdrawal') {
-      const seg = el('div', 'seg');
-      seg.id = 'plan-withdrawalStrategy';
-      WITHDRAWAL_OPTIONS.forEach(({ value, label: text }) => {
-        const b = el('button', '', text);
-        b.type = 'button';
-        b.dataset.value = value;
-        b.title = retirement.WITHDRAWAL_STRATEGIES[value] || text;
-        b.onclick = () => { state.plan.withdrawalStrategy = value; writePlanForm(); onPlanEdited(); };
-        seg.appendChild(b);
-      });
-      field.appendChild(seg);
-    } else {
-      const wrap = el('div', 'input-wrap');
-      let input;
-      if (f.type === 'currency') {
-        input = el('select');
-        CURRENCIES.forEach(c => { const o = el('option', '', c); o.value = c; input.appendChild(o); });
-      } else {
-        input = el('input');
-        input.type = 'number';
-        input.step = f.step;
-        input.min = 0;
-        input.inputMode = 'decimal';
-      }
-      input.id = 'plan-' + f.key;
-      input.addEventListener('input', onPlanEdited);
-      input.addEventListener('change', onPlanEdited);
-      wrap.appendChild(input);
-      if (f.unit !== undefined || f.money) {
-        const unit = el('span', 'unit', f.money ? '' : f.unit);
-        unit.dataset.money = f.money ? f.unit : '';
-        wrap.appendChild(unit);
-      }
-      field.appendChild(wrap);
-    }
-    form.appendChild(field);
+  const byKey = Object.fromEntries(PLAN_FIELDS.map(f => [f.key, f]));
+  for (const rowDef of PLAN_ROWS) {
+    const row = el('div', 'plan-row cols-' + rowDef.cols + (rowDef.guardrail ? ' guardrail-row' : ''));
+    for (const key of rowDef.keys) row.appendChild(buildPlanField(byKey[key]));
+    form.appendChild(row);
   }
   form.appendChild(renderGlideFields());
 }

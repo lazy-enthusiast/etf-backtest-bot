@@ -314,6 +314,7 @@ export async function handleFileSelect(event) {
 
 export function renderAttachPreview() {
   const box = $('attachPreview');
+  if (!box) return;
   box.innerHTML = '';
   box.hidden = !pendingAttachment;
   if (!pendingAttachment) return;

@@ -36,7 +36,8 @@ export function writePortfolioForm(pf) {
   $('rebalance').value = pf.rebalance || 'annual';
   $('btStart').value = pf.start || '';
   $('btEnd').value = pf.end || '';
-  $('portfolioName').textContent = pf.name || '';
+  const nameEl = $('portfolioName');
+  if (nameEl) nameEl.textContent = pf.name || '';
   updateWeightBars();
 }
 
@@ -48,7 +49,7 @@ export function readPortfolioForm() {
     if (s && w > 0) holdings[s] = (holdings[s] || 0) + w;
   });
   return {
-    name: $('portfolioName').textContent || '自訂組合',
+    name: $('portfolioName')?.textContent || '自訂組合',
     holdings,
     rebalance: $('rebalance').value,
     start: $('btStart').value,
@@ -78,7 +79,8 @@ export function updateWeightBars() {
 }
 
 export function onPortfolioEdited() {
-  $('portfolioName').textContent = '自訂組合';
+  const nameEl = $('portfolioName');
+  if (nameEl) nameEl.textContent = '自訂組合';
   updateWeightBars();
   state.portfolio = readPortfolioForm();
   saveJSON(STORE.portfolio, state.portfolio);

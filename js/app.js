@@ -12,7 +12,7 @@ import { normalizePlan } from '../backtest/retirement.js';
 import { renderDashboard, renderActiveTab } from './dashboard.js';
 import {
   loadModels, newConversation, getActiveConv, renderConvSelect, renderMessages,
-  switchConversation, toggleConvMenu, changeModel, sendMessage, handleFileSelect,
+  switchConversation, toggleConvMenu, changeModel, sendMessage,
   conversations, toggleAdvSettings, updateAdvSettingsSummary
 } from './chat.js';
 import * as chat from './chat.js';
@@ -65,8 +65,6 @@ function bindUi() {
     if (btn.title === '更多') btn.addEventListener('click', e => toggleConvMenu(e));
   });
   $('modelSelect')?.addEventListener('change', () => changeModel());
-  $('attachBtn')?.addEventListener('click', () => $('fileInput').click());
-  $('fileInput')?.addEventListener('change', handleFileSelect);
   $('sendBtn')?.addEventListener('click', () => sendMessage());
 
   document.querySelectorAll('#tabs button').forEach(b => {
@@ -76,6 +74,7 @@ function bindUi() {
       renderActiveTab();
     });
   });
+  renderActiveTab();
 
   document.addEventListener('click', () => $('convMenu')?.querySelector('.menu')?.remove());
 
