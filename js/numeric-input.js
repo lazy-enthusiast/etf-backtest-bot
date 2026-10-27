@@ -1,4 +1,9 @@
-// 儀表板數字欄：手機用數字鍵盤，金額顯示千分位。計算一律用去掉逗號後的數字。
+// 儀表板數字欄：手機只出數字鍵盤，金額在輸入框裡顯示千分位。
+// 計算與 localStorage 用去掉逗號後的數字。空欄保持空，不寫 NaN。
+// iOS 對 type=text 預設開字母全鍵盤。inputmode 必須在使用者點到的那個元素上。
+// 舊版 iOS 還要整數欄的 pattern="[0-9]*" 才會改數字鍵盤。
+// 小數與金額不能加這個 pattern，否則沒有小數點。不要用 type=tel。
+// 不要留 min/step：那是 type=number 的屬性，留在文字欄上時 iOS 會忽略 inputmode。
 
 export function readInputNumber(value) {
   let out = '';
@@ -70,28 +75,73 @@ export function rewriteNumericField(input, { integer = false, money = false } = 
   }
 }
 
-export function bindNumericInput(input, { integer = false, money = false, min, max, step } = {}) {
+export function armNumericKeypad(input) {
+  const integer = input.dataset.numeric === 'integer';
   const mode = integer ? 'numeric' : 'decimal';
-  input.type = 'text';
+  input.setAttribute('type', 'text');
+  input.removeAttribute('min');
+  input.removeAttribute('max');
+  input.removeAttribute('step');
+  input.removeAttribute('autocorrect');
+  input.removeAttribute('autocapitalize');
+  input.removeAttribute('spellcheck');
+  if (integer) input.setAttribute('pattern', '[0-9]*');
+  else input.removeAttribute('pattern');
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('enterkeyhint', 'done');
   input.inputMode = mode;
   input.setAttribute('inputmode', mode);
-  input.autocomplete = 'off';
-  input.setAttribute('autocorrect', 'off');
-  input.setAttribute('autocapitalize', 'none');
-  input.spellcheck = false;
-  if (min != null) input.setAttribute('min', String(min));
-  if (max != null) input.setAttribute('max', String(max));
-  if (step != null) input.setAttribute('step', String(step));
+}
+
+function paintMoney(input) {
+  if (input.dataset.money !== '1') return;
+  const formatted = formatGroupedNumber(input.value);
+  if (formatted !== input.value) input.value = formatted;
+}
+
+function bindWrapTap(input) {
+  const attach = () => {
+    const wrap = input.closest('.input-wrap');
+    if (!wrap || wrap.dataset.keypadBound === '1') return;
+    wrap.dataset.keypadBound = '1';
+    const onTap = (event) => {
+      const field = wrap.querySelector('input[data-numeric]');
+      if (!field) return;
+      armNumericKeypad(field);
+      if (event.target !== field) field.focus();
+    };
+    wrap.addEventListener('pointerdown', onTap);
+    wrap.addEventListener('touchstart', onTap, { passive: true });
+  };
+  if (input.isConnected) attach();
+  else queueMicrotask(attach);
+}
+
+export function bindNumericInput(input, { integer = false, money = false } = {}) {
+  input.dataset.numeric = integer ? 'integer' : 'decimal';
+  if (money) input.dataset.money = '1';
+  armNumericKeypad(input);
   const opts = { integer, money };
+  const arm = () => armNumericKeypad(input);
+  input.addEventListener('pointerdown', arm);
+  input.addEventListener('touchstart', arm, { passive: true });
+  input.addEventListener('focus', () => {
+    arm();
+    paintMoney(input);
+  });
   input.addEventListener('input', (e) => {
     if (e.isComposing || input.dataset.rewriting === '1') return;
     input.dataset.rewriting = '1';
     rewriteNumericField(input, opts);
     delete input.dataset.rewriting;
   });
+  input.addEventListener('compositionend', () => {
+    rewriteNumericField(input, opts);
+  });
   input.addEventListener('blur', () => {
     const n = readInputNumber(input.value);
     if (n == null) { input.value = ''; return; }
     input.value = money ? formatGroupedNumber(n) : String(n);
   });
+  bindWrapTap(input);
 }
