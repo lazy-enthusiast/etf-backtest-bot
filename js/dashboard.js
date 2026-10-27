@@ -206,6 +206,7 @@ export function renderDashboard() {
   renderGlideHighlight(cur);
   renderTaxHighlight(cur);
   renderDividendHighlight(cur);
+  renderCurveHighlight(cur);
   renderCashHighlight(cur);
   renderFeeHighlight(cur);
   renderFxHighlight(cur);
@@ -256,6 +257,16 @@ function renderFxHighlight(cur) {
     const peg = cur.sim.fxStatus?.twd ? '' : '（港幣為 7.8 聯繫匯率假設）';
     node.textContent = `匯率：中位實際提出 ${compact(cur.sim.fxSpend.withFx)}，未換算 ${compact(cur.sim.fxSpend.withoutFx)}${peg}`;
   } else node.textContent = '匯率未套用。';
+  node.hidden = false;
+}
+
+function renderCurveHighlight(cur) {
+  const node = $('curveHighlight');
+  const cmp = cur?.sim?.curveCompare;
+  if (!node) return;
+  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
+  const side = (name, row) => `${name} 成功率 ${pct(row.successRate, 0)}、期末中位 ${compact(row.endBalanceP50)}、最差最低年支出 ${compact(row.worstMinSpend)}`;
+  node.textContent = `${cmp.label}：${cmp.note}。${side('固定', cmp.flat)}；${side('此曲線', cmp.shaped)}`;
   node.hidden = false;
 }
 

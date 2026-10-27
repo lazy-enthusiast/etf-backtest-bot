@@ -62,5 +62,6 @@ export const PLAN_LABELS = {
   withdrawEvery: '提領間隔',
   guardrailEvery: '護欄檢查間隔',
   cashBucketYears: '現金桶年數',
+  spendingCurve: '支出曲線',
   fxSeries: '台幣匯率序列'
 };

@@ -91,6 +91,7 @@ export function parsePlanBlock(text) {
   if (obj.pathMode === 'historical' || obj.pathMode === 'bootstrap') changes.pathMode = obj.pathMode;
   if (obj.bootstrapSeed !== undefined && Number.isFinite(Number(obj.bootstrapSeed))) changes.bootstrapSeed = Math.trunc(Number(obj.bootstrapSeed));
   if (obj.bootstrapBlock !== undefined && Number.isFinite(Number(obj.bootstrapBlock))) changes.bootstrapBlock = Number(obj.bootstrapBlock);
+  if (obj.spendingCurve === 'flat' || obj.spendingCurve === 'declining' || obj.spendingCurve === 'u_shape') changes.spendingCurve = obj.spendingCurve;
   if (obj.cashBucketYears === null || obj.cashBucketYears === false) changes.cashBucketYears = null;
   else if (obj.cashBucketYears === true) changes.cashBucketYears = true;
   else if (obj.cashBucketYears !== undefined && Number.isFinite(Number(obj.cashBucketYears))) changes.cashBucketYears = Number(obj.cashBucketYears);
@@ -121,6 +122,7 @@ export function formatPlanValue(key, v) {
   if (key === 'pathMode') return v === 'bootstrap' ? '拔靴' : '歷史起點';
   if (key === 'withdrawEvery' || key === 'guardrailEvery') return `${v} 個月`;
   if (key === 'cashBucketYears') return v == null || v === false ? '關' : (v === true ? '3 年' : `${v} 年`);
+  if (key === 'spendingCurve') return ({ flat: '固定', declining: '75歲後遞減', u_shape: '先降後升' })[v] || v;
   if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
   if (key === 'dividendYields' || key === 'dividendTaxRates') {
     return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');

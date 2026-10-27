@@ -190,6 +190,16 @@ function renderGlideFields() {
   series.rows = 2;
   series.placeholder = '台幣匯率（每 1 USD），例如 2000-01,32.5。沒有序列就不套用台幣。港幣用 7.8 聯繫匯率假設。';
   series.addEventListener('input', onPlanEdited);
+  const curve = el('select');
+  curve.id = 'plan-spendingCurve';
+  curve.title = '支出曲線。固定以外會跟固定結果並列，不取代成功率。';
+  for (const [value, label] of [['flat', '支出：固定'], ['declining', '支出：75歲後每年−1%'], ['u_shape', '支出：先降後升']]) {
+    const opt = el('option');
+    opt.value = value;
+    opt.textContent = label;
+    curve.appendChild(opt);
+  }
+  curve.addEventListener('change', onPlanEdited);
   const cashRow = el('label', 'check-row');
   const cashToggle = el('input');
   cashToggle.type = 'checkbox';
@@ -227,7 +237,7 @@ function renderGlideFields() {
   guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
   bindNumericInput(guardrailEvery, { integer: true, min: 1, max: 12, step: 1 });
   guardrailEvery.addEventListener('input', onPlanEdited);
-  box.append(row, tick, start, end, floor, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, cashRow, cashYears, bootRow, seed, block, withdrawEvery, guardrailEvery);
+  box.append(row, tick, start, end, floor, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, curve, cashRow, cashYears, bootRow, seed, block, withdrawEvery, guardrailEvery);
   return box;
 }
 
@@ -282,6 +292,8 @@ export function writePlanForm() {
   if (basket && document.activeElement !== basket) basket.value = rateMapText(p.spendingBasket);
   const series = $('plan-fxSeries');
   if (series && document.activeElement !== series) series.value = p.fxSeries || '';
+  const curve = $('plan-spendingCurve');
+  if (curve && document.activeElement !== curve) curve.value = p.spendingCurve || 'flat';
   const cashToggle = $('plan-cashBucket');
   if (cashToggle && document.activeElement !== cashToggle) cashToggle.checked = p.cashBucketYears != null && p.cashBucketYears !== false;
   const cashYears = $('plan-cashBucketYears');
@@ -334,6 +346,8 @@ export function readPlanForm() {
   if (basket) p.spendingBasket = basket.value;
   const series = $('plan-fxSeries');
   if (series) p.fxSeries = series.value;
+  const curve = $('plan-spendingCurve');
+  if (curve) p.spendingCurve = curve.value;
   const cashToggle = $('plan-cashBucket');
   const cashYears = $('plan-cashBucketYears');
   if (cashToggle) {

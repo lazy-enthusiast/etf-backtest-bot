@@ -32,6 +32,7 @@ export const DEFAULT_PLAN = {
   glideStockStart: null,
   glideBondFloor: null,
   cashBucketYears: null,
+  spendingCurve: 'flat',
   dividendTax: false,
   dividendYields: {},
   dividendTaxRates: {},
@@ -113,6 +114,7 @@ export function normalizePlan(plan) {
     const years = Number(p.cashBucketYears);
     p.cashBucketYears = Number.isFinite(years) && years > 0 ? years : null;
   }
+  p.spendingCurve = p.spendingCurve === 'declining' || p.spendingCurve === 'u_shape' ? p.spendingCurve : 'flat';
   return p;
 }
 
@@ -522,6 +524,23 @@ function resolveTaxDrag(taxDrag) {
   return { annual, active: Boolean(taxDrag.active) || annual > 0 };
 }
 
+export function spendingFactor(curve, age) {
+  const years = Number(age);
+  if (curve === 'declining') return years <= 75 ? 1 : 0.99 ** (years - 75);
+  if (curve === 'u_shape') {
+    if (years <= 65) return 1;
+    if (years <= 75) return 0.99 ** (years - 65);
+    return (0.99 ** 10) * (1.01 ** (years - 75));
+  }
+  return 1;
+}
+
+export function spendingCurveNote(curve) {
+  if (curve === 'declining') return '75 歲後實質支出每年 −1%';
+  if (curve === 'u_shape') return '65–75 歲每年 −1%，其後每年 +1%（醫療）';
+  return '';
+}
+
 function equityYearReturn(bucket, idx, months, length) {
   let growth = 1;
   for (let i = 0; i < months; i++) {
@@ -531,7 +550,7 @@ function equityYearReturn(bucket, idx, months, length) {
   return growth - 1;
 }
 
-function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null, bucket = null } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null, bucket = null, applyCurve = false } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -631,6 +650,7 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
       if (k >= retireMonth) {
         const beforeSpend = spendState.annualSpend;
         withdraw = monthWithdrawal(strategy, p, spendState, balance, k, retireMonth, totalMonths);
+        if (applyCurve) withdraw *= spendingFactor(p.spendingCurve, p.currentAge + k / 12);
         if (fxOn) {
           const twdW = fx.basket.TWD || 0;
           const indexed = twdW > 0 ? fx.twd.get(returns[idx].month) : null;
@@ -975,6 +995,23 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       after: headlineOf(withCash).worstMinSpend
     };
   }
+  let curveCompare = null;
+  if (p.spendingCurve === 'declining' || p.spendingCurve === 'u_shape') {
+    const curved = walkLife(p, returns, p.withdrawalStrategy, {
+      glide: p.glidePath ? glide : null,
+      dividend: p.dividendTax ? dividend : null,
+      feeParts: feeSplitParts(p),
+      fx: p.fxMode && fx && !fx.skipped ? fx : null,
+      taxDrag: tax,
+      applyCurve: true
+    });
+    curveCompare = {
+      label: '概念建議',
+      note: spendingCurveNote(p.spendingCurve),
+      flat: headlineOf(primary),
+      shaped: headlineOf(curved)
+    };
+  }
   let dividendSpend = null;
   if (p.dividendTax && dividend?.monthlyRate > 0) {
     const plain = { ...p, dividendTax: false };
@@ -1045,6 +1082,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
     glide: p.glidePath ? (primary.equityWeightRange || { skipped: true }) : null,
     ...(glideCompare ? { glideCompare } : {}),
     ...(cashCompare ? { cashCompare } : {}),
+    ...(curveCompare ? { curveCompare } : {}),
     dividendSpend,
     feeSpend,
     fxSpend,
