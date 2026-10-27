@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { $, el } from './dom.js';
 import { saveJSON } from './storage.js';
 import { normalizeSymbol, holdingSymbolError, SYMBOL_HINT } from '../backtest/symbols.js';
+import { bindNumericInput, readInputNumber } from './numeric-input.js';
 
 export function addHoldingRow(symbol, weight) {
   const row = el('div', 'holding');
@@ -13,8 +14,9 @@ export function addHoldingRow(symbol, weight) {
   // 不自動補 .US：裸代號留給 validateHoldings 攔截
   sym.value = normalizeSymbol(symbol);
   const w = el('input', 'w');
-  w.type = 'number'; w.min = 0; w.step = 1; w.placeholder = '%';
-  w.value = weight;
+  w.placeholder = '%';
+  bindNumericInput(w, { integer: false, min: 0, step: 1 });
+  w.value = weight ?? '';
   const x = el('button', 'x-btn', '✕');
   x.title = '移除';
   x.onclick = () => { row.remove(); onPortfolioEdited(); };
@@ -45,7 +47,7 @@ export function readPortfolioForm() {
   const holdings = {};
   document.querySelectorAll('#holdings .holding').forEach(row => {
     const s = normalizeSymbol(row.querySelector('.sym').value);
-    const w = Number(row.querySelector('.w').value);
+    const w = readInputNumber(row.querySelector('.w').value);
     if (s && w > 0) holdings[s] = (holdings[s] || 0) + w;
   });
   return {
@@ -68,9 +70,9 @@ export function validateHoldings(holdings) {
 
 export function updateWeightBars() {
   const rows = [...document.querySelectorAll('#holdings .holding')];
-  const total = rows.reduce((a, r) => a + (Number(r.querySelector('.w').value) || 0), 0);
+  const total = rows.reduce((a, r) => a + (readInputNumber(r.querySelector('.w').value) || 0), 0);
   rows.forEach(r => {
-    const w = Number(r.querySelector('.w').value) || 0;
+    const w = readInputNumber(r.querySelector('.w').value) || 0;
     r.querySelector('.bar span').style.width = total > 0 ? `${w / total * 100}%` : '0';
   });
   const off = Math.abs(total - 100) > 0.01;

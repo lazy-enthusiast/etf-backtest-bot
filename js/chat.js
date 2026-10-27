@@ -14,7 +14,8 @@ function toggleAdvisor(force) {
 }
 
 export let MODEL_NAMES = {};
-export let conversations = loadJSON(STORE.conversations, []).filter(c => c && c.id && Array.isArray(c.messages));
+const storedConversations = loadJSON(STORE.conversations, []);
+export let conversations = (Array.isArray(storedConversations) ? storedConversations : []).filter(c => c && c.id && Array.isArray(c.messages));
 export let activeId = localStorage.getItem(STORE.activeConv);
 export let pendingAttachment = null;
 
@@ -210,6 +211,7 @@ export function buildMessageEl(m, conv) {
   } else if (m.role === 'bot') {
     try { renderMarkdown(bubble, m.text || ''); }
     catch (e) { bubble.textContent = m.text || ''; }
+    if (m.interrupted) appendCutNote(bubble, m);
   } else {
     bubble.textContent = m.text ?? '';
   }
@@ -383,6 +385,63 @@ async function waitUntilVisible(node) {
 
 const MIN_THINKING_MS = 450;
 
+// Safari 用 "Load failed"，Chrome / Firefox 用 Failed to fetch、NetworkError。同一類連線中斷。
+function isBrowserNetworkDrop(raw) {
+  return /Failed to fetch|NetworkError|Load failed|network error/i.test(raw || '');
+}
+
+function connectionFailureText(raw, { sawHttp, sawSse }) {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  if (!sawSse && isBrowserNetworkDrop(raw)) {
+    if (local && !sawHttp) {
+      return `無法連上本機 Worker（127.0.0.1:8787）。請先在專案根目錄執行 npm run dev，或改用 GitHub Pages 線上版。（${raw}）`;
+    }
+    return `無法連上 AI Worker：${raw}`;
+  }
+  if (sawSse && !isBrowserNetworkDrop(raw)) return raw;
+  if (sawSse && isBrowserNetworkDrop(raw)) return `連線中斷，尚未收到回覆：${raw}`;
+  return raw;
+}
+
+function appendCutNote(bubble, m) {
+  const note = el('div', 'msg-note');
+  note.appendChild(document.createTextNode((m.interruptReason || '回覆傳到一半中斷了') + ' '));
+  const cont = el('button', '', '繼續');
+  cont.type = 'button';
+  cont.onclick = () => sendMessage('請繼續');
+  note.appendChild(cont);
+  bubble.appendChild(note);
+}
+
+async function presentSendFailure(conv, botMsg, bubble, { raw, sawHttp, sawSse, acc, authFailed, thinkingShownAt }) {
+  await holdThinking(thinkingShownAt);
+  if (acc) {
+    botMsg.pending = false;
+    botMsg.text = acc;
+    botMsg.interrupted = true;
+    botMsg.interruptReason = `回覆傳到一半中斷了：${raw}`;
+    try { saveConversations(); } catch (e) {}
+    try { renderMessages(); }
+    catch (e) {
+      if (bubble && bubble.isConnected) bubble.textContent = `${acc}\n${botMsg.interruptReason}`;
+    }
+    return;
+  }
+  const errorMsg = {
+    role: 'error',
+    text: '連線失敗：' + connectionFailureText(raw, { sawHttp, sawSse }),
+    pending: false,
+    time: Date.now()
+  };
+  const idx = conv.messages.lastIndexOf(botMsg);
+  if (idx >= 0) conv.messages[idx] = errorMsg;
+  else conv.messages.push(errorMsg);
+  if (bubble && bubble.isConnected) bubble.textContent = errorMsg.text;
+  try { saveConversations(); } catch (e) {}
+  try { renderMessages(); } catch (e) {}
+  if (authFailed) handleUnauthorized();
+}
+
 function holdThinking(since) {
   const wait = MIN_THINKING_MS - (performance.now() - since);
   return wait > 0 ? new Promise(resolve => setTimeout(resolve, wait)) : Promise.resolve();
@@ -398,7 +457,6 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
   let bubble = null;
   let waitEl = null;
   let thinkingShownAt = performance.now();
-  let sawHttp = false;
   let authFailed = false;
   try {
     try { renderMessages(); }
@@ -427,127 +485,141 @@ export async function doSend(conv, text, attachment, lastAiResponse, isFirst) {
     let backtestHash = '';
     try { backtestHash = await hashText(backtestContext); } catch (e) { backtestHash = ''; }
     const backtestUnchanged = !!(backtestHash && conv.lastBacktestHash && conv.lastBacktestHash === backtestHash);
-    const res = await fetch(WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
-      body: JSON.stringify({
-        query,
-        historySummary: conv.historySummary || '',
-        lastAiResponse,
-        model: conv.model,
-        attachment: attachment?.kind === 'binary' ? attachment : undefined,
-        backtestContext: backtestUnchanged ? undefined : backtestContext,
-        backtestUnchanged,
-        lastComplexity: Number.isFinite(conv.lastComplexity) ? conv.lastComplexity : undefined
-      })
-    });
-    sawHttp = true;
-    if (res.status === 401) {
-      authFailed = true;
-      throw new Error('密碼錯誤或已失效（HTTP 401）');
-    }
-    if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
-      const raw = await res.text().catch(() => '');
-      if (raw) {
-        try {
-          const body = JSON.parse(raw);
-          detail = explainError(body.error ?? body.message ?? body, detail);
-        } catch (e) {
-          detail = raw.slice(0, 300);
-        }
-        if (!detail.includes(String(res.status))) detail = `${detail}（HTTP ${res.status}）`;
-      }
-      throw new Error(detail);
-    }
-    if (!res.body) throw new Error(`Worker 沒有回傳串流內容（HTTP ${res.status}）`);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    let acc = '';
-    let pending = false;
-    let lastRender = 0;
-    const scheduleRender = () => {
-      if (pending) return;
-      pending = true;
-      requestAnimationFrame(() => {
-        if (bubble) {
-          try { renderMarkdown(bubble, acc); }
-          catch (e) { bubble.textContent = acc; }
-        }
-        if (box) box.scrollTop = box.scrollHeight;
-        pending = false;
-      });
-    };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
-        let json;
-        try { json = JSON.parse(t.slice(6)); } catch (e) { continue; }
-        if (json.error && !json.choices) throw new Error(explainError(json.error, 'Worker 回傳錯誤'));
-        if (json.type === 'status' && json.text && !acc) {
-          if (!waitEl && bubble) {
-            waitEl = el('div', 'wait-status', json.text);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let sawHttp = false;
+      let sawSse = false;
+      let acc = '';
+      try {
+        if (attempt > 1) {
+          botMsg.pending = true;
+          botMsg.text = '思考中…';
+          botMsg.interrupted = false;
+          delete botMsg.interruptReason;
+          if (bubble && bubble.isConnected) {
+            bubble.textContent = '';
+            bubble.appendChild(document.createTextNode('思考中…'));
+            waitEl = el('div', 'wait-status', '連線中斷，正在重試…');
             bubble.appendChild(waitEl);
-          } else if (waitEl) waitEl.textContent = json.text;
-          continue;
+          }
+          thinkingShownAt = performance.now();
         }
-        if (json.type === 'meta') {
-          if (json.history_summary) conv.historySummary = json.history_summary;
-          if (Number.isFinite(json.complexity)) conv.lastComplexity = json.complexity;
-          botMsg.usedModel = json.used_model || conv.model;
-          botMsg.complexity = json.complexity;
-          botMsg.taskTag = json.task_tag || '';
-          botMsg.summarizerRaw = json.raw_summary || '';
-          continue;
+        const res = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-App-Auth': getAuth() },
+          body: JSON.stringify({
+            query,
+            historySummary: conv.historySummary || '',
+            lastAiResponse,
+            model: conv.model,
+            attachment: attachment?.kind === 'binary' ? attachment : undefined,
+            backtestContext: backtestUnchanged ? undefined : backtestContext,
+            backtestUnchanged,
+            lastComplexity: Number.isFinite(conv.lastComplexity) ? conv.lastComplexity : undefined
+          })
+        });
+        sawHttp = true;
+        if (res.status === 401) {
+          authFailed = true;
+          throw new Error('密碼錯誤或已失效（HTTP 401）');
         }
-        const token = json.choices?.[0]?.delta?.content || '';
-        if (token) {
-          acc += token;
-          botMsg.pending = false;
-          botMsg.text = acc;
-          const now = Date.now();
-          if (now - lastRender >= 80) { lastRender = now; scheduleRender(); }
+        if (!res.ok) {
+          let detail = `HTTP ${res.status}`;
+          const rawBody = await res.text().catch(() => '');
+          if (rawBody) {
+            try {
+              const body = JSON.parse(rawBody);
+              detail = explainError(body.error ?? body.message ?? body, detail);
+            } catch (e) {
+              detail = rawBody.slice(0, 300);
+            }
+            if (!detail.includes(String(res.status))) detail = `${detail}（HTTP ${res.status}）`;
+          }
+          throw new Error(detail);
         }
+        if (!res.body) throw new Error(`Worker 沒有回傳串流內容（HTTP ${res.status}）`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let pending = false;
+        let lastRender = 0;
+        const scheduleRender = () => {
+          if (pending) return;
+          pending = true;
+          requestAnimationFrame(() => {
+            if (bubble) {
+              try { renderMarkdown(bubble, acc); }
+              catch (e) { bubble.textContent = acc; }
+            }
+            if (box) box.scrollTop = box.scrollHeight;
+            pending = false;
+          });
+        };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
+            sawSse = true;
+            let json;
+            try { json = JSON.parse(t.slice(6)); } catch (e) { continue; }
+            if (json.error && !json.choices) throw new Error(explainError(json.error, 'Worker 回傳錯誤'));
+            if (json.type === 'status' && json.text && !acc) {
+              if (!waitEl && bubble) {
+                waitEl = el('div', 'wait-status', json.text);
+                bubble.appendChild(waitEl);
+              } else if (waitEl) waitEl.textContent = json.text;
+              continue;
+            }
+            if (json.type === 'meta') {
+              if (json.history_summary) conv.historySummary = json.history_summary;
+              if (Number.isFinite(json.complexity)) conv.lastComplexity = json.complexity;
+              botMsg.usedModel = json.used_model || conv.model;
+              botMsg.complexity = json.complexity;
+              botMsg.taskTag = json.task_tag || '';
+              botMsg.summarizerRaw = json.raw_summary || '';
+              continue;
+            }
+            const token = json.choices?.[0]?.delta?.content || '';
+            if (token) {
+              acc += token;
+              botMsg.pending = false;
+              botMsg.text = acc;
+              const now = Date.now();
+              if (now - lastRender >= 80) { lastRender = now; scheduleRender(); }
+            }
+          }
+        }
+        if (!acc) throw new Error('模型沒有回傳內容');
+        botMsg.pending = false;
+        botMsg.text = acc;
+        botMsg.interrupted = false;
+        delete botMsg.interruptReason;
+        conv.lastBacktestHash = backtestHash;
+        saveConversations();
+        renderMessages();
+        try { await maybeAutoApplyControls(botMsg); } catch (e) { console.error(e); }
+        if (isFirst) fetchAutoTitle(conv, text, acc);
+        break;
+      } catch (err) {
+        const raw = explainError(err && err.message, String(err || '未知錯誤'));
+        // 串流已開始（HTTP 回應到了）但一個字都還沒到：Safari 的 Load failed 只自動重送一次。
+        if (attempt === 1 && !acc && sawHttp && !authFailed && isBrowserNetworkDrop(raw)) continue;
+        await presentSendFailure(conv, botMsg, bubble, { raw, sawHttp, sawSse, acc, authFailed, thinkingShownAt });
+        break;
       }
     }
-    if (!acc) throw new Error('模型沒有回傳內容');
-    botMsg.pending = false;
-    botMsg.text = acc;
-    conv.lastBacktestHash = backtestHash;
-    saveConversations();
-    renderMessages();
-    try { await maybeAutoApplyControls(botMsg); } catch (e) { console.error(e); }
-    if (isFirst) fetchAutoTitle(conv, text, acc);
   } catch (err) {
-    await holdThinking(thinkingShownAt);
     const raw = explainError(err && err.message, String(err || '未知錯誤'));
-    const fetchThrew = /Failed to fetch|NetworkError|Load failed|network error/i.test(raw);
-    let msg = raw;
-    if (!sawHttp && fetchThrew) {
-      const local = ['localhost', '127.0.0.1'].includes(location.hostname);
-      msg = local
-        ? '無法連上本機 Worker（127.0.0.1:8787）。請先在專案根目錄執行 npm run dev，或改用 GitHub Pages 線上版。'
-        : `無法連上 AI Worker：${raw}`;
-    } else if (sawHttp && fetchThrew) {
-      msg = `回覆傳到一半中斷了：${raw}`;
-    }
-    const errorMsg = { role: 'error', text: '連線失敗：' + msg, pending: false, time: Date.now() };
-    const idx = conv.messages.lastIndexOf(botMsg);
-    if (idx >= 0) conv.messages[idx] = errorMsg;
-    else conv.messages.push(errorMsg);
-    if (bubble && bubble.isConnected) bubble.textContent = errorMsg.text;
-    try { saveConversations(); } catch (e) {}
-    try { renderMessages(); } catch (e) {}
-    if (authFailed) handleUnauthorized();
+    await presentSendFailure(conv, botMsg, bubble, {
+      raw, sawHttp: false, sawSse: false, acc: '', authFailed, thinkingShownAt
+    });
   } finally {
     state.isSending = false;
     if (sendBtn) sendBtn.disabled = false;

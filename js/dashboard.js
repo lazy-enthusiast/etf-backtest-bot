@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -97,8 +97,8 @@ function renderPhaseYield(phases, cagr) {
     return;
   }
   const assumption = accumText
-    ? '實質報酬。累積：現有資產＋每月投入，長到退休時中位資產。提領：由該資產支付淨支出至終點，允許花完本金。'
-    : '實質報酬。提領：由現有資產支付淨支出至終點，允許花完本金。';
+    ? '名目報酬。累積：現有資產＋每月投入，長到退休時中位資產。提領：由該資產支付淨支出至終點，允許花完本金。'
+    : '名目報酬。提領：由現有資產支付淨支出至終點，允許花完本金。';
   subEl.append(document.createTextNode(assumption));
   if (Number.isFinite(cagr)) {
     subEl.append(document.createElement('br'), document.createTextNode(`對照組合歷史名目 CAGR ${pct(cagr)}（口徑不同，僅供參考）`));
@@ -177,7 +177,8 @@ export function renderDashboard() {
   }
   setDelta('kpiWithdrawDelta', initRate, prev?.initialWithdrawalRate, x => pct(x), false);
 
-  // 所需報酬分兩段：累積到退休時中位資產，以及退休後花到終點（允許花完本金）。不是支出÷資產。
+  // 所需報酬（名目）分兩段：累積到退休時中位資產，以及退休後花到終點（允許花完本金）。不是支出÷資產。
+  setText('kpiYieldLabel', REQUIRED_RETURN_LABEL);
   const nestEgg = atRetire?.p50;
   const alreadyRetired = plan.retireAge <= plan.currentAge || !Number.isFinite(nestEgg);
   const phases = requiredPhaseReturns(plan, { nestEgg, alreadyRetired });
@@ -192,7 +193,101 @@ export function renderDashboard() {
   setDelta('kpiYieldDelta', deltaCur, deltaPrev, x => pct(x), false);
 
   renderFanChart(cur, c);
+  renderPathHighlights(cur);
+  renderGlideHighlight(cur);
+  renderDividendHighlight(cur);
+  renderFeeHighlight(cur);
+  renderFxHighlight(cur);
+  renderInflationLabel(cur);
+  renderBootstrapHighlight(cur);
+  renderFrequencyHighlight(cur);
   renderActiveTab();
+}
+
+function renderFrequencyHighlight(cur) {
+  const node = $('frequencyHighlight');
+  const plan = cur?.plan;
+  if (!node) return;
+  if (!plan || (plan.withdrawEvery === 1 && plan.guardrailEvery === 12)) {
+    node.hidden = true;
+    node.textContent = '';
+    return;
+  }
+  node.textContent = `提領每 ${plan.withdrawEvery} 個月，護欄每 ${plan.guardrailEvery} 個月檢查`;
+  node.hidden = false;
+}
+
+function renderBootstrapHighlight(cur) {
+  const node = $('bootstrapHighlight');
+  if (!node) return;
+  if (cur?.plan?.pathMode !== 'bootstrap') { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = `拔靴：${cur.plan.bootstrapBlock} 個月區塊，種子 ${cur.plan.bootstrapSeed}`;
+  node.hidden = false;
+}
+
+function renderInflationLabel(cur) {
+  const node = $('inflationLabel');
+  if (!node) return;
+  if (!cur?.plan) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = inflationLabel(cur.plan, cur.cpiFallbackMonths);
+  node.hidden = false;
+}
+
+function renderFxHighlight(cur) {
+  const node = $('fxHighlight');
+  if (!node) return;
+  if (!cur?.plan?.fxMode) { node.hidden = true; node.textContent = ''; return; }
+  if (cur.sim?.fxStatus?.skipped === 'twd') {
+    node.textContent = '台幣支出需要匯率序列，這次沒有套用。';
+  } else if (cur.sim?.fxSpend) {
+    const peg = cur.sim.fxStatus?.twd ? '' : '（港幣為 7.8 聯繫匯率假設）';
+    node.textContent = `匯率：中位實際提出 ${compact(cur.sim.fxSpend.withFx)}，未換算 ${compact(cur.sim.fxSpend.withoutFx)}${peg}`;
+  } else node.textContent = '匯率未套用。';
+  node.hidden = false;
+}
+
+function renderFeeHighlight(cur) {
+  const node = $('feeHighlight');
+  if (!node) return;
+  if (!cur?.plan?.feeSplit) { node.hidden = true; node.textContent = ''; return; }
+  const cmp = cur.sim?.feeSpend;
+  node.textContent = cmp
+    ? `費用拆分：中位實際提出 ${compact(cmp.withSplit)}，未拆分 ${compact(cmp.withoutSplit)}`
+    : '費用拆分已取代單一費用率。';
+  node.hidden = false;
+}
+
+function renderDividendHighlight(cur) {
+  const node = $('dividendHighlight');
+  if (!node) return;
+  if (!cur?.plan?.dividendTax) { node.hidden = true; node.textContent = ''; return; }
+  const cmp = cur.sim?.dividendSpend;
+  node.textContent = cmp
+    ? `股息稅：中位實際提出 ${compact(cmp.withTax)}，未扣稅 ${compact(cmp.withoutTax)}`
+    : '股息稅未套用：請給假設殖利率與註冊地稅率。';
+  node.hidden = false;
+}
+
+function renderGlideHighlight(cur) {
+  const node = $('glideHighlight');
+  const glide = cur?.sim?.glide;
+  if (!node) return;
+  if (!glide) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = glide.skipped || !Number.isFinite(glide.min)
+    ? '下滑路徑未套用：請同時標示股票代號與其他持倉。'
+    : `實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`;
+  node.hidden = false;
+}
+
+function renderPathHighlights(cur) {
+  const node = $('pathHighlights');
+  const brief = cur?.sim?.spendingBrief;
+  if (!node) return;
+  if (!brief?.tightest) { node.hidden = true; node.textContent = ''; return; }
+  const lines = [`最緊的一年：${brief.tightest.age} 歲實質支出 ${compact(brief.tightest.spending)}`];
+  if (brief.guardrail) lines.push(`護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`);
+  node.textContent = lines.join('\n');
+  node.hidden = false;
 }
 
 const retireLinePlugin = {

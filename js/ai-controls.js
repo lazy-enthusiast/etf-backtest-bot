@@ -52,6 +52,28 @@ export function parsePlanBlock(text) {
   for (const k of ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
+  if (obj.glidePath === true || obj.glidePath === false) changes.glidePath = obj.glidePath;
+  if (Array.isArray(obj.equityTickers) || typeof obj.equityTickers === 'string') changes.equityTickers = obj.equityTickers;
+  if (obj.glideEquityEnd === null) changes.glideEquityEnd = null;
+  else if (obj.glideEquityEnd !== undefined && Number.isFinite(Number(obj.glideEquityEnd))) changes.glideEquityEnd = Number(obj.glideEquityEnd);
+  if (obj.dividendTax === true || obj.dividendTax === false) changes.dividendTax = obj.dividendTax;
+  if (obj.dividendYields && typeof obj.dividendYields === 'object') changes.dividendYields = obj.dividendYields;
+  else if (typeof obj.dividendYields === 'string') changes.dividendYields = obj.dividendYields;
+  if (obj.dividendTaxRates && typeof obj.dividendTaxRates === 'object') changes.dividendTaxRates = obj.dividendTaxRates;
+  else if (typeof obj.dividendTaxRates === 'string') changes.dividendTaxRates = obj.dividendTaxRates;
+  if (obj.feeSplit === true || obj.feeSplit === false) changes.feeSplit = obj.feeSplit;
+  if (obj.fxMode === true || obj.fxMode === false) changes.fxMode = obj.fxMode;
+  if (obj.spendingBasket && typeof obj.spendingBasket === 'object') changes.spendingBasket = obj.spendingBasket;
+  else if (typeof obj.spendingBasket === 'string') changes.spendingBasket = obj.spendingBasket;
+  if (obj.pathMode === 'historical' || obj.pathMode === 'bootstrap') changes.pathMode = obj.pathMode;
+  if (obj.bootstrapSeed !== undefined && Number.isFinite(Number(obj.bootstrapSeed))) changes.bootstrapSeed = Math.trunc(Number(obj.bootstrapSeed));
+  if (obj.bootstrapBlock !== undefined && Number.isFinite(Number(obj.bootstrapBlock))) changes.bootstrapBlock = Number(obj.bootstrapBlock);
+  for (const k of ['withdrawEvery', 'guardrailEvery']) {
+    if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
+  }
+  for (const k of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
+    if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
+  }
   if (!Object.keys(changes).length) return null;
   return { note: typeof obj.note === 'string' ? obj.note.slice(0, 80) : '', changes };
 }
@@ -64,6 +86,18 @@ export function formatPlanValue(key, v) {
     return ({ fixed_real: '固定實質', guardrails: '護欄法', vpw: 'VPW' })[v] || v;
   }
   if (key.endsWith('Age')) return `${v} 歲`;
+  if (key === 'glidePath') return v ? '開' : '關';
+  if (key === 'equityTickers') return Array.isArray(v) ? v.join('、') : String(v || '');
+  if (key === 'glideEquityEnd') return v == null || v === '' ? '維持目前' : `${v}%`;
+  if (key === 'dividendTax') return v ? '開' : '關';
+  if (key === 'feeSplit' || key === 'fxMode') return v ? '開' : '關';
+  if (key === 'spendingBasket') return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
+  if (key === 'pathMode') return v === 'bootstrap' ? '拔靴' : '歷史起點';
+  if (key === 'withdrawEvery' || key === 'guardrailEvery') return `${v} 個月`;
+  if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
+  if (key === 'dividendYields' || key === 'dividendTaxRates') {
+    return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
+  }
   return String(v);
 }
 

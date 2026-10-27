@@ -301,6 +301,10 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
     assets,
     correlation: correlationMatrix(holdings.map(h => h.symbol), monthlyAssetReturns),
     equityMonthly: monthly,
+    assetMonthly: holdings.map((h, j) => ({
+      symbol: h.symbol,
+      series: lastPerMonth(dates.map((d, i) => [d, levels[j][i]]))
+    })),
     warnings
   };
 }

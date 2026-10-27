@@ -4,6 +4,108 @@ import { $, el, money, debounce } from './dom.js';
 import { saveJSON } from './storage.js';
 import * as retirement from '../backtest/retirement.js';
 import { recalc } from './recalc.js';
+import { bindNumericInput, formatGroupedNumber, readInputNumber } from './numeric-input.js';
+
+function readNum(value, fallback = 0) {
+  const n = readInputNumber(value);
+  return n == null ? fallback : n;
+}
+
+function usesIntegerKeypad(f) {
+  if (f.money) return false;
+  if (typeof f.unit === 'string' && f.unit.includes('%')) return false;
+  return Number.isInteger(Number(f.step));
+}
+
+function shownNumber(value, asMoney) {
+  if (value == null || value === '') return '';
+  return asMoney ? formatGroupedNumber(value) : String(value);
+}
+
+const COMPACT_LABEL = {
+  currentSavings: '現有資產',
+  monthlyContribution: '每月投入',
+  annualSpending: '年支出目標',
+  guardrailCeiling: '護欄上限',
+  guardrailFloor: '護欄下限',
+  guardrailAdjustPct: '觸發調整',
+  otherIncome: '其他收入',
+  otherIncomeAge: '收入年齡'
+};
+
+const PLAN_ROWS = [
+  { cols: 4, keys: ['currentAge', 'retireAge', 'endAge', 'currency'] },
+  { cols: 3, keys: ['currentSavings', 'monthlyContribution', 'annualSpending'] },
+  { cols: 1, keys: ['withdrawalStrategy'] },
+  { cols: 3, keys: ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct'], guardrail: true },
+  { cols: 2, keys: ['otherIncome', 'otherIncomeAge'] },
+  { cols: 1, keys: ['inflationMode'] },
+  { cols: 2, keys: ['inflationRate', 'feeRate'] }
+];
+
+function buildPlanField(f) {
+  const field = el('div', 'field' + (f.guardrail ? ' guardrail-only' : ''));
+  if (f.guardrail) field.dataset.guardrail = '1';
+  const shown = COMPACT_LABEL[f.key] || f.label;
+  const label = el('label', '', shown);
+  label.htmlFor = 'plan-' + f.key;
+  if (shown !== f.label) label.title = f.label;
+  if (f.guardrail && f.key === 'guardrailCeiling') {
+    label.title = '絕對提領率＝年提領額÷當下資產（例如 6＝6%）';
+  }
+  field.appendChild(label);
+
+  if (f.type === 'inflation') {
+    const seg = el('div', 'seg');
+    seg.id = 'plan-inflationMode';
+    [['cpi', '美國歷史 CPI'], ['fixed', '固定通膨假設']].forEach(([value, text]) => {
+      const b = el('button', '', text);
+      b.type = 'button';
+      b.dataset.value = value;
+      b.onclick = () => { state.plan.inflationMode = value; writePlanForm(); onPlanEdited(); };
+      seg.appendChild(b);
+    });
+    field.appendChild(seg);
+  } else if (f.type === 'withdrawal') {
+    const seg = el('div', 'seg');
+    seg.id = 'plan-withdrawalStrategy';
+    WITHDRAWAL_OPTIONS.forEach(({ value, label: text }) => {
+      const b = el('button', '', text);
+      b.type = 'button';
+      b.dataset.value = value;
+      b.title = retirement.WITHDRAWAL_STRATEGIES[value] || text;
+      b.onclick = () => { state.plan.withdrawalStrategy = value; writePlanForm(); onPlanEdited(); };
+      seg.appendChild(b);
+    });
+    field.appendChild(seg);
+  } else {
+    const wrap = el('div', 'input-wrap');
+    let input;
+    if (f.type === 'currency') {
+      input = el('select');
+      CURRENCIES.forEach(c => { const o = el('option', '', c); o.value = c; input.appendChild(o); });
+    } else {
+      input = el('input');
+      bindNumericInput(input, {
+        integer: usesIntegerKeypad(f),
+        money: Boolean(f.money),
+        min: 0,
+        step: f.step
+      });
+    }
+    input.id = 'plan-' + f.key;
+    input.addEventListener('input', onPlanEdited);
+    input.addEventListener('change', onPlanEdited);
+    wrap.appendChild(input);
+    if (f.unit !== undefined || f.money) {
+      const unit = el('span', 'unit', f.money ? '' : f.unit);
+      unit.dataset.money = f.money ? f.unit : '';
+      wrap.appendChild(unit);
+    }
+    field.appendChild(wrap);
+  }
+  return field;
+}
 
 const COMPACT_LABEL = {
   currentSavings: '現有資產',
@@ -97,6 +199,98 @@ export function renderPlanForm() {
     for (const key of rowDef.keys) row.appendChild(buildPlanField(byKey[key]));
     form.appendChild(row);
   }
+  form.appendChild(renderGlideFields());
+}
+
+function renderGlideFields() {
+  const box = el('details', 'advanced-plan');
+  box.appendChild(el('summary', '', '進階（預設關閉）'));
+  const row = el('label', 'check-row');
+  const toggle = el('input');
+  toggle.type = 'checkbox';
+  toggle.id = 'plan-glidePath';
+  toggle.addEventListener('change', onPlanEdited);
+  row.append(toggle, document.createTextNode(' 啟用下滑路徑'));
+  const tick = el('input');
+  tick.id = 'plan-equityTickers';
+  tick.placeholder = '股票代號，例如 VTI.US';
+  tick.addEventListener('input', onPlanEdited);
+  const end = el('input');
+  end.id = 'plan-glideEquityEnd';
+  end.placeholder = '期末股權重 %，空白＝維持目前';
+  bindNumericInput(end, { integer: false, min: 0, max: 100, step: 1 });
+  end.addEventListener('input', onPlanEdited);
+  const taxRow = el('label', 'check-row');
+  const taxToggle = el('input');
+  taxToggle.type = 'checkbox';
+  taxToggle.id = 'plan-dividendTax';
+  taxToggle.addEventListener('change', onPlanEdited);
+  taxRow.append(taxToggle, document.createTextNode(' 股息稅（需另給假設殖利率）'));
+  const yields = el('input');
+  yields.id = 'plan-dividendYields';
+  yields.placeholder = '假設年殖利率，例如 VTI.US:1.6 或 US:1.6';
+  yields.addEventListener('input', onPlanEdited);
+  const rates = el('input');
+  rates.id = 'plan-dividendTaxRates';
+  rates.placeholder = '註冊地稅率 %，例如 US:30, L:15, HK:0';
+  rates.addEventListener('input', onPlanEdited);
+  const feeRow = el('label', 'check-row');
+  const feeToggle = el('input');
+  feeToggle.type = 'checkbox';
+  feeToggle.id = 'plan-feeSplit';
+  feeToggle.addEventListener('change', onPlanEdited);
+  feeRow.append(feeToggle, document.createTextNode(' 拆開費用（取代單一費用率）'));
+  const feeInputs = ['ter', 'turnover', 'turnoverCost', 'fxSpread'].map(key => {
+    const input = el('input');
+    input.id = 'plan-' + key;
+    input.placeholder = ({ ter: 'TER %/年', turnover: '年換手 %', turnoverCost: '換手單邊成本 %', fxSpread: '匯率價差 %/年' })[key];
+    bindNumericInput(input, { integer: false, min: 0, step: 0.05 });
+    input.addEventListener('input', onPlanEdited);
+    return input;
+  });
+  const fxRow = el('label', 'check-row');
+  const fxToggle = el('input');
+  fxToggle.type = 'checkbox';
+  fxToggle.id = 'plan-fxMode';
+  fxToggle.addEventListener('change', onPlanEdited);
+  fxRow.append(fxToggle, document.createTextNode(' 支出匯率（預設關）'));
+  const basket = el('input');
+  basket.id = 'plan-spendingBasket';
+  basket.placeholder = '支出籃，空白＝100% 計劃幣別，例如 HKD:80, TWD:20';
+  basket.addEventListener('input', onPlanEdited);
+  const series = el('textarea');
+  series.id = 'plan-fxSeries';
+  series.rows = 2;
+  series.placeholder = '台幣匯率（每 1 USD），例如 2000-01,32.5。沒有序列就不套用台幣。港幣用 7.8 聯繫匯率假設。';
+  series.addEventListener('input', onPlanEdited);
+  const bootRow = el('label', 'check-row');
+  const bootToggle = el('input');
+  bootToggle.type = 'checkbox';
+  bootToggle.id = 'plan-pathMode';
+  bootToggle.addEventListener('change', onPlanEdited);
+  bootRow.append(bootToggle, document.createTextNode(' 區塊拔靴（額外模式，預設關）'));
+  const seed = el('input');
+  seed.id = 'plan-bootstrapSeed';
+  seed.placeholder = '種子';
+  bindNumericInput(seed, { integer: true, step: 1 });
+  seed.addEventListener('input', onPlanEdited);
+  const block = el('input');
+  block.id = 'plan-bootstrapBlock';
+  block.placeholder = '區塊月數';
+  bindNumericInput(block, { integer: true, min: 1, max: 120, step: 1 });
+  block.addEventListener('input', onPlanEdited);
+  const withdrawEvery = el('input');
+  withdrawEvery.id = 'plan-withdrawEvery';
+  withdrawEvery.placeholder = '提領間隔月數，1＝每月';
+  bindNumericInput(withdrawEvery, { integer: true, min: 1, max: 12, step: 1 });
+  withdrawEvery.addEventListener('input', onPlanEdited);
+  const guardrailEvery = el('input');
+  guardrailEvery.id = 'plan-guardrailEvery';
+  guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
+  bindNumericInput(guardrailEvery, { integer: true, min: 1, max: 12, step: 1 });
+  guardrailEvery.addEventListener('input', onPlanEdited);
+  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block, withdrawEvery, guardrailEvery);
+  return box;
 }
 
 export function writePlanForm() {
@@ -111,7 +305,7 @@ export function writePlanForm() {
       continue;
     }
     const input = $('plan-' + f.key);
-    if (document.activeElement !== input) input.value = p[f.key];
+    if (document.activeElement !== input) input.value = f.type === 'currency' ? p[f.key] : shownNumber(p[f.key], f.money);
   }
   document.querySelectorAll('#planForm .unit').forEach(u => {
     if (u.dataset.money !== '') u.textContent = `${p.currency}${u.dataset.money}`;
@@ -120,6 +314,42 @@ export function writePlanForm() {
   document.querySelectorAll('#planForm .field[data-guardrail]').forEach(f => {
     f.hidden = !showGuard;
   });
+  const glideToggle = $('plan-glidePath');
+  if (glideToggle && document.activeElement !== glideToggle) glideToggle.checked = Boolean(p.glidePath);
+  const tickers = $('plan-equityTickers');
+  if (tickers && document.activeElement !== tickers) {
+    tickers.value = Array.isArray(p.equityTickers) ? p.equityTickers.join(', ') : (p.equityTickers || '');
+  }
+  const glideEnd = $('plan-glideEquityEnd');
+  if (glideEnd && document.activeElement !== glideEnd) glideEnd.value = p.glideEquityEnd == null ? '' : p.glideEquityEnd;
+  const taxToggle = $('plan-dividendTax');
+  if (taxToggle && document.activeElement !== taxToggle) taxToggle.checked = Boolean(p.dividendTax);
+  const yields = $('plan-dividendYields');
+  if (yields && document.activeElement !== yields) yields.value = rateMapText(p.dividendYields);
+  const rates = $('plan-dividendTaxRates');
+  if (rates && document.activeElement !== rates) rates.value = rateMapText(p.dividendTaxRates);
+  const feeToggle = $('plan-feeSplit');
+  if (feeToggle && document.activeElement !== feeToggle) feeToggle.checked = Boolean(p.feeSplit);
+  for (const key of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
+    const input = $('plan-' + key);
+    if (input && document.activeElement !== input) input.value = p[key] ?? '';
+  }
+  const fxToggle = $('plan-fxMode');
+  if (fxToggle && document.activeElement !== fxToggle) fxToggle.checked = Boolean(p.fxMode);
+  const basket = $('plan-spendingBasket');
+  if (basket && document.activeElement !== basket) basket.value = rateMapText(p.spendingBasket);
+  const series = $('plan-fxSeries');
+  if (series && document.activeElement !== series) series.value = p.fxSeries || '';
+  const bootToggle = $('plan-pathMode');
+  if (bootToggle && document.activeElement !== bootToggle) bootToggle.checked = p.pathMode === 'bootstrap';
+  const seed = $('plan-bootstrapSeed');
+  if (seed && document.activeElement !== seed) seed.value = p.bootstrapSeed ?? 1;
+  const block = $('plan-bootstrapBlock');
+  if (block && document.activeElement !== block) block.value = p.bootstrapBlock ?? 12;
+  const withdrawEvery = $('plan-withdrawEvery');
+  if (withdrawEvery && document.activeElement !== withdrawEvery) withdrawEvery.value = p.withdrawEvery ?? 1;
+  const guardrailEvery = $('plan-guardrailEvery');
+  if (guardrailEvery && document.activeElement !== guardrailEvery) guardrailEvery.value = p.guardrailEvery ?? 12;
   renderPlanTimeline();
 }
 
@@ -128,9 +358,49 @@ export function readPlanForm() {
   for (const f of PLAN_FIELDS) {
     if (f.type === 'inflation' || f.type === 'withdrawal') continue;
     const v = $('plan-' + f.key).value;
-    p[f.key] = f.type === 'currency' ? v : (v === '' ? 0 : Number(v));
+    p[f.key] = f.type === 'currency' ? v : readNum(v, 0);
   }
+  const glideToggle = $('plan-glidePath');
+  if (glideToggle) p.glidePath = glideToggle.checked;
+  const tickers = $('plan-equityTickers');
+  if (tickers) p.equityTickers = tickers.value;
+  const glideEnd = $('plan-glideEquityEnd');
+  if (glideEnd) p.glideEquityEnd = readInputNumber(glideEnd.value);
+  const taxToggle = $('plan-dividendTax');
+  if (taxToggle) p.dividendTax = taxToggle.checked;
+  const yields = $('plan-dividendYields');
+  if (yields) p.dividendYields = yields.value;
+  const rates = $('plan-dividendTaxRates');
+  if (rates) p.dividendTaxRates = rates.value;
+  const feeToggle = $('plan-feeSplit');
+  if (feeToggle) p.feeSplit = feeToggle.checked;
+  for (const key of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
+    const input = $('plan-' + key);
+    if (input) p[key] = readNum(input.value, 0);
+  }
+  const fxToggle = $('plan-fxMode');
+  if (fxToggle) p.fxMode = fxToggle.checked;
+  const basket = $('plan-spendingBasket');
+  if (basket) p.spendingBasket = basket.value;
+  const series = $('plan-fxSeries');
+  if (series) p.fxSeries = series.value;
+  const bootToggle = $('plan-pathMode');
+  if (bootToggle) p.pathMode = bootToggle.checked ? 'bootstrap' : 'historical';
+  const seed = $('plan-bootstrapSeed');
+  if (seed && readInputNumber(seed.value) != null) p.bootstrapSeed = readInputNumber(seed.value);
+  const block = $('plan-bootstrapBlock');
+  if (block && readInputNumber(block.value) != null) p.bootstrapBlock = readInputNumber(block.value);
+  const withdrawEvery = $('plan-withdrawEvery');
+  if (withdrawEvery && readInputNumber(withdrawEvery.value) != null) p.withdrawEvery = readInputNumber(withdrawEvery.value);
+  const guardrailEvery = $('plan-guardrailEvery');
+  if (guardrailEvery && readInputNumber(guardrailEvery.value) != null) p.guardrailEvery = readInputNumber(guardrailEvery.value);
   return p;
+}
+
+function rateMapText(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return Object.entries(value).map(([k, n]) => `${k}:${n}`).join(', ');
 }
 
 export function renderPlanTimeline() {
