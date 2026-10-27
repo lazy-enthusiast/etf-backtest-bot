@@ -4,6 +4,23 @@ import { $, el, money, debounce } from './dom.js';
 import { saveJSON } from './storage.js';
 import * as retirement from '../backtest/retirement.js';
 import { recalc } from './recalc.js';
+import { bindNumericInput, formatGroupedNumber, readInputNumber } from './numeric-input.js';
+
+function readNum(value, fallback = 0) {
+  const n = readInputNumber(value);
+  return n == null ? fallback : n;
+}
+
+function usesIntegerKeypad(f) {
+  if (f.money) return false;
+  if (typeof f.unit === 'string' && f.unit.includes('%')) return false;
+  return Number.isInteger(Number(f.step));
+}
+
+function shownNumber(value, asMoney) {
+  if (value == null || value === '') return '';
+  return asMoney ? formatGroupedNumber(value) : String(value);
+}
 
 const COMPACT_LABEL = {
   currentSavings: '現有資產',
@@ -69,10 +86,12 @@ function buildPlanField(f) {
       CURRENCIES.forEach(c => { const o = el('option', '', c); o.value = c; input.appendChild(o); });
     } else {
       input = el('input');
-      input.type = 'number';
-      input.step = f.step;
-      input.min = 0;
-      input.inputMode = 'decimal';
+      bindNumericInput(input, {
+        integer: usesIntegerKeypad(f),
+        money: Boolean(f.money),
+        min: 0,
+        step: f.step
+      });
     }
     input.id = 'plan-' + f.key;
     input.addEventListener('input', onPlanEdited);
@@ -115,11 +134,8 @@ function renderGlideFields() {
   tick.addEventListener('input', onPlanEdited);
   const end = el('input');
   end.id = 'plan-glideEquityEnd';
-  end.type = 'number';
-  end.min = 0;
-  end.max = 100;
-  end.step = 1;
   end.placeholder = '期末股權重 %，空白＝維持目前';
+  bindNumericInput(end, { integer: false, min: 0, max: 100, step: 1 });
   end.addEventListener('input', onPlanEdited);
   const taxRow = el('label', 'check-row');
   const taxToggle = el('input');
@@ -144,10 +160,8 @@ function renderGlideFields() {
   const feeInputs = ['ter', 'turnover', 'turnoverCost', 'fxSpread'].map(key => {
     const input = el('input');
     input.id = 'plan-' + key;
-    input.type = 'number';
-    input.min = 0;
-    input.step = 0.05;
     input.placeholder = ({ ter: 'TER %/年', turnover: '年換手 %', turnoverCost: '換手單邊成本 %', fxSpread: '匯率價差 %/年' })[key];
+    bindNumericInput(input, { integer: false, min: 0, step: 0.05 });
     input.addEventListener('input', onPlanEdited);
     return input;
   });
@@ -174,33 +188,23 @@ function renderGlideFields() {
   bootRow.append(bootToggle, document.createTextNode(' 區塊拔靴（額外模式，預設關）'));
   const seed = el('input');
   seed.id = 'plan-bootstrapSeed';
-  seed.type = 'number';
-  seed.step = 1;
   seed.placeholder = '種子';
+  bindNumericInput(seed, { integer: true, step: 1 });
   seed.addEventListener('input', onPlanEdited);
   const block = el('input');
   block.id = 'plan-bootstrapBlock';
-  block.type = 'number';
-  block.min = 1;
-  block.max = 120;
-  block.step = 1;
   block.placeholder = '區塊月數';
+  bindNumericInput(block, { integer: true, min: 1, max: 120, step: 1 });
   block.addEventListener('input', onPlanEdited);
   const withdrawEvery = el('input');
   withdrawEvery.id = 'plan-withdrawEvery';
-  withdrawEvery.type = 'number';
-  withdrawEvery.min = 1;
-  withdrawEvery.max = 12;
-  withdrawEvery.step = 1;
   withdrawEvery.placeholder = '提領間隔月數，1＝每月';
+  bindNumericInput(withdrawEvery, { integer: true, min: 1, max: 12, step: 1 });
   withdrawEvery.addEventListener('input', onPlanEdited);
   const guardrailEvery = el('input');
   guardrailEvery.id = 'plan-guardrailEvery';
-  guardrailEvery.type = 'number';
-  guardrailEvery.min = 1;
-  guardrailEvery.max = 12;
-  guardrailEvery.step = 1;
   guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
+  bindNumericInput(guardrailEvery, { integer: true, min: 1, max: 12, step: 1 });
   guardrailEvery.addEventListener('input', onPlanEdited);
   box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block, withdrawEvery, guardrailEvery);
   return box;
@@ -218,7 +222,7 @@ export function writePlanForm() {
       continue;
     }
     const input = $('plan-' + f.key);
-    if (document.activeElement !== input) input.value = p[f.key];
+    if (document.activeElement !== input) input.value = f.type === 'currency' ? p[f.key] : shownNumber(p[f.key], f.money);
   }
   document.querySelectorAll('#planForm .unit').forEach(u => {
     if (u.dataset.money !== '') u.textContent = `${p.currency}${u.dataset.money}`;
@@ -271,14 +275,14 @@ export function readPlanForm() {
   for (const f of PLAN_FIELDS) {
     if (f.type === 'inflation' || f.type === 'withdrawal') continue;
     const v = $('plan-' + f.key).value;
-    p[f.key] = f.type === 'currency' ? v : (v === '' ? 0 : Number(v));
+    p[f.key] = f.type === 'currency' ? v : readNum(v, 0);
   }
   const glideToggle = $('plan-glidePath');
   if (glideToggle) p.glidePath = glideToggle.checked;
   const tickers = $('plan-equityTickers');
   if (tickers) p.equityTickers = tickers.value;
   const glideEnd = $('plan-glideEquityEnd');
-  if (glideEnd) p.glideEquityEnd = glideEnd.value === '' ? null : Number(glideEnd.value);
+  if (glideEnd) p.glideEquityEnd = readInputNumber(glideEnd.value);
   const taxToggle = $('plan-dividendTax');
   if (taxToggle) p.dividendTax = taxToggle.checked;
   const yields = $('plan-dividendYields');
@@ -289,7 +293,7 @@ export function readPlanForm() {
   if (feeToggle) p.feeSplit = feeToggle.checked;
   for (const key of ['ter', 'turnover', 'turnoverCost', 'fxSpread']) {
     const input = $('plan-' + key);
-    if (input) p[key] = input.value === '' ? 0 : Number(input.value);
+    if (input) p[key] = readNum(input.value, 0);
   }
   const fxToggle = $('plan-fxMode');
   if (fxToggle) p.fxMode = fxToggle.checked;
@@ -300,13 +304,13 @@ export function readPlanForm() {
   const bootToggle = $('plan-pathMode');
   if (bootToggle) p.pathMode = bootToggle.checked ? 'bootstrap' : 'historical';
   const seed = $('plan-bootstrapSeed');
-  if (seed && seed.value !== '') p.bootstrapSeed = Number(seed.value);
+  if (seed && readInputNumber(seed.value) != null) p.bootstrapSeed = readInputNumber(seed.value);
   const block = $('plan-bootstrapBlock');
-  if (block && block.value !== '') p.bootstrapBlock = Number(block.value);
+  if (block && readInputNumber(block.value) != null) p.bootstrapBlock = readInputNumber(block.value);
   const withdrawEvery = $('plan-withdrawEvery');
-  if (withdrawEvery && withdrawEvery.value !== '') p.withdrawEvery = Number(withdrawEvery.value);
+  if (withdrawEvery && readInputNumber(withdrawEvery.value) != null) p.withdrawEvery = readInputNumber(withdrawEvery.value);
   const guardrailEvery = $('plan-guardrailEvery');
-  if (guardrailEvery && guardrailEvery.value !== '') p.guardrailEvery = Number(guardrailEvery.value);
+  if (guardrailEvery && readInputNumber(guardrailEvery.value) != null) p.guardrailEvery = readInputNumber(guardrailEvery.value);
   return p;
 }
 
