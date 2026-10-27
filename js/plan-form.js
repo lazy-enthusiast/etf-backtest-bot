@@ -427,13 +427,12 @@ export function renderPlanTimeline() {
 export function formatWan(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '0';
-  return String(Math.round((n / 10000) * 100) / 100);
+  return (Math.round((n / 10000) * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
 }
 
 export function planBriefText(p) {
   if (!p) return '';
-  const cur = p.currency || '$';
-  return `現時${p.currentAge}歲，退休年齡${p.retireAge}歲，起始本金${cur}${formatWan(p.currentSavings)}萬，每月投入${cur}${formatWan(p.monthlyContribution)}萬，年支出${cur}${formatWan(p.annualSpending)}萬`;
+  return `現時${p.currentAge}歲，退休年齡${p.retireAge}歲，起始本金$${formatWan(p.currentSavings)}萬，每月投入$${formatWan(p.monthlyContribution)}萬，年支出$${formatWan(p.annualSpending)}萬`;
 }
 
 const recalcPlanOnly = debounce(() => recalc({ markPrevious: false }), 350);

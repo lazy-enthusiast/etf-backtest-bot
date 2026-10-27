@@ -127,12 +127,12 @@
   .timeline-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
   /* ===== Portfolio editor ===== */
-  .fold > summary { cursor: pointer; display: flex; flex-direction: column; gap: 4px; list-style: none; }
+  .fold > summary { cursor: pointer; display: block; list-style: none; line-height: 1.45; }
   .fold > summary::-webkit-details-marker { display: none; }
   .fold-title { font-size: 15px; font-weight: 700; }
-  .fold > summary .fold-title::before { content: '▸ '; color: var(--muted); }
+  .fold > summary .fold-title::before { content: '▸ '; color: var(--muted); font-weight: 400; }
   .fold[open] > summary .fold-title::before { content: '▾ '; }
-  .fold-brief { font-size: 13px; font-weight: 500; color: var(--muted); line-height: 1.4; }
+  .fold-brief { font-size: 14px; font-weight: 400; color: var(--text); }
   .fold[open] > summary .fold-brief { display: none; }
   .fold:not([open]) > summary .hint { display: none; }
   .fold-body { margin-top: 10px; }

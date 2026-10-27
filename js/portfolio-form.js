@@ -111,7 +111,7 @@ export function updateWeightBars() {
     r.querySelector('.bar span').style.width = total > 0 ? `${w / total * 100}%` : '0';
   });
   const off = Math.abs(total - 100) > 0.01;
-  $('weightSum').textContent = `合計 ${Number(total.toFixed(2))}%${off ? '（自動按比例）' : ''}`;
+  $('weightSum').textContent = ` 合計 ${Number(total.toFixed(2))}%${off ? '（自動按比例）' : ''}`;
   $('weightSum').style.color = off ? 'var(--warn)' : '';
   const brief = $('portfolioBrief');
   if (brief) brief.textContent = portfolioBriefText();
