@@ -7,6 +7,7 @@ import { bindNumericInput, readInputNumber } from './numeric-input.js';
 
 export function addHoldingRow(symbol, weight, tax) {
   const row = el('div', 'holding');
+  const line = el('div', 'holding-line');
   const sym = el('input', 'sym');
   sym.setAttribute('list', 'symbolList');
   sym.placeholder = 'VTI.US / VWRD.L / 2800.HK';
@@ -45,7 +46,8 @@ export function addHoldingRow(symbol, weight, tax) {
   dom.addEventListener('change', () => { syncOther(); onPortfolioEdited(); });
   const bar = el('div', 'bar');
   bar.appendChild(el('span'));
-  row.append(sym, w, dom, yieldInput, other, x, bar);
+  line.append(sym, w, dom, yieldInput, other, x);
+  row.append(line, bar);
   [sym, w, yieldInput, other].forEach(i => i.addEventListener('input', onPortfolioEdited));
   sym.addEventListener('change', () => {
     sym.value = normalizeSymbol(sym.value);

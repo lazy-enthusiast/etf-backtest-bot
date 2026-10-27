@@ -136,18 +136,20 @@
   .fold[open] > summary .fold-brief { display: none; }
   .fold:not([open]) > summary .hint { display: none; }
   .fold-body { margin-top: 10px; }
-  .holding { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
-  .holding .bar { flex: 1 0 100%; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .holding { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; min-width: 0; }
+  .holding-line { display: grid; grid-template-columns: minmax(0, 1fr) 3.2em 4.4em 3.6em 1.7em; gap: 4px; align-items: center; width: 100%; min-width: 0; }
+  .holding-line:has(.tax-other:not([hidden])) { grid-template-columns: minmax(0, 1fr) 2.8em 3.8em 3.2em 3em 1.7em; }
+  .holding .bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
   .holding .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
   .holding input,
-  .holding select { border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 9px; outline: none; min-width: 0; }
+  .holding select { box-sizing: border-box; width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 4px; outline: none; min-width: 0; }
   .holding input:focus,
   .holding select:focus { border-color: var(--accent); }
-  .holding .sym { flex: 1 1 140px; width: auto; text-transform: uppercase; font-weight: 600; }
-  .holding .w { flex: 0 1 76px; width: 76px; text-align: right; }
-  .holding .tax-dom { flex: 0 1 108px; width: 108px; }
-  .holding .tax-yield { flex: 0 1 92px; width: 92px; }
-  .holding .tax-other { flex: 0 1 80px; width: 80px; }
+  .holding .sym { text-transform: uppercase; font-weight: 600; }
+  .holding .w,
+  .holding .tax-yield,
+  .holding .tax-other { text-align: right; }
+  .holding .x-btn { width: 100%; padding: 0; }
   .x-btn { border: none; background: none; color: var(--faint); font-size: 15px; border-radius: 6px; height: 26px; }
   .x-btn:hover { color: var(--bad); background: var(--bad-soft); }
   .row { display: flex; align-items: center; gap: 8px; }
