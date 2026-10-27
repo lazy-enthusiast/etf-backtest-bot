@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv, effectiveSampleNote } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv, effectiveSampleNote, fxStressAmounts } from '../backtest/retirement.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -209,6 +209,7 @@ export function renderDashboard() {
   renderCurveHighlight(cur);
   renderCashHighlight(cur);
   renderFeeHighlight(cur);
+  renderFxStress(cur);
   renderFxHighlight(cur);
   renderInflationLabel(cur);
   renderBootstrapHighlight(cur);
@@ -244,6 +245,19 @@ function renderInflationLabel(cur) {
   if (!node) return;
   if (!cur?.plan) { node.hidden = true; node.textContent = ''; return; }
   node.textContent = inflationLabel(cur.plan, cur.cpiFallbackMonths);
+  node.hidden = false;
+}
+
+function renderFxStress(cur) {
+  const node = $('fxStress');
+  if (!node) return;
+  const stress = fxStressAmounts(cur?.sim?.sustainableSpending?.p95);
+  if (!stress) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = [
+    `估計：港幣與美元掛鉤，這是壓力測試，不是預測。`,
+    `若美元兌港幣下跌 10%，實質可花 ${compact(stress.down10)}。`,
+    `若美元兌港幣下跌 20%，實質可花 ${compact(stress.down20)}。`
+  ].join('\n');
   node.hidden = false;
 }
 

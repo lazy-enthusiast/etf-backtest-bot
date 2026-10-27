@@ -53,6 +53,14 @@ export const DEFAULT_PLAN = {
 
 export const HKD_USD_PEG = 7.8;
 
+/** 不改模擬。美元相對港幣下跌時，實質可花金額按同樣比例變少。 */
+export function fxStressAmounts(amount) {
+  if (amount == null || amount === '') return null;
+  const base = Number(amount);
+  if (!Number.isFinite(base)) return null;
+  return { down10: base * 0.9, down20: base * 0.8 };
+}
+
 const PERCENTILES = [10, 25, 50, 75, 90];
 
 export function normalizePlan(plan) {
