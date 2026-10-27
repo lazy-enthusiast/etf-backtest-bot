@@ -127,19 +127,27 @@
   .timeline-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
   /* ===== Portfolio editor ===== */
-  .holding { display: grid; grid-template-columns: minmax(0, 1fr) 76px 26px; gap: 6px; align-items: center; margin-bottom: 8px; }
-  .holding .bar { grid-column: 1 / -1; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-top: -4px; }
+  .fold > summary { cursor: pointer; display: flex; flex-direction: column; gap: 4px; list-style: none; }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold-title { font-size: 15px; font-weight: 700; }
+  .fold > summary .fold-title::before { content: '▸ '; color: var(--muted); }
+  .fold[open] > summary .fold-title::before { content: '▾ '; }
+  .fold-brief { font-size: 13px; font-weight: 500; color: var(--muted); line-height: 1.4; }
+  .fold[open] > summary .fold-brief { display: none; }
+  .fold:not([open]) > summary .hint { display: none; }
+  .fold-body { margin-top: 10px; }
+  .holding { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .holding .bar { flex: 1 0 100%; height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
   .holding .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-  .holding input { width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 9px; outline: none; }
-  .holding input:focus { border-color: var(--accent); }
-  .holding .sym { text-transform: uppercase; font-weight: 600; }
-  .holding .w { text-align: right; }
-  .holding .tax-line { grid-column: 1 / -1; display: flex; gap: 6px; }
-  .holding .tax-line select,
-  .holding .tax-line input { height: 34px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: 0 8px; }
-  .holding .tax-dom { flex: 1.1; min-width: 0; }
-  .holding .tax-yield,
-  .holding .tax-other { flex: 0.8; min-width: 0; width: auto; }
+  .holding input,
+  .holding select { border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 9px; outline: none; min-width: 0; }
+  .holding input:focus,
+  .holding select:focus { border-color: var(--accent); }
+  .holding .sym { flex: 1 1 140px; width: auto; text-transform: uppercase; font-weight: 600; }
+  .holding .w { flex: 0 1 76px; width: 76px; text-align: right; }
+  .holding .tax-dom { flex: 0 1 108px; width: 108px; }
+  .holding .tax-yield { flex: 0 1 92px; width: 92px; }
+  .holding .tax-other { flex: 0 1 80px; width: 80px; }
   .x-btn { border: none; background: none; color: var(--faint); font-size: 15px; border-radius: 6px; height: 26px; }
   .x-btn:hover { color: var(--bad); background: var(--bad-soft); }
   .row { display: flex; align-items: center; gap: 8px; }

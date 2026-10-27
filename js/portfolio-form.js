@@ -20,7 +20,6 @@ export function addHoldingRow(symbol, weight, tax) {
   const x = el('button', 'x-btn', '✕');
   x.title = '移除';
   x.onclick = () => { row.remove(); onPortfolioEdited(); };
-  const taxLine = el('div', 'tax-line');
   const dom = el('select', 'tax-dom');
   dom.title = '估計：註冊地稅率。不選則不扣稅。';
   for (const [value, label] of [['', '不計稅'], ['IE', 'IE 15%'], ['US', 'US 30%'], ['other', '其他']]) {
@@ -44,10 +43,9 @@ export function addHoldingRow(symbol, weight, tax) {
   const syncOther = () => { other.hidden = dom.value !== 'other'; };
   syncOther();
   dom.addEventListener('change', () => { syncOther(); onPortfolioEdited(); });
-  taxLine.append(dom, yieldInput, other);
   const bar = el('div', 'bar');
   bar.appendChild(el('span'));
-  row.append(sym, w, x, taxLine, bar);
+  row.append(sym, w, dom, yieldInput, other, x, bar);
   [sym, w, yieldInput, other].forEach(i => i.addEventListener('input', onPortfolioEdited));
   sym.addEventListener('change', () => {
     sym.value = normalizeSymbol(sym.value);
@@ -115,6 +113,19 @@ export function updateWeightBars() {
   const off = Math.abs(total - 100) > 0.01;
   $('weightSum').textContent = `合計 ${Number(total.toFixed(2))}%${off ? '（自動按比例）' : ''}`;
   $('weightSum').style.color = off ? 'var(--warn)' : '';
+  const brief = $('portfolioBrief');
+  if (brief) brief.textContent = portfolioBriefText();
+}
+
+export function portfolioBriefText() {
+  const parts = [];
+  document.querySelectorAll('#holdings .holding').forEach(row => {
+    const s = normalizeSymbol(row.querySelector('.sym').value);
+    const w = readInputNumber(row.querySelector('.w').value);
+    if (!s || !(w > 0)) return;
+    parts.push(`${s} (${w}%)`);
+  });
+  return parts.join(', ');
 }
 
 export function onPortfolioEdited() {

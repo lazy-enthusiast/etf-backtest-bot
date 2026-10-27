@@ -239,7 +239,7 @@ function renderDualEngine(cur) {
   if (!node) return;
   if (!cmp) { node.hidden = true; node.textContent = ''; return; }
   const tag = cmp.robust ? '，穩健' : '';
-  node.textContent = `歷史成功率 ${pct(cmp.historical, 1)}，拔靴成功率 ${pct(cmp.bootstrap, 1)}${tag}`;
+  node.textContent = `估計：歷史成功率 ${pct(cmp.historical, 1)}，拔靴成功率 ${pct(cmp.bootstrap, 1)}${tag}`;
   node.hidden = false;
 }
 
