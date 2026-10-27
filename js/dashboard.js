@@ -206,6 +206,7 @@ export function renderDashboard() {
   renderGlideHighlight(cur);
   renderTaxHighlight(cur);
   renderDividendHighlight(cur);
+  renderCashHighlight(cur);
   renderFeeHighlight(cur);
   renderFxHighlight(cur);
   renderInflationLabel(cur);
@@ -258,6 +259,15 @@ function renderFxHighlight(cur) {
   node.hidden = false;
 }
 
+function renderCashHighlight(cur) {
+  const node = $('cashHighlight');
+  const cmp = cur?.sim?.cashCompare;
+  if (!node) return;
+  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = `${cmp.label}：現金桶規則。最差路徑最低年提領 之前 ${compact(cmp.before)}、之後 ${compact(cmp.after)}`;
+  node.hidden = false;
+}
+
 function renderFeeHighlight(cur) {
   const node = $('feeHighlight');
   if (!node) return;
@@ -294,12 +304,21 @@ function renderDividendHighlight(cur) {
 
 function renderGlideHighlight(cur) {
   const node = $('glideHighlight');
-  const glide = cur?.sim?.glide;
   if (!node) return;
-  if (!glide) { node.hidden = true; node.textContent = ''; return; }
-  node.textContent = glide.skipped || !Number.isFinite(glide.min)
-    ? '下滑路徑未套用：請同時標示股票代號與其他持倉。'
-    : `實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`;
+  const parts = [];
+  const glide = cur?.sim?.glide;
+  if (glide && !glide.skipped && Number.isFinite(glide.min)) {
+    parts.push(`實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`);
+  } else if (cur?.plan?.glidePath && glide?.skipped) {
+    parts.push('下滑路徑未套用：請同時標示股票代號與其他持倉。');
+  }
+  const cmp = cur?.sim?.glideCompare;
+  if (cmp) {
+    const side = (name, row) => `${name} 成功率 ${pct(row.successRate, 0)}、期末中位 ${compact(row.endBalanceP50)}、最差路徑最低年支出 ${compact(row.worstMinSpend)}`;
+    parts.push(`${cmp.label}。${side('固定權重', cmp.flat)}；${side('下滑', cmp.glide)}`);
+  }
+  if (!parts.length) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = parts.join('\n');
   node.hidden = false;
 }
 

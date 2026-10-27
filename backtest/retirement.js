@@ -29,6 +29,9 @@ export const DEFAULT_PLAN = {
   glidePath: false,
   equityTickers: [],
   glideEquityEnd: null,
+  glideStockStart: null,
+  glideBondFloor: null,
+  cashBucketYears: null,
   dividendTax: false,
   dividendYields: {},
   dividendTaxRates: {},
@@ -70,12 +73,23 @@ export function normalizePlan(plan) {
   p.guardrailCeiling = Math.min(20, Math.max(1, Number(p.guardrailCeiling) || DEFAULT_PLAN.guardrailCeiling));
   p.guardrailFloor = Math.min(p.guardrailCeiling - 0.1, Math.max(0.5, Number(p.guardrailFloor) || DEFAULT_PLAN.guardrailFloor));
   p.guardrailAdjustPct = Math.min(50, Math.max(1, Number(p.guardrailAdjustPct) || DEFAULT_PLAN.guardrailAdjustPct));
-  p.glidePath = p.glidePath === true || p.glidePath === 'true';
+  const glideRaw = p.glidePath;
+  if (glideRaw && typeof glideRaw === 'object') {
+    p.glidePath = glideRaw.enabled === true || glideRaw.enabled === 'true';
+    if (glideRaw.stockStart != null && glideRaw.stockStart !== '') p.glideStockStart = glideRaw.stockStart;
+    if (glideRaw.stockEnd != null && glideRaw.stockEnd !== '') p.glideEquityEnd = glideRaw.stockEnd;
+    if (glideRaw.bondFloor != null && glideRaw.bondFloor !== '') p.glideBondFloor = glideRaw.bondFloor;
+  } else {
+    p.glidePath = glideRaw === true || glideRaw === 'true';
+  }
   p.equityTickers = normalizeEquityTickers(p.equityTickers);
-  const end = Number(p.glideEquityEnd);
-  p.glideEquityEnd = p.glideEquityEnd == null || p.glideEquityEnd === '' || !Number.isFinite(end)
-    ? null
-    : Math.min(100, Math.max(0, end));
+  const pctOrNull = v => {
+    const n = Number(v);
+    return v == null || v === '' || !Number.isFinite(n) ? null : Math.min(100, Math.max(0, n));
+  };
+  p.glideEquityEnd = pctOrNull(p.glideEquityEnd);
+  p.glideStockStart = pctOrNull(p.glideStockStart);
+  p.glideBondFloor = pctOrNull(p.glideBondFloor);
   p.dividendTax = p.dividendTax === true || p.dividendTax === 'true';
   p.dividendYields = parseRateMap(p.dividendYields);
   p.dividendTaxRates = parseRateMap(p.dividendTaxRates);
@@ -93,6 +107,12 @@ export function normalizePlan(plan) {
   p.bootstrapBlock = Math.min(120, Math.max(1, Math.round(Number(p.bootstrapBlock) || 12)));
   p.withdrawEvery = Math.min(12, Math.max(1, Math.round(Number(p.withdrawEvery) || 1)));
   p.guardrailEvery = Math.min(12, Math.max(1, Math.round(Number(p.guardrailEvery) || 12)));
+  if (p.cashBucketYears === true || p.cashBucketYears === 'true') p.cashBucketYears = 3;
+  else if (p.cashBucketYears == null || p.cashBucketYears === false || p.cashBucketYears === '' || p.cashBucketYears === 'false') p.cashBucketYears = null;
+  else {
+    const years = Number(p.cashBucketYears);
+    p.cashBucketYears = Number.isFinite(years) && years > 0 ? years : null;
+  }
   return p;
 }
 
@@ -304,13 +324,15 @@ export function buildGlide(assetMonthly, holdings, plan, cpiSeries) {
     }
     inflation[i - 1] = factor;
   }
+  const cap = p.glideBondFloor == null ? 1 : Math.max(0, 1 - p.glideBondFloor / 100);
+  const clampEquity = w => Math.min(cap, Math.max(0, w));
   return {
     equityR,
     restR,
     inflation,
     feeFactor,
-    startEquity: eqW,
-    endEquity: p.glideEquityEnd == null ? eqW : p.glideEquityEnd / 100
+    startEquity: clampEquity(p.glideStockStart == null ? eqW : p.glideStockStart / 100),
+    endEquity: clampEquity(p.glideEquityEnd == null ? eqW : p.glideEquityEnd / 100)
   };
 }
 
@@ -464,6 +486,20 @@ function monthWithdrawal(strategy, p, state, balance, k, retireMonth, totalMonth
  * 單一提領規則下，對所有歷史起點跑完整人生路徑。
  * fixed_real 時同時用線性分解算 maxSpending（期末歸零的最大固定年支出）。
  */
+function headlineOf(walked) {
+  const { runs } = walked;
+  let worst = 0;
+  for (let s = 1; s < runs.length; s++) if (worseRun(runs[s], runs[worst])) worst = s;
+  const years = walked.yearSpends[worst] || [];
+  let worstMinSpend = years.length ? years[0] : null;
+  for (let i = 1; i < years.length; i++) if (years[i] < worstMinSpend) worstMinSpend = years[i];
+  return {
+    successRate: runs.length ? runs.filter(x => x.success).length / runs.length : null,
+    endBalanceP50: summarize(runs.map(x => x.endBalance)).p50,
+    worstMinSpend
+  };
+}
+
 function worseRun(a, b) {
   if (a.success !== b.success) return !a.success;
   const da = a.depletedAge ?? Infinity;
@@ -486,7 +522,16 @@ function resolveTaxDrag(taxDrag) {
   return { annual, active: Boolean(taxDrag.active) || annual > 0 };
 }
 
-function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null } = {}) {
+function equityYearReturn(bucket, idx, months, length) {
+  let growth = 1;
+  for (let i = 0; i < months; i++) {
+    const j = (idx + i) % length;
+    growth *= (1 + bucket.equityR[j]) * bucket.feeFactor / bucket.inflation[j];
+  }
+  return growth - 1;
+}
+
+function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null, bucket = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -537,6 +582,14 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
     let streak = 0;
     let longest = 0;
     let largest = 0;
+    const bucketOn = Boolean(bucket && p.cashBucketYears > 0 && bucket.equityR?.length === L);
+    let cashBal = 0;
+    let riskyBal = balance;
+    let yearUseCash = false;
+    if (bucketOn) {
+      cashBal = Math.min(balance, p.annualSpending * p.cashBucketYears);
+      riskyBal = balance - cashBal;
+    }
     yearly[0][s] = balance;
 
     for (let k = 0; k < totalMonths; k++) {
@@ -597,8 +650,33 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
           } else streak = 0;
         }
         if (trackLinear && (k - retireMonth) % p.withdrawEvery === 0) perSpend -= Math.min(p.withdrawEvery, totalMonths - k) / 12;
-        const payable = Math.min(withdraw, Math.max(0, balance));
-        balance -= withdraw;
+        let bucketPaid = false;
+        if (bucketOn) {
+          if ((k - retireMonth) % 12 === 0) {
+            const left = Math.min(12, totalMonths - k);
+            yearUseCash = equityYearReturn(bucket, idx, left, L) < -0.10;
+          }
+          riskyBal = Math.max(0, balance - cashBal);
+          if (yearUseCash) {
+            const paid = Math.min(withdraw, Math.max(0, cashBal));
+            cashBal -= paid;
+            withdraw = paid;
+          } else {
+            const paid = Math.min(withdraw, Math.max(0, riskyBal));
+            riskyBal -= paid;
+            withdraw = paid;
+            const target = Math.min(cashBal + riskyBal, p.annualSpending * p.cashBucketYears);
+            if (cashBal < target) {
+              const move = Math.min(target - cashBal, Math.max(0, riskyBal));
+              riskyBal -= move;
+              cashBal += move;
+            }
+          }
+          balance = Math.max(0, cashBal + riskyBal);
+          bucketPaid = true;
+        }
+        const payable = bucketPaid ? withdraw : Math.min(withdraw, Math.max(0, balance));
+        if (!bucketPaid) balance -= withdraw;
         totalSpent += withdraw;
         targetSpent += targetMonthly;
         retireMonths++;
@@ -614,6 +692,13 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
       }
 
       const balanceAfterFlows = balance;
+      if (bucketOn) {
+        const realEq = (1 + bucket.equityR[idx]) * bucket.feeFactor / bucket.inflation[idx] - 1;
+        if (k < retireMonth) riskyBal = Math.max(0, balance - cashBal);
+        riskyBal = Math.max(0, riskyBal) * (1 + realEq);
+        balance = Math.max(0, cashBal + riskyBal);
+        growth = 1;
+      }
       balance *= growth;
       if (trackLinear) {
         base *= growth;
@@ -821,7 +906,7 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
  * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
  * @param returns realMonthlyReturns().returns
  */
-export function simulateRetirement(plan, returns, glide = null, dividend = null, baselineReturns = null, fx = null, taxDrag = null) {
+export function simulateRetirement(plan, returns, glide = null, dividend = null, baselineReturns = null, fx = null, taxDrag = null, cashSleeve = null) {
   const p = normalizePlan(plan);
   const L = returns.length;
   if (L < 24) throw new Error('可用歷史不足 2 年，無法做退休模擬');
@@ -865,6 +950,31 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
   const retireStats = retireValues.length ? summarize(retireValues) : null;
   const netSpendAtRetire = p.annualSpending - (p.otherIncomeAge <= p.retireAge ? p.otherIncome : 0);
   const spendingBrief = spendingBriefFromWalk(p, p.withdrawalStrategy, returns, primary);
+  let glideCompare = null;
+  if (p.glidePath && glide?.equityR?.length === L) {
+    const flatWalk = runLifePaths({ ...p, glidePath: false }, returns, p.withdrawalStrategy, null, dividend, fx, tax);
+    glideCompare = {
+      label: '概念建議，非歷史實證',
+      flat: headlineOf(flatWalk),
+      glide: headlineOf(primary)
+    };
+  }
+  let cashCompare = null;
+  if (p.cashBucketYears && cashSleeve?.equityR?.length === L) {
+    const withCash = walkLife(p, returns, p.withdrawalStrategy, {
+      glide: p.glidePath ? glide : null,
+      dividend: p.dividendTax ? dividend : null,
+      feeParts: feeSplitParts(p),
+      fx: p.fxMode && fx && !fx.skipped ? fx : null,
+      taxDrag: tax,
+      bucket: cashSleeve
+    });
+    cashCompare = {
+      label: '概念建議',
+      before: headlineOf(primary).worstMinSpend,
+      after: headlineOf(withCash).worstMinSpend
+    };
+  }
   let dividendSpend = null;
   if (p.dividendTax && dividend?.monthlyRate > 0) {
     const plain = { ...p, dividendTax: false };
@@ -933,6 +1043,8 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
     cumWithdrawal: summarize(primary.totals),
     spendingBrief,
     glide: p.glidePath ? (primary.equityWeightRange || { skipped: true }) : null,
+    ...(glideCompare ? { glideCompare } : {}),
+    ...(cashCompare ? { cashCompare } : {}),
     dividendSpend,
     feeSpend,
     fxSpend,

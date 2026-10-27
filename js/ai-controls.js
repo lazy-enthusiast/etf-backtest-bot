@@ -65,10 +65,20 @@ export function parsePlanBlock(text) {
   for (const k of ['guardrailCeiling', 'guardrailFloor', 'guardrailAdjustPct']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
-  if (obj.glidePath === true || obj.glidePath === false) changes.glidePath = obj.glidePath;
+  if (obj.glidePath && typeof obj.glidePath === 'object') {
+    const g = obj.glidePath;
+    if (g.enabled === true || g.enabled === false) changes.glidePath = g.enabled;
+    if (g.stockStart != null && Number.isFinite(Number(g.stockStart))) changes.glideStockStart = Number(g.stockStart);
+    if (g.stockEnd != null && Number.isFinite(Number(g.stockEnd))) changes.glideEquityEnd = Number(g.stockEnd);
+    if (g.bondFloor != null && Number.isFinite(Number(g.bondFloor))) changes.glideBondFloor = Number(g.bondFloor);
+  } else if (obj.glidePath === true || obj.glidePath === false) changes.glidePath = obj.glidePath;
   if (Array.isArray(obj.equityTickers) || typeof obj.equityTickers === 'string') changes.equityTickers = obj.equityTickers;
   if (obj.glideEquityEnd === null) changes.glideEquityEnd = null;
   else if (obj.glideEquityEnd !== undefined && Number.isFinite(Number(obj.glideEquityEnd))) changes.glideEquityEnd = Number(obj.glideEquityEnd);
+  if (obj.glideStockStart === null) changes.glideStockStart = null;
+  else if (obj.glideStockStart !== undefined && Number.isFinite(Number(obj.glideStockStart))) changes.glideStockStart = Number(obj.glideStockStart);
+  if (obj.glideBondFloor === null) changes.glideBondFloor = null;
+  else if (obj.glideBondFloor !== undefined && Number.isFinite(Number(obj.glideBondFloor))) changes.glideBondFloor = Number(obj.glideBondFloor);
   if (obj.dividendTax === true || obj.dividendTax === false) changes.dividendTax = obj.dividendTax;
   if (obj.dividendYields && typeof obj.dividendYields === 'object') changes.dividendYields = obj.dividendYields;
   else if (typeof obj.dividendYields === 'string') changes.dividendYields = obj.dividendYields;
@@ -81,6 +91,9 @@ export function parsePlanBlock(text) {
   if (obj.pathMode === 'historical' || obj.pathMode === 'bootstrap') changes.pathMode = obj.pathMode;
   if (obj.bootstrapSeed !== undefined && Number.isFinite(Number(obj.bootstrapSeed))) changes.bootstrapSeed = Math.trunc(Number(obj.bootstrapSeed));
   if (obj.bootstrapBlock !== undefined && Number.isFinite(Number(obj.bootstrapBlock))) changes.bootstrapBlock = Number(obj.bootstrapBlock);
+  if (obj.cashBucketYears === null || obj.cashBucketYears === false) changes.cashBucketYears = null;
+  else if (obj.cashBucketYears === true) changes.cashBucketYears = true;
+  else if (obj.cashBucketYears !== undefined && Number.isFinite(Number(obj.cashBucketYears))) changes.cashBucketYears = Number(obj.cashBucketYears);
   for (const k of ['withdrawEvery', 'guardrailEvery']) {
     if (obj[k] !== undefined && Number.isFinite(Number(obj[k]))) changes[k] = Number(obj[k]);
   }
@@ -101,12 +114,13 @@ export function formatPlanValue(key, v) {
   if (key.endsWith('Age')) return `${v} 歲`;
   if (key === 'glidePath') return v ? '開' : '關';
   if (key === 'equityTickers') return Array.isArray(v) ? v.join('、') : String(v || '');
-  if (key === 'glideEquityEnd') return v == null || v === '' ? '維持目前' : `${v}%`;
+  if (key === 'glideEquityEnd' || key === 'glideStockStart' || key === 'glideBondFloor') return v == null || v === '' ? '維持目前' : `${v}%`;
   if (key === 'dividendTax') return v ? '開' : '關';
   if (key === 'feeSplit' || key === 'fxMode') return v ? '開' : '關';
   if (key === 'spendingBasket') return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
   if (key === 'pathMode') return v === 'bootstrap' ? '拔靴' : '歷史起點';
   if (key === 'withdrawEvery' || key === 'guardrailEvery') return `${v} 個月`;
+  if (key === 'cashBucketYears') return v == null || v === false ? '關' : (v === true ? '3 年' : `${v} 年`);
   if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
   if (key === 'dividendYields' || key === 'dividendTaxRates') {
     return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');

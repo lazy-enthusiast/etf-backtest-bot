@@ -137,6 +137,16 @@ function renderGlideFields() {
   end.placeholder = '期末股權重 %，空白＝維持目前';
   bindNumericInput(end, { integer: false, min: 0, max: 100, step: 1 });
   end.addEventListener('input', onPlanEdited);
+  const start = el('input');
+  start.id = 'plan-glideStockStart';
+  start.placeholder = '起始股權重 %，空白＝目前權重';
+  bindNumericInput(start, { integer: false, min: 0, max: 100, step: 1 });
+  start.addEventListener('input', onPlanEdited);
+  const floor = el('input');
+  floor.id = 'plan-glideBondFloor';
+  floor.placeholder = '債券下限 %，空白＝不設';
+  bindNumericInput(floor, { integer: false, min: 0, max: 100, step: 1 });
+  floor.addEventListener('input', onPlanEdited);
   const taxRow = el('label', 'check-row');
   const taxToggle = el('input');
   taxToggle.type = 'checkbox';
@@ -180,6 +190,17 @@ function renderGlideFields() {
   series.rows = 2;
   series.placeholder = '台幣匯率（每 1 USD），例如 2000-01,32.5。沒有序列就不套用台幣。港幣用 7.8 聯繫匯率假設。';
   series.addEventListener('input', onPlanEdited);
+  const cashRow = el('label', 'check-row');
+  const cashToggle = el('input');
+  cashToggle.type = 'checkbox';
+  cashToggle.id = 'plan-cashBucket';
+  cashToggle.addEventListener('change', onPlanEdited);
+  cashRow.append(cashToggle, document.createTextNode(' 現金桶（概念建議，預設關）'));
+  const cashYears = el('input');
+  cashYears.id = 'plan-cashBucketYears';
+  cashYears.placeholder = '年數，開啟後空白＝3';
+  bindNumericInput(cashYears, { integer: true, min: 1, step: 1 });
+  cashYears.addEventListener('input', onPlanEdited);
   const bootRow = el('label', 'check-row');
   const bootToggle = el('input');
   bootToggle.type = 'checkbox';
@@ -206,7 +227,7 @@ function renderGlideFields() {
   guardrailEvery.placeholder = '護欄檢查間隔月數，12＝每年';
   bindNumericInput(guardrailEvery, { integer: true, min: 1, max: 12, step: 1 });
   guardrailEvery.addEventListener('input', onPlanEdited);
-  box.append(row, tick, end, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, bootRow, seed, block, withdrawEvery, guardrailEvery);
+  box.append(row, tick, start, end, floor, taxRow, yields, rates, feeRow, ...feeInputs, fxRow, basket, series, cashRow, cashYears, bootRow, seed, block, withdrawEvery, guardrailEvery);
   return box;
 }
 
@@ -239,6 +260,10 @@ export function writePlanForm() {
   }
   const glideEnd = $('plan-glideEquityEnd');
   if (glideEnd && document.activeElement !== glideEnd) glideEnd.value = p.glideEquityEnd == null ? '' : p.glideEquityEnd;
+  const glideStart = $('plan-glideStockStart');
+  if (glideStart && document.activeElement !== glideStart) glideStart.value = p.glideStockStart == null ? '' : p.glideStockStart;
+  const bondFloor = $('plan-glideBondFloor');
+  if (bondFloor && document.activeElement !== bondFloor) bondFloor.value = p.glideBondFloor == null ? '' : p.glideBondFloor;
   const taxToggle = $('plan-dividendTax');
   if (taxToggle && document.activeElement !== taxToggle) taxToggle.checked = Boolean(p.dividendTax);
   const yields = $('plan-dividendYields');
@@ -257,6 +282,10 @@ export function writePlanForm() {
   if (basket && document.activeElement !== basket) basket.value = rateMapText(p.spendingBasket);
   const series = $('plan-fxSeries');
   if (series && document.activeElement !== series) series.value = p.fxSeries || '';
+  const cashToggle = $('plan-cashBucket');
+  if (cashToggle && document.activeElement !== cashToggle) cashToggle.checked = p.cashBucketYears != null && p.cashBucketYears !== false;
+  const cashYears = $('plan-cashBucketYears');
+  if (cashYears && document.activeElement !== cashYears) cashYears.value = p.cashBucketYears == null ? '' : p.cashBucketYears;
   const bootToggle = $('plan-pathMode');
   if (bootToggle && document.activeElement !== bootToggle) bootToggle.checked = p.pathMode === 'bootstrap';
   const seed = $('plan-bootstrapSeed');
@@ -283,6 +312,10 @@ export function readPlanForm() {
   if (tickers) p.equityTickers = tickers.value;
   const glideEnd = $('plan-glideEquityEnd');
   if (glideEnd) p.glideEquityEnd = readInputNumber(glideEnd.value);
+  const glideStart = $('plan-glideStockStart');
+  if (glideStart) p.glideStockStart = readInputNumber(glideStart.value);
+  const bondFloor = $('plan-glideBondFloor');
+  if (bondFloor) p.glideBondFloor = readInputNumber(bondFloor.value);
   const taxToggle = $('plan-dividendTax');
   if (taxToggle) p.dividendTax = taxToggle.checked;
   const yields = $('plan-dividendYields');
@@ -301,6 +334,15 @@ export function readPlanForm() {
   if (basket) p.spendingBasket = basket.value;
   const series = $('plan-fxSeries');
   if (series) p.fxSeries = series.value;
+  const cashToggle = $('plan-cashBucket');
+  const cashYears = $('plan-cashBucketYears');
+  if (cashToggle) {
+    if (!cashToggle.checked) p.cashBucketYears = null;
+    else {
+      const n = cashYears ? readInputNumber(cashYears.value) : null;
+      p.cashBucketYears = n == null ? true : n;
+    }
+  }
   const bootToggle = $('plan-pathMode');
   if (bootToggle) p.pathMode = bootToggle.checked ? 'bootstrap' : 'historical';
   const seed = $('plan-bootstrapSeed');
