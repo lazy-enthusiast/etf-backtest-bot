@@ -137,18 +137,19 @@
   .fold:not([open]) > summary .hint { display: none; }
   .fold-body { margin-top: 10px; }
   .holding { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; min-width: 0; }
-  .holding-line { display: grid; grid-template-columns: minmax(0, 1fr) 3.2em 4.4em 3.6em 1.7em; gap: 4px; align-items: center; width: 100%; min-width: 0; }
-  .holding-line:has(.tax-other:not([hidden])) { grid-template-columns: minmax(0, 1fr) 2.8em 3.8em 3.2em 3em 1.7em; }
+  .holding-line { display: grid; grid-template-columns: minmax(4.2em, 8em) 3em max-content 6.6em 1.6em; gap: 4px; align-items: center; width: 100%; min-width: 0; justify-content: start; }
+  .holding-line:has(.tax-other:not([hidden])) { grid-template-columns: minmax(3.6em, 6em) 2.6em max-content 5.2em 4.4em 1.6em; }
   .holding .bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
   .holding .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
   .holding input,
   .holding select { box-sizing: border-box; width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 4px; outline: none; min-width: 0; }
   .holding input:focus,
   .holding select:focus { border-color: var(--accent); }
-  .holding .sym { text-transform: uppercase; font-weight: 600; }
-  .holding .w,
+  .holding .sym { width: 100%; text-transform: uppercase; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .holding .w { width: 100%; text-align: right; }
+  .holding .tax-dom { width: auto; min-width: max-content; padding: 0 6px; }
   .holding .tax-yield,
-  .holding .tax-other { text-align: right; }
+  .holding .tax-other { width: 100%; min-width: 0; padding: 0 6px; text-align: right; }
   .holding .x-btn { width: 100%; padding: 0; }
   .x-btn { border: none; background: none; color: var(--faint); font-size: 15px; border-radius: 6px; height: 26px; }
   .x-btn:hover { color: var(--bad); background: var(--bad-soft); }
