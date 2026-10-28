@@ -231,6 +231,19 @@ function feeSplitParts(p) {
   };
 }
 
+/** 主路徑、對照路徑、打開的年份表共用這包袖套。費用與通膨留在這條路徑裡，不另拆模組。 */
+function sleeveOptions(p, glide, dividend, fx, taxDrag, extra = {}) {
+  return {
+    glide: p.glidePath ? glide : null,
+    dividend: p.dividendTax ? dividend : null,
+    feeParts: feeSplitParts(p),
+    fx: p.fxMode && fx && !fx.skipped ? fx : null,
+    taxDrag,
+    bucket: extra.bucket || null,
+    applyCurve: Boolean(extra.applyCurve)
+  };
+}
+
 function parseRateMap(value) {
   const out = {};
   const entries = value && typeof value === 'object' && !Array.isArray(value)
@@ -430,7 +443,7 @@ export function parseHoldingWeight(raw) {
  * 年化稅負拖累（小數）＝ Σ(權重 × 殖利率 × 稅率)。
  * 沒有任一檔同時給註冊地與殖利率時回傳 null，呼叫端不得改報酬。
  */
-export function annualTaxDrag(holdings, holdingTax) {
+function holdingRows(holdings, holdingTax) {
   const entries = Array.isArray(holdings)
     ? holdings.map(h => [h.symbol, h.weight])
     : Object.entries(holdings || {});
@@ -441,8 +454,6 @@ export function annualTaxDrag(holdings, holdingTax) {
     if (!Number.isFinite(w) || w <= 0) continue;
     cleaned.push([String(symbol).toUpperCase(), w, parsed.tax]);
   }
-  const total = cleaned.reduce((sum, [, w]) => sum + w, 0);
-  if (!(total > 0)) return null;
   const extra = {};
   if (holdingTax && typeof holdingTax === 'object' && !Array.isArray(holdingTax)) {
     for (const [key, value] of Object.entries(holdingTax)) {
@@ -451,17 +462,39 @@ export function annualTaxDrag(holdings, holdingTax) {
       if (parsed.tax) extra[String(key).toUpperCase()] = parsed.tax;
     }
   }
+  return cleaned.map(([symbol, weight, inline]) => ({
+    symbol,
+    weight,
+    meta: extra[symbol] || inline || null
+  }));
+}
+
+export function annualTaxDrag(holdings, holdingTax) {
+  const rows = holdingRows(holdings, holdingTax);
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  if (!(total > 0)) return null;
   let fraction = 0;
   let used = false;
-  for (const [symbol, weight, inline] of cleaned) {
-    const meta = extra[symbol] || inline;
-    if (!meta) continue;
+  for (const row of rows) {
+    if (!row.meta) continue;
     used = true;
-    const rate = domicileTaxRate(meta.taxDomicile, meta.otherTaxRate) / 100;
-    fraction += (weight / total) * (meta.dividendYield / 100) * rate;
+    const rate = domicileTaxRate(row.meta.taxDomicile, row.meta.otherTaxRate) / 100;
+    fraction += (row.weight / total) * (row.meta.dividendYield / 100) * rate;
   }
   if (!used) return null;
   return { fraction, annual: fraction, active: true };
+}
+
+function coveredSymbols(holdings, holdingTax) {
+  return new Set(holdingRows(holdings, holdingTax).filter(row => row.meta).map(row => row.symbol));
+}
+
+/** 持倉稅是唯一的報酬拖累。計劃上的殖利率只補沒有持倉稅的代號，並仍走餘額扣稅。 */
+export function composeDrags(holdings, holdingTax, plan) {
+  return {
+    taxDrag: annualTaxDrag(holdings, holdingTax),
+    dividend: buildDividendTax(holdings, plan, coveredSymbols(holdings, holdingTax))
+  };
 }
 
 /** 兩種註冊地版本的可持續支出差。給測試與比較用，不改預設組合。 */
@@ -482,9 +515,10 @@ export function compareHoldingTaxSpend(plan, returns, versions) {
   };
 }
 
-export function buildDividendTax(holdings, plan) {
+export function buildDividendTax(holdings, plan, skipSymbols = null) {
   const p = normalizePlan(plan);
   if (!p.dividendTax) return null;
+  const skip = skipSymbols instanceof Set ? skipSymbols : null;
   const list = Array.isArray(holdings)
     ? holdings.map(h => [h.symbol, h.weight])
     : Object.entries(holdings || {});
@@ -494,6 +528,7 @@ export function buildDividendTax(holdings, plan) {
   let annual = 0;
   for (const [symbol, weight] of cleaned) {
     if (!Number.isFinite(weight) || weight <= 0) continue;
+    if (skip?.has(symbol)) continue;
     const domicile = symbol.includes('.') ? symbol.slice(symbol.lastIndexOf('.') + 1) : '';
     const yieldPct = p.dividendYields[symbol] ?? (domicile ? p.dividendYields[domicile] : undefined);
     const taxPct = p.dividendTaxRates[symbol] ?? (domicile ? p.dividendTaxRates[domicile] : undefined);
@@ -866,16 +901,12 @@ export function formatPathCsv(summaries) {
 }
 
 /** 單一歷史起點的年齡表。只在呼叫時組出來，不寫入儲存。 */
-export function buildPathYears(plan, returns, startMonth, glide = null, dividend = null, fx = null, taxDrag = null) {
+export function buildPathYears(plan, returns, startMonth, glide = null, dividend = null, fx = null, taxDrag = null, extra = null) {
   const p = normalizePlan(plan);
   const walked = walkLife(p, returns, p.withdrawalStrategy, {
+    ...sleeveOptions(p, glide, dividend, fx, taxDrag, extra || {}),
     keepRows: true,
-    markGuardrail: true,
-    glide: p.glidePath ? glide : null,
-    dividend: p.dividendTax ? dividend : null,
-    feeParts: feeSplitParts(p),
-    fx: p.fxMode && fx && !fx.skipped ? fx : null,
-    taxDrag
+    markGuardrail: true
   });
   const rows = walked.rows.filter(row => row.start_month === startMonth);
   if (!rows.length) return null;
@@ -916,15 +947,8 @@ function medianFunded(walked) {
   return sums[Math.floor((sums.length - 1) / 2)];
 }
 
-function runLifePaths(p, returns, strategy, glide, dividend, fx, taxDrag = null) {
-  return walkLife(p, returns, strategy, {
-    keepRows: false,
-    glide: p.glidePath ? glide : null,
-    dividend: p.dividendTax ? dividend : null,
-    feeParts: feeSplitParts(p),
-    fx: p.fxMode && fx && !fx.skipped ? fx : null,
-    taxDrag
-  });
+function runLifePaths(p, returns, strategy, glide, dividend, fx, taxDrag = null, extra = null) {
+  return walkLife(p, returns, strategy, sleeveOptions(p, glide, dividend, fx, taxDrag, extra || {}));
 }
 
 function spendingBriefFromWalk(p, strategy, returns, walked) {
@@ -959,12 +983,8 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
   const p = normalizePlan(plan);
   const strat = strategy || p.withdrawalStrategy;
   const walked = walkLife(p, returns, strat, {
-    keepRows: true,
-    glide: p.glidePath ? glide : null,
-    dividend: p.dividendTax ? dividend : null,
-    feeParts: feeSplitParts(p),
-    fx: p.fxMode && fx && !fx.skipped ? fx : null,
-    taxDrag
+    ...sleeveOptions(p, glide, dividend, fx, taxDrag),
+    keepRows: true
   });
   return {
     header: {
@@ -985,6 +1005,47 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
     totals: walked.totals,
     cumWithdrawal: summarize(walked.totals)
   };
+}
+
+/**
+ * 由計劃、持倉與價格序列決定哪些對照要跑。表單、命令列與測試都走這裡，不再各自組袖套。
+ */
+export function prepareRetirement({ plan, holdings, holdingTax = null, equityMonthly, assetMonthly, cpiSeries }) {
+  const p = normalizePlan(plan);
+  const priced = realMonthlyReturns(equityMonthly, p, cpiSeries);
+  const glide = buildGlide(assetMonthly, holdings, p, cpiSeries);
+  const drags = composeDrags(holdings, holdingTax, p);
+  const baselineReturns = p.feeSplit && !p.glidePath
+    ? realMonthlyReturns(equityMonthly, { ...p, feeSplit: false }, cpiSeries).returns
+    : null;
+  const fx = buildFx(p);
+  const cashSleeve = p.cashBucketYears
+    ? (p.glidePath && glide ? glide : buildGlide(assetMonthly, holdings, { ...p, glidePath: true }, cpiSeries))
+    : null;
+  return {
+    plan: p,
+    returns: priced.returns,
+    cpiFallbackMonths: priced.cpiFallbackMonths,
+    glide,
+    dividend: drags.dividend,
+    baselineReturns,
+    fx,
+    taxDrag: drags.taxDrag,
+    cashSleeve
+  };
+}
+
+export function runPrepared(prepared) {
+  return simulateRetirement(
+    prepared.plan,
+    prepared.returns,
+    prepared.glide,
+    prepared.dividend,
+    prepared.baselineReturns,
+    prepared.fx,
+    prepared.taxDrag,
+    prepared.cashSleeve
+  );
 }
 
 /**
@@ -1047,14 +1108,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
   }
   let cashCompare = null;
   if (p.cashBucketYears && cashSleeve?.equityR?.length === L) {
-    const withCash = walkLife(p, returns, p.withdrawalStrategy, {
-      glide: p.glidePath ? glide : null,
-      dividend: p.dividendTax ? dividend : null,
-      feeParts: feeSplitParts(p),
-      fx: p.fxMode && fx && !fx.skipped ? fx : null,
-      taxDrag: tax,
-      bucket: cashSleeve
-    });
+    const withCash = walkLife(p, returns, p.withdrawalStrategy, sleeveOptions(p, glide, dividend, fx, tax, { bucket: cashSleeve }));
     cashCompare = {
       label: '概念建議',
       before: headlineOf(primary).worstMinSpend,
@@ -1063,14 +1117,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
   }
   let curveCompare = null;
   if (p.spendingCurve === 'declining' || p.spendingCurve === 'u_shape') {
-    const curved = walkLife(p, returns, p.withdrawalStrategy, {
-      glide: p.glidePath ? glide : null,
-      dividend: p.dividendTax ? dividend : null,
-      feeParts: feeSplitParts(p),
-      fx: p.fxMode && fx && !fx.skipped ? fx : null,
-      taxDrag: tax,
-      applyCurve: true
-    });
+    const curved = walkLife(p, returns, p.withdrawalStrategy, sleeveOptions(p, glide, dividend, fx, tax, { applyCurve: true }));
     curveCompare = {
       label: '概念建議',
       note: spendingCurveNote(p.spendingCurve),

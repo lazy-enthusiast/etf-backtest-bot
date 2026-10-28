@@ -25,28 +25,32 @@ export async function recalc({ markPrevious = true, label } = {}) {
   setStatus('計算中…');
   try {
     const meta = await loadMeta();
-    const plan = meta.retirement.normalizePlan(readPlanForm());
+    const result = await runBacktestCached(pf);
+    const draft = readPlanForm();
+    const cpi = draft.inflationMode === 'fixed' ? null : await loadCpi(meta);
+    const prepared = meta.retirement.prepareRetirement({
+      plan: draft,
+      holdings: pf.holdings,
+      holdingTax: pf.holdingTax,
+      equityMonthly: result.equityMonthly,
+      assetMonthly: result.assetMonthly,
+      cpiSeries: cpi
+    });
+    const plan = prepared.plan;
     state.plan = plan;
     saveJSON(STORE.plan, plan);
-    const result = await runBacktestCached(pf);
-    const cpi = plan.inflationMode === 'cpi' ? await loadCpi(meta) : null;
-    const { returns, cpiFallbackMonths } = meta.retirement.realMonthlyReturns(result.equityMonthly, plan, cpi);
-    const glide = meta.retirement.buildGlide(result.assetMonthly, pf.holdings, plan, cpi);
-    const dragInfo = meta.retirement.annualTaxDrag(pf.holdings, pf.holdingTax);
-    const dividend = dragInfo?.fraction > 0 ? null : meta.retirement.buildDividendTax(pf.holdings, plan);
-    const baselineReturns = plan.feeSplit && !plan.glidePath
-      ? meta.retirement.realMonthlyReturns(result.equityMonthly, { ...plan, feeSplit: false }, cpi).returns
-      : null;
-    const fx = meta.retirement.buildFx(plan);
-    const cashSleeve = plan.cashBucketYears
-      ? (plan.glidePath && glide ? glide : meta.retirement.buildGlide(result.assetMonthly, pf.holdings, { ...plan, glidePath: true }, cpi))
-      : null;
-    const sim = meta.retirement.simulateRetirement(plan, returns, glide, dividend, baselineReturns, fx, dragInfo, cashSleeve);
+    const sim = meta.retirement.runPrepared(prepared);
     if (seq !== recalcSeq) return null;
     if (markPrevious && state.current) state.previous = state.current;
     state.current = {
-      label: label || pf.name, portfolio: pf, plan, result, sim, cpiFallbackMonths,
-      series: returns, glide, dividend, fx, taxDrag: dragInfo
+      label: label || pf.name, portfolio: pf, plan, result, sim,
+      cpiFallbackMonths: prepared.cpiFallbackMonths,
+      series: prepared.returns,
+      glide: prepared.glide,
+      dividend: prepared.dividend,
+      fx: prepared.fx,
+      taxDrag: prepared.taxDrag,
+      cashSleeve: prepared.cashSleeve
     };
     renderDashboard();
     setStatus(`已更新 · 歷史 ${sim.history.start} ~ ${sim.history.end} · ${intFmt.format(sim.history.starts)} 個起始月份`);

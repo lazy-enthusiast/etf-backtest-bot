@@ -1,7 +1,8 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv, effectiveSampleNote, fxStressAmounts } from '../backtest/retirement.js';
+import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
+import { highlightLines } from './narrate.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -134,14 +135,11 @@ export function renderDashboard() {
     successSub.append(pill, document.createTextNode(successNote));
   }
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
+  const said = highlightLines(sim, plan, { pct, money: compact }, { cagr: cur.result?.stats?.cagr });
   const sample = $('sampleWarning');
   if (sample) {
-    sample.textContent = effectiveSampleNote(sim.history, {
-      pathMode: plan.pathMode,
-      bootstrapBlock: plan.bootstrapBlock,
-      successRate: sim.successRate
-    });
-    sample.hidden = false;
+    sample.textContent = said.sample || '';
+    sample.hidden = !said.sample;
   }
 
   const atRetire = sim.balanceAtRetire;
@@ -203,52 +201,33 @@ export function renderDashboard() {
 
   renderFanChart(cur, c);
   renderPathHighlights(cur);
-  renderGlideHighlight(cur);
-  renderTaxHighlight(cur);
-  renderDividendHighlight(cur);
-  renderCurveHighlight(cur);
-  renderCashHighlight(cur);
-  renderFeeHighlight(cur);
-  renderFxStress(cur);
-  renderFxHighlight(cur);
+  paintHighlights(said);
   renderInflationLabel(cur);
-  renderDualEngine(cur);
-  renderBootstrapHighlight(cur);
-  renderFrequencyHighlight(cur);
   renderPathActions(cur);
   renderActiveTab();
   if (state.selectedPath) openPath(state.selectedPath);
 }
 
-function renderFrequencyHighlight(cur) {
-  const node = $('frequencyHighlight');
-  const plan = cur?.plan;
+function showLine(id, text) {
+  const node = $(id);
   if (!node) return;
-  if (!plan || (plan.withdrawEvery === 1 && plan.guardrailEvery === 12)) {
-    node.hidden = true;
-    node.textContent = '';
-    return;
-  }
-  node.textContent = `提領每 ${plan.withdrawEvery} 個月，護欄每 ${plan.guardrailEvery} 個月檢查`;
+  if (!text) { node.hidden = true; node.textContent = ''; return; }
+  node.textContent = text;
   node.hidden = false;
 }
 
-function renderDualEngine(cur) {
-  const node = $('dualEngine');
-  const cmp = cur?.sim?.bootstrapCompare;
-  if (!node) return;
-  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
-  const tag = cmp.robust ? '，穩健' : '';
-  node.textContent = `估計：歷史成功率 ${pct(cmp.historical, 1)}，拔靴成功率 ${pct(cmp.bootstrap, 1)}${tag}`;
-  node.hidden = false;
-}
-
-function renderBootstrapHighlight(cur) {
-  const node = $('bootstrapHighlight');
-  if (!node) return;
-  if (cur?.plan?.pathMode !== 'bootstrap') { node.hidden = true; node.textContent = ''; return; }
-  node.textContent = `拔靴：${cur.plan.bootstrapBlock} 個月區塊，種子 ${cur.plan.bootstrapSeed}`;
-  node.hidden = false;
+function paintHighlights(said) {
+  showLine('glideHighlight', said.glide);
+  showLine('taxDragHighlight', said.tax);
+  showLine('dividendHighlight', said.dividend);
+  showLine('curveHighlight', said.curve);
+  showLine('cashHighlight', said.cash);
+  showLine('feeHighlight', said.fee);
+  showLine('fxStress', said.fxStress);
+  showLine('fxHighlight', said.fx);
+  showLine('dualEngine', said.bootstrap);
+  showLine('bootstrapHighlight', said.bootstrapMode);
+  showLine('frequencyHighlight', said.frequency);
 }
 
 function renderInflationLabel(cur) {
@@ -259,104 +238,6 @@ function renderInflationLabel(cur) {
   node.hidden = false;
 }
 
-function renderFxStress(cur) {
-  const node = $('fxStress');
-  if (!node) return;
-  const stress = fxStressAmounts(cur?.sim?.sustainableSpending?.p95);
-  if (!stress) { node.hidden = true; node.textContent = ''; return; }
-  node.textContent = [
-    `估計：港幣與美元掛鉤，這是壓力測試，不是預測。`,
-    `若美元兌港幣下跌 10%，實質可花 ${compact(stress.down10)}。`,
-    `若美元兌港幣下跌 20%，實質可花 ${compact(stress.down20)}。`
-  ].join('\n');
-  node.hidden = false;
-}
-
-function renderFxHighlight(cur) {
-  const node = $('fxHighlight');
-  if (!node) return;
-  if (!cur?.plan?.fxMode) { node.hidden = true; node.textContent = ''; return; }
-  if (cur.sim?.fxStatus?.skipped === 'twd') {
-    node.textContent = '台幣支出需要匯率序列，這次沒有套用。';
-  } else if (cur.sim?.fxSpend) {
-    const peg = cur.sim.fxStatus?.twd ? '' : '（港幣為 7.8 聯繫匯率假設）';
-    node.textContent = `匯率：中位實際提出 ${compact(cur.sim.fxSpend.withFx)}，未換算 ${compact(cur.sim.fxSpend.withoutFx)}${peg}`;
-  } else node.textContent = '匯率未套用。';
-  node.hidden = false;
-}
-
-function renderCurveHighlight(cur) {
-  const node = $('curveHighlight');
-  const cmp = cur?.sim?.curveCompare;
-  if (!node) return;
-  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
-  const side = (name, row) => `${name} 成功率 ${pct(row.successRate, 0)}、期末中位 ${compact(row.endBalanceP50)}、最差最低年支出 ${compact(row.worstMinSpend)}`;
-  node.textContent = `${cmp.label}：${cmp.note}。${side('固定', cmp.flat)}；${side('此曲線', cmp.shaped)}`;
-  node.hidden = false;
-}
-
-function renderCashHighlight(cur) {
-  const node = $('cashHighlight');
-  const cmp = cur?.sim?.cashCompare;
-  if (!node) return;
-  if (!cmp) { node.hidden = true; node.textContent = ''; return; }
-  node.textContent = `${cmp.label}：現金桶規則。最差路徑最低年提領 之前 ${compact(cmp.before)}、之後 ${compact(cmp.after)}`;
-  node.hidden = false;
-}
-
-function renderFeeHighlight(cur) {
-  const node = $('feeHighlight');
-  if (!node) return;
-  if (!cur?.plan?.feeSplit) { node.hidden = true; node.textContent = ''; return; }
-  const cmp = cur.sim?.feeSpend;
-  node.textContent = cmp
-    ? `費用拆分：中位實際提出 ${compact(cmp.withSplit)}，未拆分 ${compact(cmp.withoutSplit)}`
-    : '費用拆分已取代單一費用率。';
-  node.hidden = false;
-}
-
-function renderTaxHighlight(cur) {
-  const node = $('taxDragHighlight');
-  if (!node) return;
-  const drag = cur?.sim?.taxDrag;
-  if (!drag) { node.hidden = true; node.textContent = ''; return; }
-  const pre = cur.result?.stats?.cagr;
-  let text = `估計：年化稅負拖累 ${(drag.annual * 100).toFixed(2)}%`;
-  if (Number.isFinite(pre)) text += `，稅後 CAGR ${pct(pre - drag.annual, 2)}（稅前 ${pct(pre, 2)}）`;
-  node.textContent = text;
-  node.hidden = false;
-}
-
-function renderDividendHighlight(cur) {
-  const node = $('dividendHighlight');
-  if (!node) return;
-  if (!cur?.plan?.dividendTax) { node.hidden = true; node.textContent = ''; return; }
-  const cmp = cur.sim?.dividendSpend;
-  node.textContent = cmp
-    ? `股息稅：中位實際提出 ${compact(cmp.withTax)}，未扣稅 ${compact(cmp.withoutTax)}`
-    : '股息稅未套用：請給假設殖利率與註冊地稅率。';
-  node.hidden = false;
-}
-
-function renderGlideHighlight(cur) {
-  const node = $('glideHighlight');
-  if (!node) return;
-  const parts = [];
-  const glide = cur?.sim?.glide;
-  if (glide && !glide.skipped && Number.isFinite(glide.min)) {
-    parts.push(`實際股權重 ${pct(glide.min, 0)}–${pct(glide.max, 0)}`);
-  } else if (cur?.plan?.glidePath && glide?.skipped) {
-    parts.push('下滑路徑未套用：請同時標示股票代號與其他持倉。');
-  }
-  const cmp = cur?.sim?.glideCompare;
-  if (cmp) {
-    const side = (name, row) => `${name} 成功率 ${pct(row.successRate, 0)}、期末中位 ${compact(row.endBalanceP50)}、最差路徑最低年支出 ${compact(row.worstMinSpend)}`;
-    parts.push(`${cmp.label}。${side('固定權重', cmp.flat)}；${side('下滑', cmp.glide)}`);
-  }
-  if (!parts.length) { node.hidden = true; node.textContent = ''; return; }
-  node.textContent = parts.join('\n');
-  node.hidden = false;
-}
 
 function renderPathActions(cur) {
   const exp = $('exportPaths');
@@ -410,6 +291,34 @@ export function openPath(start) {
       ];
     })
   ));
+  if (cur.sim?.cashCompare && cur.cashSleeve) {
+    const cashYears = buildPathYears(cur.plan, cur.series, start, cur.glide, cur.dividend, cur.fx, cur.taxDrag, { bucket: cur.cashSleeve });
+    if (cashYears) {
+      box.appendChild(el('div', 'section-h', '概念建議：現金桶'));
+      box.appendChild(yearTable(cashYears));
+    }
+  }
+  if (cur.sim?.curveCompare) {
+    const curveYears = buildPathYears(cur.plan, cur.series, start, cur.glide, cur.dividend, cur.fx, cur.taxDrag, { applyCurve: true });
+    if (curveYears) {
+      box.appendChild(el('div', 'section-h', '概念建議：支出曲線'));
+      box.appendChild(yearTable(curveYears));
+    }
+  }
+}
+
+function yearTable(years) {
+  return table(
+    ['年齡', '年初資產', '提領額', '護欄是否觸發', '當年報酬', '年末資產'],
+    years.map(y => [
+      String(y.age),
+      compact(y.startBalance),
+      compact(y.withdrawal),
+      y.guardrail ? '是' : '否',
+      { text: pct(y.yearReturn, 1), neg: y.yearReturn < 0 },
+      compact(y.endBalance)
+    ])
+  );
 }
 
 function renderPathHighlights(cur) {
