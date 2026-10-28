@@ -105,12 +105,23 @@ export function validateHoldings(holdings) {
   return errors;
 }
 
+const MIX_COLORS = ['#4f46e5', '#0ea5e9', '#059669', '#d97706', '#db2777', '#7c3aed'];
+
 export function updateWeightBars() {
   const rows = [...document.querySelectorAll('#holdings .holding')];
   const total = rows.reduce((a, r) => a + (readInputNumber(r.querySelector('.w').value) || 0), 0);
-  rows.forEach(r => {
+  const mix = $('mixBar');
+  if (mix) mix.replaceChildren();
+  rows.forEach((r, i) => {
     const w = readInputNumber(r.querySelector('.w').value) || 0;
     r.querySelector('.bar span').style.width = total > 0 ? `${w / total * 100}%` : '0';
+    if (!mix || !(w > 0) || !(total > 0)) return;
+    const seg = document.createElement('i');
+    const symbol = r.querySelector('.sym')?.value || '';
+    seg.style.width = `${w / total * 100}%`;
+    seg.style.background = MIX_COLORS[i % MIX_COLORS.length];
+    seg.title = `${symbol} ${w}%`;
+    mix.appendChild(seg);
   });
   const off = Math.abs(total - 100) > 0.01;
   $('weightSum').textContent = ` 合計 ${Number(total.toFixed(2))}%${off ? '（自動按比例）' : ''}`;

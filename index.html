@@ -45,6 +45,7 @@
           <summary>
             <span class="fold-title">📦 ETF 組合權重<span class="hint" id="weightSum"></span></span>
             <span class="fold-brief" id="portfolioBrief"></span>
+            <span class="mix" id="mixBar"></span>
           </summary>
           <div class="fold-body">
             <div id="portfolioName" hidden></div>
@@ -73,6 +74,7 @@
           <summary>
             <span class="fold-title">🎯 退休計劃假設</span>
             <span class="fold-brief" id="planBrief"></span>
+            <span class="life-mini" id="planLife"><span class="acc"></span><span class="ret"></span></span>
           </summary>
           <div class="fold-body">
             <div class="plan-grid" id="planForm"></div>
@@ -109,21 +111,33 @@
       </div>
       <div class="tab-panel" id="tab-overview">
         <dl class="overview-facts" id="kpis">
-          <div>
-            <dt>歷史成功率</dt>
-            <dd id="kpiSuccess">—</dd>
-            <dd class="overview-extra" id="sampleWarning" hidden></dd>
-            <dd class="delta" id="kpiSuccessDelta"></dd>
+          <div class="with-ring">
+            <svg class="ring ring-sm" viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="track" cx="60" cy="60" r="50"></circle>
+              <circle class="meter" id="ringMeter" cx="60" cy="60" r="50" stroke-dasharray="314.16" stroke-dashoffset="314.16"></circle>
+              <text id="ringText" x="60" y="66" text-anchor="middle">—</text>
+            </svg>
+            <div>
+              <dt>歷史成功率</dt>
+              <dd id="kpiSuccess">—</dd>
+              <dd class="overview-extra" id="sampleWarning" hidden></dd>
+              <dd class="delta" id="kpiSuccessDelta"></dd>
+            </div>
           </div>
           <div>
             <dt>每月可花金額</dt>
             <dd id="kpiSpend">—</dd>
+            <div class="meter-track" title="可持續月支出相對目標"><i id="spendMeter"></i></div>
             <dd class="delta" id="kpiSpendDelta"></dd>
           </div>
           <div>
             <dt>初始提領率</dt>
             <dd id="kpiWithdraw">—</dd>
             <dd class="overview-extra"><b id="kpiSwr">—</b> SWR · <b id="kpiPwr">—</b> PWR</dd>
+            <div class="pair-meters" aria-hidden="true">
+              <div>SWR<span class="meter-track"><i id="swrMeter"></i></span></div>
+              <div>PWR<span class="meter-track"><i id="pwrMeter"></i></span></div>
+            </div>
             <dd class="delta" id="kpiWithdrawDelta"></dd>
           </div>
           <div>

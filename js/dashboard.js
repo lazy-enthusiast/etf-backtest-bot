@@ -119,6 +119,8 @@ export function renderDashboard() {
     meter.style.stroke = c[tone];
     meter.setAttribute('stroke-dashoffset', String(314.16 * (1 - sim.successRate)));
   }
+  const ringLabel = $('ringText');
+  if (ringLabel) ringLabel.setAttribute('fill', c[tone]);
   const successText = pct(sim.successRate, sim.successRate > 0.995 && sim.successRate < 1 ? 1 : 0);
   setText('ringText', successText);
   const successEl = setText('kpiSuccess', successText);
@@ -169,6 +171,15 @@ export function renderDashboard() {
     );
   }
   setDelta('kpiSpendDelta', monthly, prev?.sustainableSpending?.p95 != null ? prev.sustainableSpending.p95 / 12 : null, compact);
+  const spendMeter = $('spendMeter');
+  if (spendMeter) {
+    const ratio = targetMonthly > 0 && Number.isFinite(monthly) ? monthly / targetMonthly : 0;
+    spendMeter.style.width = `${Math.max(0, Math.min(100, ratio * 100))}%`;
+    const track = spendMeter.parentElement;
+    track.classList.toggle('good', ratio >= 1);
+    track.classList.toggle('warn', ratio < 1 && ratio >= 0.8);
+    track.classList.toggle('bad', ratio > 0 && ratio < 0.8);
+  }
 
   const w = sim.withdrawalRates;
   const initRate = sim.initialWithdrawalRate;
@@ -181,6 +192,11 @@ export function renderDashboard() {
   if (w) {
     if (swrEl) swrEl.title = `${w.horizonYears} 年最差起點 ${w.worstStart} · P10 ${pct(w.swr.p10, 2)}`;
     if (pwrEl) pwrEl.title = `保住實質本金 · 中位 ${pct(w.pwr.p50, 2)}`;
+    const scale = 0.08;
+    const swrMeter = $('swrMeter');
+    const pwrMeter = $('pwrMeter');
+    if (swrMeter) swrMeter.style.width = `${Math.max(0, Math.min(100, w.swr.min / scale * 100))}%`;
+    if (pwrMeter) pwrMeter.style.width = `${Math.max(0, Math.min(100, w.pwr.min / scale * 100))}%`;
   }
   setDelta('kpiWithdrawDelta', initRate, prev?.initialWithdrawalRate, x => pct(x), false);
 

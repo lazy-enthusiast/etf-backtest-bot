@@ -413,8 +413,14 @@ export function renderPlanTimeline() {
   const p = state.plan;
   const total = Math.max(1, p.endAge - p.currentAge);
   const acc = Math.max(0, p.retireAge - p.currentAge);
-  $('planTimeline').children[0].style.width = `${acc / total * 100}%`;
-  $('planTimeline').children[1].style.width = `${(total - acc) / total * 100}%`;
+  for (const root of [$('planTimeline'), $('planLife')]) {
+    if (!root) continue;
+    const accEl = root.querySelector('.acc');
+    const retEl = root.querySelector('.ret');
+    if (!accEl || !retEl) continue;
+    accEl.style.width = `${acc / total * 100}%`;
+    retEl.style.width = `${(total - acc) / total * 100}%`;
+  }
   $('planTimelineLabels').innerHTML = '';
   [`${p.currentAge} 歲`, `累積 ${acc} 年 → ${p.retireAge} 歲退休`, `提領 ${p.endAge - p.retireAge} 年 → ${p.endAge} 歲`]
     .forEach(t => $('planTimelineLabels').appendChild(el('span', '', t)));

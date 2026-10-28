@@ -89,7 +89,7 @@
   .small { font-size: 12px; }
 
   /* ===== Workspace（組合 + 計劃假設）===== */
-  .workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+  .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
   .workspace > .card { min-width: 0; }
   .portfolio-card.card, .plan-card.card { padding: 18px 20px; }
   .portfolio-card .card-title, .plan-card .card-title { margin-bottom: 8px; }
@@ -127,20 +127,31 @@
   .timeline-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
   /* ===== Portfolio editor ===== */
-  .fold > summary { cursor: pointer; display: block; list-style: none; line-height: 1.45; }
+  .fold > summary { cursor: pointer; display: flex; flex-direction: column; align-items: stretch; gap: 8px; list-style: none; line-height: 1.45; }
   .fold > summary::-webkit-details-marker { display: none; }
   .fold-title { font-size: 15px; font-weight: 700; }
   .fold > summary .fold-title::before { content: '▸ '; color: var(--muted); font-weight: 400; }
   .fold[open] > summary .fold-title::before { content: '▾ '; }
   .fold-brief { font-size: 14px; font-weight: 400; color: var(--text); }
-  .fold[open] > summary .fold-brief { display: none; }
+  .fold[open] > summary .fold-brief,
+  .fold[open] > summary .mix,
+  .fold[open] > summary .life-mini { display: none; }
+  .mix, .life-mini { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); }
+  .mix i { display: block; height: 100%; min-width: 0; }
+  .life-mini .acc { background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+  .life-mini .ret { background: linear-gradient(90deg, #f59e0b, #ef4444); }
   .fold:not([open]) > summary .hint { display: none; }
   .fold-body { margin-top: 10px; }
   .holding { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; min-width: 0; }
   .holding-line { display: grid; grid-template-columns: minmax(6.5em, 1fr) 2.8em 4.8em 4.6em 1.6em; gap: 8px; align-items: center; width: 100%; min-width: 0; }
   .holding-line:has(.tax-other:not([hidden])) { grid-template-columns: minmax(5.2em, 1fr) 2.5em 4.6em 4.2em 3.6em 1.6em; }
-  .holding .bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
-  .holding .bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .holding .bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .holding .bar span { display: block; height: 100%; background: #4f46e5; }
+  .holding:nth-child(6n+2) .bar span { background: #0ea5e9; }
+  .holding:nth-child(6n+3) .bar span { background: #059669; }
+  .holding:nth-child(6n+4) .bar span { background: #d97706; }
+  .holding:nth-child(6n+5) .bar span { background: #db2777; }
+  .holding:nth-child(6n+6) .bar span { background: #7c3aed; }
   .holding input,
   .holding select { box-sizing: border-box; width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; height: 34px; padding: 0 4px; outline: none; min-width: 0; }
   .holding input:focus,
@@ -212,6 +223,21 @@
   .kpi-secondary { display: none; }
   .kpi-secondary b { color: var(--text); font-size: 14px; font-weight: 700; margin: 0 4px; }
   .kpi-secondary .delta { display: inline; margin-left: 4px; }
+  .with-ring { display: flex; align-items: center; gap: 14px; }
+  .with-ring #kpiSuccess {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0, 0, 0, 0); border: 0;
+  }
+  .ring-sm { width: 72px; height: 72px; }
+  .ring-sm text { font-size: 16px; }
+  .meter-track { height: 8px; margin-top: 10px; border-radius: 999px; background: var(--border); overflow: hidden; }
+  .meter-track > i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); }
+  .meter-track.good > i { background: var(--good); }
+  .meter-track.warn > i { background: var(--warn); }
+  .meter-track.bad > i { background: var(--bad); }
+  .pair-meters { display: grid; gap: 6px; margin-top: 10px; }
+  .pair-meters div { display: grid; grid-template-columns: 2.4em 1fr; gap: 8px; align-items: center; font-size: 11px; color: var(--muted); font-weight: 700; }
+  .pair-meters .meter-track { margin-top: 0; }
   .ring { width: 112px; height: 112px; flex-shrink: 0; }
   .ring circle { fill: none; stroke-width: 11; }
   .ring .track { stroke: var(--surface-2); }
