@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { pct, num2, money, compact } from './dom.js';
 import { inflationLabel, requiredPhaseReturns, formatRequiredPhaseReturns } from '../backtest/retirement.js';
+import { highlightLines, planOptionLines } from './narrate.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 
 function shortSnippet(snippet, tightAge) {
@@ -24,48 +25,11 @@ function describeSpendingBrief(sim, plan) {
   return `路徑摘要（逐月帳本只在記憶體裡算完即丟）：${tight}${vol}${guard}。最差起點逐年：${snip}`;
 }
 
-function describeGlide(sim) {
-  const g = sim?.glide;
-  if (!g) return null;
-  if (g.skipped || !Number.isFinite(g.min)) return '下滑路徑未套用：需要同時標示股票代號與其他持倉，且價格月序對得上。';
-  const range = `實際股權重 ${pct(g.min, 0)}–${pct(g.max, 0)}（同一條歷史索引，只改該月目標權重）`;
-  const cmp = sim.glideCompare;
-  if (!cmp) return range;
-  const side = (name, row) => `${name}成功率 ${pct(row.successRate, 0)}、期末中位 ${money(row.endBalanceP50)}、最差最低年支出 ${money(row.worstMinSpend)}`;
-  return `${range}。${cmp.label}。${side('固定權重', cmp.flat)}；${side('下滑', cmp.glide)}`;
-}
-
-function describeTaxDrag(cur) {
-  const drag = cur?.sim?.taxDrag;
-  if (!drag) return null;
-  const pre = cur.result?.stats?.cagr;
-  const tail = Number.isFinite(pre)
-    ? `，稅後 CAGR ${pct(pre - drag.annual, 2)}（稅前 ${pct(pre, 2)}）`
-    : '';
-  return `估計：年化稅負拖累 ${(drag.annual * 100).toFixed(2)}%${tail}`;
-}
-
-function describeDividend(sim, plan) {
-  if (!plan?.dividendTax) return null;
-  const cmp = sim?.dividendSpend;
-  if (!cmp) return '股息稅未套用：沒有對得上持倉的假設殖利率與註冊地稅率。';
-  return `股息稅：中位實際提出 ${money(cmp.withTax, plan.currency)}，未扣稅 ${money(cmp.withoutTax, plan.currency)}。可持續支出分位仍是未另扣這筆稅的固定實質口徑。`;
-}
-
-function describeFeeSplit(sim, plan) {
-  if (!plan?.feeSplit) return null;
-  const cmp = sim?.feeSpend;
-  if (!cmp) return '費用拆分已取代單一費用率。與未拆分的支出對照只在未同時開啟下滑路徑時計算。';
-  return `費用拆分：中位實際提出 ${money(cmp.withSplit, plan.currency)}，未拆分（仍用單一費用率） ${money(cmp.withoutSplit, plan.currency)}`;
-}
-
-function describeFx(sim, plan) {
-  if (!plan?.fxMode) return null;
-  if (sim?.fxStatus?.skipped === 'twd') return '台幣在支出籃裡，但沒有傳入匯率序列，所以這次沒有換算，也沒有拿港幣聯繫來充數。';
-  const cmp = sim?.fxSpend;
-  if (!cmp) return '支出匯率未套用。';
-  const peg = sim.fxStatus?.twd ? '台幣用傳入的匯率序列。' : '港幣部分用 7.8 聯繫匯率假設，匯率不變時支出數字與未換算相同。';
-  return `匯率：中位實際提出 ${money(cmp.withFx, plan.currency)}，未換算 ${money(cmp.withoutFx, plan.currency)}。${peg}`;
+function chatFmt(plan) {
+  return {
+    pct,
+    money: (x) => money(x, plan?.currency)
+  };
 }
 
 function describeWithdrawal(p) {
@@ -91,7 +55,8 @@ export function describePlan(p) {
     p.pathMode === 'bootstrap' ? `路徑抽樣：區塊拔靴 ${p.bootstrapBlock} 個月，種子 ${p.bootstrapSeed}。這是額外模式，不要拿它的成功率去和歷史起點比。` : null,
     (p.withdrawEvery && p.withdrawEvery !== 1) || (p.guardrailEvery && p.guardrailEvery !== 12)
       ? `提領每 ${p.withdrawEvery || 1} 個月，護欄每 ${p.guardrailEvery || 12} 個月檢查。預設是每月提領、每 12 個退休月檢查。`
-      : null
+      : null,
+    ...planOptionLines(p)
   ].filter(Boolean).join('\n');
 }
 
@@ -103,6 +68,7 @@ function describeRequiredReturn(plan, sim) {
 
 export function describeSim(cur) {
   const { sim, plan } = cur;
+  const said = highlightLines(sim, plan, chatFmt(plan), { cagr: cur.result?.stats?.cagr });
   const h = sim.history;
   const w = sim.withdrawalRates;
   const keyAges = [...new Set([plan.retireAge, plan.retireAge + 10, plan.retireAge + 20, plan.endAge])].filter(a => a >= plan.currentAge && a <= plan.endAge);
@@ -119,11 +85,18 @@ export function describeSim(cur) {
     `提領期 ${w.horizonYears} 年的 SWR：最差 ${pct(w.swr.min, 2)}（${w.worstStart} 起）、P5 ${pct(w.swr.p5, 2)}、P10 ${pct(w.swr.p10, 2)}、中位 ${pct(w.swr.p50, 2)}；PWR：最差 ${pct(w.pwr.min, 2)}、P10 ${pct(w.pwr.p10, 2)}、中位 ${pct(w.pwr.p50, 2)}`,
     '最差起始時點：' + sim.worstRuns.map(r => `${r.start}${r.success ? '（成功）' : `（${r.depletedAge.toFixed(1)} 歲耗盡）`}`).join('、'),
     describeSpendingBrief(sim, plan),
-    describeGlide(sim),
-    describeTaxDrag(cur),
-    describeDividend(sim, plan),
-    describeFeeSplit(sim, plan),
-    describeFx(sim, plan),
+    said.glide,
+    said.tax,
+    said.dividend,
+    said.curve,
+    said.cash,
+    said.fee,
+    said.fx,
+    said.fxStress,
+    said.bootstrap,
+    said.bootstrapMode,
+    said.frequency,
+    said.sample,
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

@@ -3,7 +3,7 @@
 //   以 100 萬起始、每年提領 4%（實質固定金額）跑歷史每個起始月份
 
 import { runBacktest, symbolsNeeded } from './engine.js';
-import { realMonthlyReturns, simulateRetirement } from './retirement.js';
+import { prepareRetirement, runPrepared } from './retirement.js';
 import { ensureData, loadMapping } from './data-fetcher.js';
 
 function parseArgs(argv) {
@@ -76,10 +76,10 @@ async function main() {
   if (opts.json) console.log(JSON.stringify(result, null, 2));
   else printReport(result);
 
-  if (opts.withdraw) await printWithdrawalTest(result, opts);
+  if (opts.withdraw) await printWithdrawalTest(result, opts, holdings);
 }
 
-async function printWithdrawalTest(result, opts) {
+async function printWithdrawalTest(result, opts, holdings) {
   const years = Number(opts.years || 30);
   const fixed = opts.inflation && opts.inflation !== 'cpi';
   const plan = {
@@ -91,8 +91,15 @@ async function printWithdrawalTest(result, opts) {
     feeRate: Number(opts.fee || 0)
   };
   const cpi = fixed ? null : (await ensureData(['CPI_US'])).CPI_US?.series;
-  const { returns, cpiFallbackMonths } = realMonthlyReturns(result.equityMonthly, plan, cpi);
-  const sim = simulateRetirement(plan, returns);
+  const prepared = prepareRetirement({
+    plan,
+    holdings,
+    equityMonthly: result.equityMonthly,
+    assetMonthly: result.assetMonthly,
+    cpiSeries: cpi
+  });
+  const { cpiFallbackMonths } = prepared;
+  const sim = runPrepared(prepared);
   const w = sim.withdrawalRates;
   console.log(`\n提領測試：每年 ${opts.withdraw}%（實質），${years} 年，通膨 ${fixed ? `固定 ${opts.inflation}%` : '美國 CPI'}，費用 ${plan.feeRate}%`);
   console.log(`歷史：${sim.history.start} ~ ${sim.history.end}，${sim.history.starts} 個起始月份（${sim.history.method === 'rolling' ? '完整歷史窗口' : '循環序列'}）${cpiFallbackMonths ? `，${cpiFallbackMonths} 個月缺 CPI 改用 2.5%` : ''}`);
