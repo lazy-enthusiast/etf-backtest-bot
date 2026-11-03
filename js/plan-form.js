@@ -328,6 +328,10 @@ export function writePlanForm() {
   if (withdrawEvery && document.activeElement !== withdrawEvery) withdrawEvery.value = p.withdrawEvery ?? 1;
   const guardrailEvery = $('plan-guardrailEvery');
   if (guardrailEvery && document.activeElement !== guardrailEvery) guardrailEvery.value = p.guardrailEvery ?? 12;
+  const reshuffleBlock = $('reshuffleBlock');
+  if (reshuffleBlock && document.activeElement !== reshuffleBlock) reshuffleBlock.value = p.reshuffleBlock ?? 12;
+  const reshuffleSeed = $('reshuffleSeed');
+  if (reshuffleSeed && document.activeElement !== reshuffleSeed) reshuffleSeed.value = p.reshuffleSeed ?? 1;
   renderPlanTimeline();
 }
 
@@ -393,6 +397,10 @@ export function readPlanForm() {
   if (withdrawEvery && readInputNumber(withdrawEvery.value) != null) p.withdrawEvery = readInputNumber(withdrawEvery.value);
   const guardrailEvery = $('plan-guardrailEvery');
   if (guardrailEvery && readInputNumber(guardrailEvery.value) != null) p.guardrailEvery = readInputNumber(guardrailEvery.value);
+  const reshuffleBlock = $('reshuffleBlock');
+  if (reshuffleBlock && readInputNumber(reshuffleBlock.value) != null) p.reshuffleBlock = readInputNumber(reshuffleBlock.value);
+  const reshuffleSeed = $('reshuffleSeed');
+  if (reshuffleSeed && readInputNumber(reshuffleSeed.value) != null) p.reshuffleSeed = readInputNumber(reshuffleSeed.value);
   return p;
 }
 

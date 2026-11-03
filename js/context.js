@@ -75,7 +75,8 @@ export function describeSim(cur) {
   const flex = sim.spendingFlexibility;
   const lines = [
     `方法：${h.start} ~ ${h.end} 共 ${h.months} 個月實質報酬（已扣費用與通膨），${h.starts} 個起始月份（${h.method === 'rolling' ? '完整歷史窗口' : h.method === 'bootstrap' ? '區塊拔靴，額外模式' : '歷史不足，循環序列'}）${cur.cpiFallbackMonths ? `；${cur.cpiFallbackMonths} 個月缺 CPI` : ''}`,
-    `提領規則 ${describeWithdrawal(plan)}；成功率 ${pct(sim.successRate, 1)}` +
+    describeReshuffle(sim),
+    `提領規則 ${describeWithdrawal(plan)}；歷史成功率 ${pct(sim.successRate, 1)}` +
       (plan.withdrawalStrategy !== 'fixed_real' ? `（對照固定實質 ${pct(sim.successRateFixedReal, 1)}）` : ''),
     sim.balanceAtRetire ? `退休時資產：中位 ${money(sim.balanceAtRetire.p50)}、P10 ${money(sim.balanceAtRetire.p10)}、P90 ${money(sim.balanceAtRetire.p90)}；以中位數計初始淨提領率 ${pct(sim.initialWithdrawalRate, 2)}` : '已在退休期',
     describeRequiredReturn(plan, sim),
@@ -107,14 +108,24 @@ export function describeSim(cur) {
   return lines.join('\n');
 }
 
+function describeReshuffle(sim) {
+  const mc = sim?.monteCarlo;
+  if (!mc) return null;
+  if (mc.suppressed) return `區塊重排：${mc.suppressed}。這不是歷史成功率，也不取代它。`;
+  const spend = mc.sustainableSpending;
+  return `區塊重排（不是未來機率，不取代歷史成功率）：${pct(mc.solventRate, 1)}，${mc.paths} 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。重排路徑可持續年支出 P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}。`;
+}
+
 export function describeBacktest(name, r, brief) {
   const s = r.stats;
-  const lines = [
+  const lines = [];
+  if (r.account?.note) lines.push(r.account.note);
+  lines.push(
     `組合：${name}；權重：${r.portfolio.holdings.map(h => `${h.symbol} ${(h.weight * 100).toFixed(1)}%`).join('、')}；再平衡：${r.portfolio.rebalance}`,
     `期間：${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`,
     `名目 CAGR ${pct(s.cagr, 2)}、年化波動 ${pct(s.volatility, 2)}、Sharpe(rf=0) ${num2(s.sharpe)}、Sortino ${num2(s.sortino)}、Calmar ${num2(s.calmar)}`,
     `最大回撤 ${pct(s.maxDrawdown, 2)}（${s.peakDate} → ${s.troughDate}，回復：${s.recoveryDate || '尚未回復'}）`
-  ];
+  );
   if (brief) return lines.join('\n');
   const yearly = r.annualReturns;
   const shown = yearly.length > 60 ? yearly.filter(y => y.return < -0.1 || y.return > 0.25 || y.year >= yearly.at(-1).year - 30) : yearly;

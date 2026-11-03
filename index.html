@@ -161,6 +161,21 @@
         <p class="path-highlights" id="dualEngine" hidden></p>
         <p class="path-highlights" id="bootstrapHighlight" hidden></p>
         <p class="path-highlights" id="frequencyHighlight" hidden></p>
+        <ul class="warn-list" id="overviewNotes" hidden></ul>
+        <details class="reshuffle-panel" id="reshufflePanel">
+          <summary>進階：區塊重排</summary>
+          <p class="hint">把已換成港元、扣過費用與通膨的月報酬切成連續的塊再接起來。同一個月的報酬與通膨一起走。這不是未來機率，也不改上面的歷史成功率。</p>
+          <div class="reshuffle-controls">
+            <label>塊長（6–60 個月，預設 12）
+              <input id="reshuffleBlock" inputmode="numeric" value="12">
+            </label>
+            <label>種子
+              <input id="reshuffleSeed" inputmode="numeric" value="1">
+            </label>
+            <span>1,000 條。以後可以再加。</span>
+          </div>
+          <p id="reshuffleResult">尚未計算。</p>
+        </details>
       </div>
       <div class="tab-panel" id="tab-scenarios" hidden></div>
       <div class="tab-panel" id="tab-performance" hidden></div>

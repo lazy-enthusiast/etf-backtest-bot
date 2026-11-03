@@ -107,3 +107,36 @@ export function planOptionLines(plan) {
   if (plan.compareBootstrap) lines.push('拔靴對照：開。歷史成功率仍是公布的成功率。');
   return lines;
 }
+
+/** 概況上的資料限制。不放進成功率圓環。 */
+export function overviewNotes({ result, sim, plan }) {
+  const notes = [];
+  if (result?.account?.note) notes.push(result.account.note);
+  if (plan?.currency && plan.currency !== 'HKD') {
+    notes.push(`價格已換成港元。計劃幣別標成 ${plan.currency}，與計價單位不一致。v1 的價格單位是港元。`);
+  }
+  if (plan?.inflationMode !== 'fixed') notes.push('實質報酬扣的是美國 CPI，不是香港 CPI。');
+  for (const warning of result?.warnings || []) {
+    if (warning.includes('價格指數') || warning.includes('不含股息')) notes.push(warning);
+  }
+  if (sim?.history?.method === 'circular') {
+    notes.push('歷史長度不足整個計劃年限，退休模擬以循環序列補足。');
+  }
+  return notes;
+}
+
+/** 進階區的重排句子。百分比不與歷史成功率合併。 */
+export function reshuffleSummary(mc) {
+  if (!mc) return '尚未計算。';
+  const head = `1,000 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。塊長可改 6–60 個月，預設 12，與舊的拔靴開關無關。`;
+  if (mc.suppressed) return `${mc.suppressed}。${head}這不改變歷史成功率。`;
+  const pctText = `${Math.round(mc.solventRate * 1000) / 10}%`;
+  const spend = mc.sustainableSpending;
+  const spendText = spend
+    ? `重排路徑上的可持續年支出（固定實質）P10 ${Math.round(spend.p10).toLocaleString('en-US')}、P50 ${Math.round(spend.p50).toLocaleString('en-US')}。不取代歷史可花金額。`
+    : '';
+  const ruin = mc.ruinAge
+    ? `沒撐過的路徑裡，最早 ${mc.ruinAge.min.toFixed(1)} 歲耗盡，中位 ${mc.ruinAge.p50.toFixed(1)} 歲。`
+    : '這 1,000 條都撐到終點。';
+  return `重排 ${pctText}（${head}）${mc.label}。${ruin}${spendText}`;
+}

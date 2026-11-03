@@ -4,7 +4,8 @@ import { $, el } from './dom.js';
 import { loadJSON, saveJSON } from './storage.js';
 import { getAuth, showAuthDialog, submitAuth, unlockApp } from './auth.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
-import { renderPlanForm, writePlanForm } from './plan-form.js';
+import { renderPlanForm, writePlanForm, onPlanEdited } from './plan-form.js';
+import { bindNumericInput } from './numeric-input.js';
 import { writePortfolioForm, addHoldingRow, onPortfolioEdited } from './portfolio-form.js';
 import { recalc, setStatus } from './recalc.js';
 import { migrateHoldings, usBareKeysFromMapping } from '../backtest/symbols.js';
@@ -52,6 +53,16 @@ function bindUi() {
   });
 
   $('calcBtn')?.addEventListener('click', () => recalc({ markPrevious: true }));
+  const reshuffleBlock = $('reshuffleBlock');
+  const reshuffleSeed = $('reshuffleSeed');
+  if (reshuffleBlock) {
+    bindNumericInput(reshuffleBlock, { integer: true });
+    reshuffleBlock.addEventListener('input', onPlanEdited);
+  }
+  if (reshuffleSeed) {
+    bindNumericInput(reshuffleSeed, { integer: true });
+    reshuffleSeed.addEventListener('input', onPlanEdited);
+  }
   $('authSubmitBtn')?.addEventListener('click', () => submitAuth());
   $('authInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); });
 

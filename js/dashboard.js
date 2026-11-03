@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
 import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
-import { highlightLines } from './narrate.js';
+import { highlightLines, overviewNotes, reshuffleSummary } from './narrate.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -106,6 +106,20 @@ function renderPhaseYield(phases, cagr) {
   }
 }
 
+function renderOverviewNotes(cur) {
+  const list = $('overviewNotes');
+  if (!list) return;
+  const notes = overviewNotes({ result: cur.result, sim: cur.sim, plan: cur.plan });
+  list.innerHTML = '';
+  notes.forEach(note => list.appendChild(el('li', '', note)));
+  list.hidden = notes.length === 0;
+}
+
+function renderReshuffle(cur) {
+  const out = $('reshuffleResult');
+  if (out) out.textContent = reshuffleSummary(cur.sim?.monteCarlo);
+}
+
 export function renderDashboard() {
   const cur = state.current;
   if (!cur) return;
@@ -138,6 +152,8 @@ export function renderDashboard() {
   }
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
   const said = highlightLines(sim, plan, { pct, money: compact }, { cagr: cur.result?.stats?.cagr });
+  renderOverviewNotes(cur);
+  renderReshuffle(cur);
   const sample = $('sampleWarning');
   if (sample) {
     sample.textContent = said.sample || '';
@@ -670,7 +686,7 @@ export function renderAssets() {
   const warnings = [...r.warnings];
   if (state.current.sim.history.method === 'circular') warnings.push('歷史長度不足整個計劃年限，退休模擬以循環序列（走到尾端接回開頭）補足，結果較不可靠。');
   if (state.current.cpiFallbackMonths) warnings.push(`最近 ${state.current.cpiFallbackMonths} 個月沒有 CPI 資料，以固定通膨 ${state.current.plan.inflationRate}% 替代。`);
-  warnings.push('各資產以自身幣別計算，未做匯率換算；美國 CPI 未必反映你所在地的通膨。');
+  if (state.current.plan.inflationMode !== 'fixed') warnings.push('實質報酬扣的是美國 CPI，不是香港 CPI。');
   box.appendChild(el('div', 'section-h', '數據限制'));
   const ul = el('ul', 'warn-list');
   warnings.forEach(w => ul.appendChild(el('li', '', w)));
