@@ -3,11 +3,8 @@
 
 import { mappingLookupKey, normalizeSymbol } from './symbols.js';
 
-/** 計劃以港元計價。美元價格整段都乘這個固定數，不隨月份改變。 */
+/** 計劃以港元計價。美元價格整段都乘這個固定數，不隨月份改變。畫面不重述這句。 */
 export const HKD_PER_USD = 7.8;
-
-/** 概況與進階區共用。不要寫成歷史匯率或換匯成本已計入。 */
-export const HKD_PEG_NOTE = '結果用港元計算。美元開支全程按 1 美元 = 7.8 港元換，沒有算換匯費用，也不代表你在外國當地的物價。';
 
 export function priceCurrency(code) {
   const c = String(code || '').trim().toUpperCase();
@@ -45,10 +42,9 @@ export function alignPricesToHkd(symbols, dataBySymbol) {
       hkdNative.push(symbol);
     }
   }
-  const note = (usdConverted.length || hkdNative.length) ? HKD_PEG_NOTE : '';
   return {
     data,
-    account: { unit: 'HKD', peg: HKD_PER_USD, usdConverted, hkdNative, note }
+    account: { unit: 'HKD', peg: HKD_PER_USD, usdConverted, hkdNative, note: '' }
   };
 }
 
@@ -329,7 +325,6 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
   const limiting = assets.find(a => a.historyStart === commonStart);
 
   const warnings = spliced.flatMap(s => s.warnings);
-  if (aligned.account.usdConverted.length || aligned.account.hkdNative.length) warnings.unshift(aligned.account.note);
   for (const s of spliced) {
     for (const seg of s.segments) {
       if (SEGMENT_WARNINGS[seg.type] && seg.from < dates.at(-1) && seg.to > dates[0]) {

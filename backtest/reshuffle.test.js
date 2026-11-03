@@ -9,7 +9,6 @@ import {
   simulateRetirement,
   RESHUFFLE_PATHS
 } from './retirement.js';
-import { HKD_PEG_NOTE } from './engine.js';
 import { overviewNotes, reshuffleParts } from '../js/narrate.js';
 
 function plan(over = {}) {
@@ -97,19 +96,17 @@ test('reshuffle sits beside the historical success rate and does not overwrite s
   assert.notEqual(legacy.monteCarlo.blockMonths, legacy.plan.bootstrapBlock);
 });
 
-test('overview copy states the peg and US CPI, and reshuffle copy stays out of the success rate', () => {
+test('overview copy skips the peg sentence and keeps US inflation and dividends', () => {
   const notes = overviewNotes({
     result: {
-      account: { note: HKD_PEG_NOTE },
+      account: { note: '' },
       warnings: ['2800.HK：價格指數，不含股息，報酬被低估']
     },
     sim: { history: { method: 'rolling' } },
     plan: { inflationMode: 'cpi', currency: 'HKD' }
   });
   const joined = notes.join('\n');
-  assert.match(joined, /7\.8 港元/);
-  assert.match(joined, /外國當地的物價/);
-  assert.doesNotMatch(joined, /7\.75/);
+  assert.doesNotMatch(joined, /7\.8 港元|換匯費用|外國當地/);
   assert.match(joined, /美國物價/);
   assert.match(joined, /不含派息/);
   const parts = reshuffleParts({

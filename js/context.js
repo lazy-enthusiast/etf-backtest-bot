@@ -120,7 +120,6 @@ function describeReshuffle(sim, plan) {
 export function describeBacktest(name, r, brief) {
   const s = r.stats;
   const lines = [];
-  if (r.account?.note) lines.push(r.account.note);
   lines.push(
     `組合：${name}；權重：${r.portfolio.holdings.map(h => `${h.symbol} ${(h.weight * 100).toFixed(1)}%`).join('、')}；再平衡：${r.portfolio.rebalance}`,
     `期間：${r.period.start} ~ ${r.period.end}（${r.period.years.toFixed(1)} 年），起點受 ${r.period.limitingAsset} 限制`,

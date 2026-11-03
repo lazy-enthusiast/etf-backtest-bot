@@ -111,7 +111,6 @@ export function planOptionLines(plan) {
 /** 概況上的資料限制。不放進成功率圓環。 */
 export function overviewNotes({ result, sim, plan }) {
   const notes = [];
-  if (result?.account?.note) notes.push(result.account.note);
   if (plan?.currency && plan.currency !== 'HKD') {
     notes.push(`金額標成 ${plan.currency}，但價格是用港元算的。`);
   }
