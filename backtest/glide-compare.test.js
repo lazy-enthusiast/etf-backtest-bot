@@ -36,8 +36,8 @@ function plan(over = {}) {
 }
 
 const data = {
-  'AAA.US': { series: points(Array.from({ length: 40 }, () => 0.01)) },
-  'BBB.US': { series: points(Array.from({ length: 40 }, () => 0)) }
+  'AAA.US': { currency: 'USD', series: points(Array.from({ length: 40 }, () => 0.01)) },
+  'BBB.US': { currency: 'USD', series: points(Array.from({ length: 40 }, () => 0)) }
 };
 const holdings = { 'AAA.US': 60, 'BBB.US': 40 };
 
