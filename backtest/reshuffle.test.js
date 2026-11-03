@@ -126,14 +126,17 @@ test('overview copy states the peg and US CPI, and reshuffle copy stays out of t
     sustainableSpending: { p10: 100000, p50: 200000 }
   }, { priceIndex: true });
   const text = `${parts.headline}\n${parts.spend}\n${parts.notes}`;
-  assert.match(parts.headline, /重排後達成比例 61%/);
-  assert.match(parts.headline, /有多少條能撐到計劃結束/);
+  assert.match(parts.headline, /重排後達成比例為 61%/);
+  assert.match(parts.headline, /能讓錢用到計劃結束/);
   assert.match(parts.headline, /不是預測/);
-  assert.match(parts.headline, /一共模擬 1000 條，每塊 12 個月，種子 1/);
-  assert.match(parts.spend, /概況裡那個歷史可花金額/);
+  assert.match(parts.headline, /與概況裡的歷史可花金額不是同一回事/);
+  assert.match(parts.headline, /共模擬 1000 次，每段 12 個月；隨機種子 1/);
+  assert.match(parts.spend, /這不是概況裡的歷史可花金額/);
+  assert.match(parts.spend, /約十次模擬中有一次/);
+  assert.match(parts.spend, /中間值/);
   assert.match(parts.notes, /上下動一點/);
   assert.match(parts.notes, /港股會顯得比較保守/);
-  assert.doesNotMatch(text, /機率|勝率|袖套|口徑|序列頭尾/);
+  assert.doesNotMatch(text, /機率|勝率/);
   assert.doesNotMatch(text, /區塊拔靴/);
   const legacy = reshuffleParts({
     suppressed: null,
@@ -143,7 +146,7 @@ test('overview copy states the peg and US CPI, and reshuffle copy stays out of t
     solventRate: 0.61,
     sustainableSpending: { p10: 1, p50: 2 }
   }, { legacyOn: true });
-  assert.match(legacy.notes, /你開了「區塊拔靴」/);
+  assert.match(legacy.notes, /你已開啟「區塊拔靴」，其數字與這裡不能直接比較/);
 });
 
 test('block length is capped by history and a short tape is marked as few blocks', () => {

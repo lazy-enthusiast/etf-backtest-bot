@@ -113,8 +113,8 @@ function describeReshuffle(sim, plan) {
   if (!mc) return null;
   if (mc.suppressed) return `區塊重排：${mc.suppressed}。上面圓環的數字不變。`;
   const spend = mc.sustainableSpending;
-  const legacy = plan?.pathMode === 'bootstrap' ? '你開了「區塊拔靴」。那個數字不能和這裡直接比。' : '';
-  return `重排後達成比例 ${pct(mc.solventRate, 1)}。這是把歷史月份打亂之後，有多少條能撐到計劃結束。這不是預測。P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}，和概況裡那個歷史可花金額不是同一件事。一共模擬 ${mc.paths} 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。${legacy}`;
+  const legacy = plan?.pathMode === 'bootstrap' ? '你已開啟「區塊拔靴」，其數字與這裡不能直接比較。' : '';
+  return `重排後達成比例為 ${pct(mc.solventRate, 1)}。意思是：把歷史月份打亂重排後，有這麼多模擬能讓錢用到計劃結束。這不是預測。P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}，與概況裡的歷史可花金額不是同一回事。共模擬 ${mc.paths} 次，每段 ${mc.blockMonths} 個月；隨機種子 ${mc.seed}（相同種子可重現相同結果）。${legacy}`;
 }
 
 export function describeBacktest(name, r, brief) {

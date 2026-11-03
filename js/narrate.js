@@ -135,7 +135,7 @@ export function reshuffleParts(mc, { priceIndex = false, legacyOn = false } = {}
   const fewLine = mc.fewBlocks && !mc.suppressed ? '能切出的整段不多。換個種子，數字會跳很多。' : '';
   const noise = '換一個種子，這個比例會上下動一點。';
   const price = priceIndex ? '有些較早的資料不含派息，港股會顯得比較保守。重排也會跟著保守。' : '';
-  const legacy = legacyOn ? '你開了「區塊拔靴」。那個數字不能和這裡直接比。' : '';
+  const legacy = legacyOn ? '你已開啟「區塊拔靴」，其數字與這裡不能直接比較。' : '';
   const notes = [blockLine, capLine, fewLine, noise, price, legacy].filter(Boolean).join('');
   if (mc.suppressed) {
     return {
@@ -149,11 +149,14 @@ export function reshuffleParts(mc, { priceIndex = false, legacyOn = false } = {}
     ? `沒撐到的那些，最早 ${mc.ruinAge.min.toFixed(1)} 歲用完，中間是 ${mc.ruinAge.p50.toFixed(1)} 歲。`
     : '';
   const amount = mc.sustainableSpending;
+  const p10 = amount ? Math.round(amount.p10).toLocaleString('en-US') : '';
+  const p50 = amount ? Math.round(amount.p50).toLocaleString('en-US') : '';
+  const spendBits = amount ? `P10 ${p10}、P50 ${p50}，與概況裡的歷史可花金額不是同一回事。` : '';
   const spend = amount
-    ? `這不是概況裡那個歷史可花金額。這裡是用今天的購買力，每年花同樣多，到結束剛好花完。P10 ${Math.round(amount.p10).toLocaleString('en-US')} 比較緊，大約十次裡有一次做不到。P50 ${Math.round(amount.p50).toLocaleString('en-US')} 是中間。`
+    ? `這不是概況裡的歷史可花金額。這裡的意思是：以今天的購買力計，每年花同樣金額，剛好在計劃結束時用完。P10 ${p10} 為較保守的情況，約十次模擬中有一次，可花金額會低於這個數字。P50 ${p50} 為中間值，約一半的模擬高於它、一半低於它。`
     : '';
   return {
-    headline: `重排後達成比例 ${pctText}。這是把歷史月份打亂之後，有多少條能撐到計劃結束。這不是預測。${ruin}一共模擬 ${mc.paths} 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。`,
+    headline: `重排後達成比例為 ${pctText}。意思是：把歷史月份打亂重排後，有 ${pctText} 的模擬能讓錢用到計劃結束。這不是預測。${spendBits}${ruin}共模擬 ${mc.paths} 次，每段 ${mc.blockMonths} 個月；隨機種子 ${mc.seed}（相同種子可重現相同結果）。`,
     spend,
     notes
   };
