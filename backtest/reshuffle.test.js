@@ -96,7 +96,7 @@ test('reshuffle sits beside the historical success rate and does not overwrite s
   assert.notEqual(legacy.monteCarlo.blockMonths, legacy.plan.bootstrapBlock);
 });
 
-test('overview copy skips the peg sentence and keeps US inflation and dividends', () => {
+test('overview copy omits peg, inflation, and dividend lectures', () => {
   const notes = overviewNotes({
     result: {
       account: { note: '' },
@@ -106,45 +106,17 @@ test('overview copy skips the peg sentence and keeps US inflation and dividends'
     plan: { inflationMode: 'cpi', currency: 'HKD' }
   });
   const joined = notes.join('\n');
-  assert.doesNotMatch(joined, /7\.8 港元|換匯費用|外國當地/);
-  assert.match(joined, /美國物價/);
-  assert.match(joined, /不含派息/);
+  assert.equal(joined, '');
+  assert.doesNotMatch(joined, /7\.8|美國物價|不含派息|換匯/);
   const parts = reshuffleParts({
     suppressed: null,
-    blockMonths: 12,
-    seed: 1,
-    paths: 1000,
-    historyMonths: 120,
-    blockStarts: 109,
-    nonOverlappingBlocks: 10,
-    fewBlocks: false,
     solventRate: 0.61,
-    label: '重排後達成比例',
-    ruinAge: null,
     sustainableSpending: { p10: 100000, p50: 200000 }
-  }, { priceIndex: true });
-  const text = `${parts.headline}\n${parts.spend}\n${parts.notes}`;
-  assert.match(parts.headline, /重排後達成比例為 61%/);
-  assert.match(parts.headline, /能讓錢用到計劃結束/);
-  assert.match(parts.headline, /不是預測/);
-  assert.match(parts.headline, /與概況裡的歷史可花金額不是同一回事/);
-  assert.match(parts.headline, /共模擬 1000 次，每段 12 個月；隨機種子 1/);
-  assert.match(parts.spend, /這不是概況裡的歷史可花金額/);
-  assert.match(parts.spend, /約十次模擬中有一次/);
-  assert.match(parts.spend, /中間值/);
-  assert.match(parts.notes, /上下動一點/);
-  assert.match(parts.notes, /港股會顯得比較保守/);
-  assert.doesNotMatch(text, /機率|勝率/);
-  assert.doesNotMatch(text, /區塊拔靴/);
-  const legacy = reshuffleParts({
-    suppressed: null,
-    blockMonths: 12,
-    seed: 1,
-    paths: 1000,
-    solventRate: 0.61,
-    sustainableSpending: { p10: 1, p50: 2 }
-  }, { legacyOn: true });
-  assert.match(legacy.notes, /你已開啟「區塊拔靴」，其數字與這裡不能直接比較/);
+  });
+  assert.equal(parts.headline, '重排後達成比例 61%');
+  assert.equal(parts.spend, '');
+  assert.equal(parts.notes, '');
+  assert.doesNotMatch(parts.headline, /機率|勝率|預測|拔靴|P10/);
 });
 
 test('block length is capped by history and a short tape is marked as few blocks', () => {

@@ -116,17 +116,9 @@ function renderOverviewNotes(cur) {
 }
 
 function renderReshuffle(cur) {
-  const priceIndex = (cur.result?.warnings || []).some(w => w.includes('價格指數') || w.includes('不含股息'));
-  const parts = reshuffleParts(cur.sim?.monteCarlo, {
-    priceIndex,
-    legacyOn: cur.plan?.pathMode === 'bootstrap'
-  });
+  const parts = reshuffleParts(cur.sim?.monteCarlo);
   const out = $('reshuffleResult');
-  const spend = $('reshuffleSpend');
-  const notes = $('reshuffleNotes');
   if (out) out.textContent = parts.headline;
-  if (spend) spend.textContent = parts.spend;
-  if (notes) notes.textContent = parts.notes;
 }
 
 export function renderDashboard() {
@@ -265,7 +257,6 @@ function paintHighlights(said) {
   showLine('curveHighlight', said.curve);
   showLine('cashHighlight', said.cash);
   showLine('feeHighlight', said.fee);
-  showLine('fxStress', said.fxStress);
   showLine('fxHighlight', said.fx);
   showLine('dualEngine', said.bootstrap);
   showLine('bootstrapHighlight', said.bootstrapMode);
@@ -707,7 +698,6 @@ export function renderAssets() {
   const warnings = [...r.warnings];
   if (state.current.sim.history.method === 'circular') warnings.push('歷史長度不足整個計劃年限，退休模擬以循環序列（走到尾端接回開頭）補足，結果較不可靠。');
   if (state.current.cpiFallbackMonths) warnings.push(`最近 ${state.current.cpiFallbackMonths} 個月沒有 CPI 資料，以固定通膨 ${state.current.plan.inflationRate}% 替代。`);
-  if (state.current.plan.inflationMode !== 'fixed') warnings.push('通膨用的是美國物價，不是香港物價。');
   box.appendChild(el('div', 'section-h', '數據限制'));
   const ul = el('ul', 'warn-list');
   warnings.forEach(w => ul.appendChild(el('li', '', w)));

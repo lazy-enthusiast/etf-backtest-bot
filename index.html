@@ -157,7 +157,6 @@
         <p class="path-highlights" id="curveHighlight" hidden></p>
         <p class="path-highlights" id="cashHighlight" hidden></p>
         <p class="path-highlights" id="feeHighlight" hidden></p>
-        <p class="path-highlights" id="fxStress" hidden></p>
         <p class="path-highlights" id="fxHighlight" hidden></p>
         <p class="path-highlights" id="dualEngine" hidden></p>
         <p class="path-highlights" id="bootstrapHighlight" hidden></p>
@@ -165,21 +164,15 @@
         <ul class="warn-list" id="overviewNotes" hidden></ul>
         <details class="reshuffle-panel" id="reshufflePanel">
           <summary>進階：把歷史月份重新排列</summary>
-          <p class="hint">這不是預測。圓環上的數字，是把過去每一個月份當作起點，看有多少次，錢能夠用到計劃結束。下面把這個數字稱為「重排後達成比例」。</p>
-          <p class="hint">重排時，是以整個月份為單位。同一個月份裡，各類資產的漲跌會一起使用，數字已換成港元，也已扣除通膨。股票與其他資產取自同一個月份，不會把每一檔基金分開重新抽取。</p>
-          <p class="hint">另有一個開關叫「區塊拔靴」。打開後，圓環上的數字會改用另一種方法計算：把歷史資料首尾相接成一圈再切取，模擬的次數也和歷史的月數一樣多。由於方法和模擬次數都不同，兩個數字不能直接比較。</p>
           <div class="reshuffle-controls">
-            <label>塊長（6–60 個月，預設 12）
+            <label>塊長
               <input id="reshuffleBlock" inputmode="numeric" value="12">
             </label>
             <label>種子
               <input id="reshuffleSeed" inputmode="numeric" value="1">
             </label>
-            <span>1,000 條。以後可以再加。</span>
           </div>
-          <p id="reshuffleResult">尚未計算。</p>
-          <p id="reshuffleSpend" class="reshuffle-aside"></p>
-          <p id="reshuffleNotes" class="reshuffle-aside"></p>
+          <p id="reshuffleResult"></p>
         </details>
       </div>
       <div class="tab-panel" id="tab-scenarios" hidden></div>
