@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {
   clampReshuffleBlock,
   drawReshuffleIndices,
+  fitReshuffleBlock,
+  growthAtMonthIndex,
   normalizePlan,
   simulateRetirement,
   RESHUFFLE_PATHS
 } from './retirement.js';
-import { overviewNotes, reshuffleSummary } from '../js/narrate.js';
+import { overviewNotes, reshuffleParts } from '../js/narrate.js';
 
 function plan(over = {}) {
   return {
@@ -107,18 +109,66 @@ test('overview copy states the peg and US CPI, and reshuffle copy stays out of t
   assert.match(joined, /7\.8/);
   assert.match(joined, /美國 CPI/);
   assert.match(joined, /價格指數/);
-  const text = reshuffleSummary({
+  const parts = reshuffleParts({
     suppressed: null,
     blockMonths: 12,
     seed: 1,
     paths: 1000,
+    historyMonths: 120,
+    blockStarts: 109,
+    nonOverlappingBlocks: 10,
+    fewBlocks: false,
     solventRate: 0.61,
-    label: '同一段歷史的區塊重排，不是未來機率',
+    label: '重排後達成比例',
     ruinAge: null,
     sustainableSpending: { p10: 100000, p50: 200000 }
-  });
-  assert.match(text, /6–60/);
-  assert.match(text, /不是未來機率/);
-  assert.match(text, /不取代歷史可花金額/);
-  assert.doesNotMatch(text, /歷史成功率/);
+  }, { priceIndex: true });
+  const text = `${parts.headline}\n${parts.spend}\n${parts.notes}`;
+  assert.match(parts.headline, /重排後達成比例/);
+  assert.match(parts.spend, /今日購買力/);
+  assert.match(parts.spend, /不是概況上的歷史可花金額/);
+  assert.match(parts.notes, /抽樣起伏/);
+  assert.match(parts.notes, /偏保守/);
+  assert.doesNotMatch(text, /機率|勝率/);
+});
+
+test('block length is capped by history and a short tape is marked as few blocks', () => {
+  const wide = fitReshuffleBlock(12, 120);
+  assert.equal(wide.block, 12);
+  assert.equal(wide.nonOverlapping, 10);
+  assert.equal(wide.few, false);
+  const tight = fitReshuffleBlock(60, 120);
+  assert.equal(tight.block, 60);
+  assert.equal(tight.nonOverlapping, 2);
+  assert.equal(tight.few, true);
+  assert.equal(tight.starts, 61);
+  const over = fitReshuffleBlock(40, 30);
+  assert.equal(over.block, 30);
+  assert.equal(over.capped, true);
+});
+
+test('one month index drives both sleeves', () => {
+  const glide = {
+    equityR: [0.2, -0.4],
+    restR: [-0.1, 0.8],
+    inflation: [1, 2],
+    feeFactor: 1
+  };
+  const together = growthAtMonthIndex(1, { glideOn: true, glide, equityWeight: 0.25 });
+  const mixed = 1 + 0.25 * glide.equityR[1] + 0.75 * glide.restR[0];
+  assert.equal(together, (1 + 0.25 * glide.equityR[1] + 0.75 * glide.restR[1]) / glide.inflation[1]);
+  assert.notEqual(together, mixed);
+});
+
+test('historical successRate is unchanged by reshuffle seed and block length', () => {
+  const series = returns(120);
+  const base = simulateRetirement(plan({ reshuffleSeed: 1, reshuffleBlock: 12 }), series);
+  const otherSeed = simulateRetirement(plan({ reshuffleSeed: 99, reshuffleBlock: 12 }), series);
+  const otherBlock = simulateRetirement(plan({ reshuffleSeed: 1, reshuffleBlock: 48 }), series);
+  assert.equal(otherSeed.successRate, base.successRate);
+  assert.equal(otherBlock.successRate, base.successRate);
+  assert.deepEqual(otherSeed.sustainableSpending, base.sustainableSpending);
+  assert.deepEqual(otherBlock.sustainableSpending, base.sustainableSpending);
+  assert.notEqual(otherSeed.monteCarlo.seed, base.monteCarlo.seed);
+  assert.notEqual(otherBlock.monteCarlo.blockMonths, base.monteCarlo.blockMonths);
 });

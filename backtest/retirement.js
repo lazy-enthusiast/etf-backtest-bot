@@ -189,6 +189,32 @@ export function clampReshuffleBlock(value) {
   return Math.min(RESHUFFLE_BLOCK_MAX, Math.max(RESHUFFLE_BLOCK_MIN, block));
 }
 
+/** 塊長不得長過這段歷史。不重疊的塊少於 4 個時標成偏少。 */
+export function fitReshuffleBlock(requested, historyMonths) {
+  const asked = clampReshuffleBlock(requested);
+  const months = Math.max(0, Math.floor(Number(historyMonths) || 0));
+  if (months < RESHUFFLE_BLOCK_MIN) {
+    return { block: asked, capped: false, starts: 0, nonOverlapping: 0, few: true };
+  }
+  const cap = Math.min(RESHUFFLE_BLOCK_MAX, months);
+  const block = Math.min(asked, Math.max(RESHUFFLE_BLOCK_MIN, cap));
+  const starts = months - block + 1;
+  const nonOverlapping = Math.floor(months / block);
+  return { block, capped: block < asked, starts, nonOverlapping, few: nonOverlapping < 4 };
+}
+
+/**
+ * 同一個月份索引同時用於組合實質報酬，或股／其他兩袖與該月通膨。
+ * 不會為每一檔資產各抽一個月。
+ */
+export function growthAtMonthIndex(idx, { glideOn = false, glide = null, equityWeight = 0, blendedReal = null } = {}) {
+  if (glideOn) {
+    const gross = 1 + equityWeight * glide.equityR[idx] + (1 - equityWeight) * glide.restR[idx];
+    return gross * glide.feeFactor / glide.inflation[idx];
+  }
+  return 1 + blendedReal[idx];
+}
+
 /**
  * 一條路徑的月份索引。一塊是歷史上連續的月份，塊內不環繞。
  * 種子只決定塊從哪裡開始。費用、通膨與袖套都用同一個索引。
@@ -767,11 +793,8 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
         if (equityWeight > 1) equityWeight = 1;
         if (equityWeight < eqMin) eqMin = equityWeight;
         if (equityWeight > eqMax) eqMax = equityWeight;
-        const gross = 1 + equityWeight * glide.equityR[idx] + (1 - equityWeight) * glide.restR[idx];
-        growth = gross * glide.feeFactor / glide.inflation[idx];
-      } else {
-        growth = 1 + r[idx];
       }
+      growth = growthAtMonthIndex(idx, { glideOn, glide, equityWeight, blendedReal: r });
       if (taxMonthly) growth -= taxMonthly;
       const realReturn = growth - 1;
       const contrib = k < retireMonth ? contribution : 0;
@@ -1106,13 +1129,19 @@ export function runPrepared(prepared) {
 export function blockReshuffle(plan, returns, glide = null, dividend = null, fx = null, taxDrag = null) {
   const p = normalizePlan({ ...plan, pathMode: 'historical' });
   const L = returns?.length || 0;
+  const fit = fitReshuffleBlock(p.reshuffleBlock, L);
   const result = {
-    label: '同一段歷史的區塊重排，不是未來機率',
+    label: '重排後達成比例',
     paths: RESHUFFLE_PATHS,
-    blockMonths: p.reshuffleBlock,
+    blockMonths: fit.block,
+    requestedBlockMonths: p.reshuffleBlock,
     seed: p.reshuffleSeed,
     historyMonths: L,
     planMonths: (p.endAge - p.currentAge) * 12,
+    blockStarts: fit.starts,
+    nonOverlappingBlocks: fit.nonOverlapping,
+    fewBlocks: fit.few,
+    capped: fit.capped,
     intraBlockWrap: false,
     jointMonth: true,
     suppressed: null,
@@ -1126,7 +1155,7 @@ export function blockReshuffle(plan, returns, glide = null, dividend = null, fx 
   }
   const options = {
     ...sleeveOptions(p, glide, dividend, fx, taxDrag),
-    reshuffle: { paths: RESHUFFLE_PATHS, block: p.reshuffleBlock, seed: p.reshuffleSeed }
+    reshuffle: { paths: RESHUFFLE_PATHS, block: fit.block, seed: p.reshuffleSeed }
   };
   const primary = walkLife(p, returns, p.withdrawalStrategy, options);
   const fixed = p.withdrawalStrategy === 'fixed_real'

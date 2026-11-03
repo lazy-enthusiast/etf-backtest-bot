@@ -3,8 +3,11 @@
 
 import { mappingLookupKey, normalizeSymbol } from './symbols.js';
 
-/** 計劃以港元計價。美元價格乘這個固定聯繫匯率；假設匯率不變，報酬率與美元計價相同。 */
+/** 計劃以港元計價。美元價格整段都乘這個固定數，不隨月份改變。 */
 export const HKD_PER_USD = 7.8;
+
+/** 概況與進階區共用。不要寫成歷史匯率或換匯成本已計入。 */
+export const HKD_PEG_NOTE = '整段路徑假設 1 美元 = 7.8 港元，不隨月份改變。實際聯繫匯率大致在 7.75–7.85。這裡沒有計入換匯成本。若聯繫匯率制度改變，這些結果不適用。結果只涵蓋港元或美元支出，不包括其他貨幣，也不代表海外當地物價。';
 
 export function priceCurrency(code) {
   const c = String(code || '').trim().toUpperCase();
@@ -42,9 +45,7 @@ export function alignPricesToHkd(symbols, dataBySymbol) {
       hkdNative.push(symbol);
     }
   }
-  const note = usdConverted.length
-    ? '計劃以港元計價。美元價格已按 1 美元 = 7.8 港元換算。假設聯繫匯率不變，這些資產的報酬率與美元計價相同。其他幣別未支援。'
-    : '計劃以港元計價。持倉價格已是港元。其他幣別未支援。';
+  const note = (usdConverted.length || hkdNative.length) ? HKD_PEG_NOTE : '';
   return {
     data,
     account: { unit: 'HKD', peg: HKD_PER_USD, usdConverted, hkdNative, note }

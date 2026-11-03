@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
 import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
-import { highlightLines, overviewNotes, reshuffleSummary } from './narrate.js';
+import { highlightLines, overviewNotes, reshuffleParts } from './narrate.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -116,8 +116,14 @@ function renderOverviewNotes(cur) {
 }
 
 function renderReshuffle(cur) {
+  const priceIndex = (cur.result?.warnings || []).some(w => w.includes('價格指數') || w.includes('不含股息'));
+  const parts = reshuffleParts(cur.sim?.monteCarlo, { priceIndex });
   const out = $('reshuffleResult');
-  if (out) out.textContent = reshuffleSummary(cur.sim?.monteCarlo);
+  const spend = $('reshuffleSpend');
+  const notes = $('reshuffleNotes');
+  if (out) out.textContent = parts.headline;
+  if (spend) spend.textContent = parts.spend;
+  if (notes) notes.textContent = parts.notes;
 }
 
 export function renderDashboard() {

@@ -111,9 +111,10 @@ export function describeSim(cur) {
 function describeReshuffle(sim) {
   const mc = sim?.monteCarlo;
   if (!mc) return null;
-  if (mc.suppressed) return `區塊重排：${mc.suppressed}。這不是歷史成功率，也不取代它。`;
+  if (mc.suppressed) return `區塊重排：${mc.suppressed}。這不改變歷史占比。`;
   const spend = mc.sustainableSpending;
-  return `區塊重排（不是未來機率，不取代歷史成功率）：${pct(mc.solventRate, 1)}，${mc.paths} 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。重排路徑可持續年支出 P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}。`;
+  const blocks = Number.isFinite(mc.nonOverlappingBlocks) ? `，不重疊約 ${mc.nonOverlappingBlocks} 塊` : '';
+  return `重排後達成比例 ${pct(mc.solventRate, 1)}（不是預測）。${mc.paths} 條，每塊 ${mc.blockMonths} 個月${blocks}，種子 ${mc.seed}。旁註的固定實質可花金額（今日購買力，各年實質相同）P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}，不是概況上的歷史可花金額。舊的區塊拔靴口徑不同。`;
 }
 
 export function describeBacktest(name, r, brief) {

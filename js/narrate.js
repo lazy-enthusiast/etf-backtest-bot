@@ -125,18 +125,35 @@ export function overviewNotes({ result, sim, plan }) {
   return notes;
 }
 
-/** 進階區的重排句子。百分比不與歷史成功率合併。 */
-export function reshuffleSummary(mc) {
-  if (!mc) return '尚未計算。';
-  const head = `1,000 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。塊長可改 6–60 個月，預設 12，與舊的拔靴開關無關。`;
-  if (mc.suppressed) return `${mc.suppressed}。${head}這不改變歷史成功率。`;
-  const pctText = `${Math.round(mc.solventRate * 1000) / 10}%`;
-  const spend = mc.sustainableSpending;
-  const spendText = spend
-    ? `重排路徑上的可持續年支出（固定實質）P10 ${Math.round(spend.p10).toLocaleString('en-US')}、P50 ${Math.round(spend.p50).toLocaleString('en-US')}。不取代歷史可花金額。`
+/** 進階區文案。結果叫「重排後達成比例」，不叫機率或勝率。 */
+export function reshuffleParts(mc, { priceIndex = false } = {}) {
+  if (!mc) return { headline: '尚未計算。', spend: '', notes: '' };
+  const blockLine = Number.isFinite(mc.historyMonths)
+    ? `這段歷史 ${mc.historyMonths} 個月，實際每塊 ${mc.blockMonths} 個月，不重疊約 ${mc.nonOverlappingBlocks ?? '—'} 塊（起點 ${mc.blockStarts ?? '—'} 個）。`
     : '';
+  const capLine = mc.capped ? `塊長已從 ${mc.requestedBlockMonths} 收到 ${mc.blockMonths}，因為不能長過這段歷史。` : '';
+  const fewLine = mc.fewBlocks && !mc.suppressed ? '不重疊的塊不到 4 個，換種子時數字起伏會很大。' : '';
+  const noise = '1,000 條換一個種子，達成比例會有抽樣起伏。';
+  const price = priceIndex ? '延伸歷史若是價格指數（不含股息），港股這類袖套的報酬偏低，重排會一併偏保守。' : '';
+  const notes = [noise, fewLine, price].filter(Boolean).join('');
+  if (mc.suppressed) {
+    return {
+      headline: `${mc.suppressed}。${blockLine}${capLine}這不改變上面的歷史占比。`,
+      spend: '',
+      notes
+    };
+  }
+  const pctText = `${Math.round(mc.solventRate * 1000) / 10}%`;
   const ruin = mc.ruinAge
-    ? `沒撐過的路徑裡，最早 ${mc.ruinAge.min.toFixed(1)} 歲耗盡，中位 ${mc.ruinAge.p50.toFixed(1)} 歲。`
-    : '這 1,000 條都撐到終點。';
-  return `重排 ${pctText}（${head}）${mc.label}。${ruin}${spendText}`;
+    ? `沒走完的路徑裡，最早 ${mc.ruinAge.min.toFixed(1)} 歲用盡，中位 ${mc.ruinAge.p50.toFixed(1)} 歲。`
+    : '這 1,000 條都走到終點。';
+  const amount = mc.sustainableSpending;
+  const spend = amount
+    ? `旁註，不是概況上的歷史可花金額。固定實質：以今日購買力計，第一年與之後每一年的實質金額相同，期末剛好花完。P10 ${Math.round(amount.p10).toLocaleString('en-US')} 是偏低門檻（約一成重排路徑達不到），P50 ${Math.round(amount.p50).toLocaleString('en-US')} 是這些路徑的中位。`
+    : '';
+  return {
+    headline: `重排後達成比例 ${pctText}。${mc.paths} 條，種子 ${mc.seed}。${blockLine}${capLine}${ruin}`,
+    spend,
+    notes
+  };
 }

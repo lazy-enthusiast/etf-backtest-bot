@@ -164,7 +164,10 @@
         <ul class="warn-list" id="overviewNotes" hidden></ul>
         <details class="reshuffle-panel" id="reshufflePanel">
           <summary>進階：區塊重排</summary>
-          <p class="hint">把已換成港元、扣過費用與通膨的月報酬切成連續的塊再接起來。同一個月的報酬與通膨一起走。這不是未來機率，也不改上面的歷史成功率。</p>
+          <p class="hint">這不是預測，也不是以後會發生的事情。圓環上的數字仍是歷史起始月的占比。這裡的結果只叫「重排後達成比例」。</p>
+          <p class="hint">整段路徑假設 1 美元 = 7.8 港元，不隨月份改變。實際聯繫匯率大致在 7.75–7.85。這裡沒有計入換匯成本。若聯繫匯率制度改變，這些結果不適用。結果只涵蓋港元或美元支出，不包括其他貨幣，也不代表海外當地物價。</p>
+          <p class="hint">重排把整個月一起搬走：組合的港元實質報酬，或股與其他兩袖加上該月通膨，用同一個月份。不會把每一檔 ETF 分開亂抽。</p>
+          <p class="hint">舊的「區塊拔靴」是另一個開關。它的塊可以繞過序列頭尾，條數等於歷史起始月個數，打開後會改寫圓環上的占比。它走的也是同一條港元實質月報酬，但口徑不同，不要和「重排後達成比例」放在一起比。</p>
           <div class="reshuffle-controls">
             <label>塊長（6–60 個月，預設 12）
               <input id="reshuffleBlock" inputmode="numeric" value="12">
@@ -175,6 +178,8 @@
             <span>1,000 條。以後可以再加。</span>
           </div>
           <p id="reshuffleResult">尚未計算。</p>
+          <p id="reshuffleSpend" class="reshuffle-aside"></p>
+          <p id="reshuffleNotes" class="reshuffle-aside"></p>
         </details>
       </div>
       <div class="tab-panel" id="tab-scenarios" hidden></div>
