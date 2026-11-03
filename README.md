@@ -2,7 +2,7 @@
 
 瀏覽器裡的 ETF 退休規劃。用歷史價格做滾動壓力測試：每個歷史起始月各走一次累積與提領，看計劃撐到終點的比例，以及大約能花多少。計算在瀏覽器完成。這不是報酬預測；成功率是歷史起始月的占比，不是未來機率。
 
-口徑與限制見 [docs/METHODOLOGY.md](docs/METHODOLOGY.md)。
+口徑與限制見 [docs/METHODOLOGY.md](docs/METHODOLOGY.md)。讀法與改進見 [docs/ANALYSIS.md](docs/ANALYSIS.md)。
 
 ## 這個工具做什麼
 

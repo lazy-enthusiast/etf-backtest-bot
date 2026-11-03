@@ -6,7 +6,7 @@
 
 三層（前端／Worker／Proxy）各有存在理由，不要合併。改請求／回應 shape 時，同步檢查 `js/`（尤其 chat／context／ai-controls）、Worker、Proxy。所有金鑰走環境變數，不要硬編碼。
 
-**文件：** `docs/*.md` 仍在 `.gitignore`。本分支應使用者要求以 `git add -f` 納入這三份 markdown；之後若要再更新，同樣只強制加入這三個檔，不要連帶 secrets。
+**文件：** `docs/*.md` 納入版控，一般 `git add` 即可。不要把 secrets 寫進 markdown，也不要提交 `.dev.vars`／`.env*`。
 | 檔案 | 用途 |
 |---|---|
 | [CONTRACTS.md](./CONTRACTS.md)（本檔） | 現行架構、API／資料契約、操作 |
@@ -75,7 +75,7 @@ OpenRouter  →  Claude / DeepSeek 等
 | `backtest/index-mapping.json` | ETF → 延伸歷史用的替代序列（可含裸別名鍵；持倉仍須後綴） |
 | `backtest/cli.js` | 終端機回測；`--withdraw` 做提領測試 |
 | `data/` | 僅 SYNTHETIC／CPI 與瘦身 `manifest.json`；一般 ETF 不提交 |
-| `docs/` | `CONTRACTS`／`METHODOLOGY`／`WORK_LOG`（gitignore；要進版控時 `git add -f` 這三份） |
+| `docs/` | `CONTRACTS`／`METHODOLOGY`／`WORK_LOG`／`PLAN-output-and-costs`／`ANALYSIS`（`*.md` 進版控） |
 | `icon.png`、`manifest.webmanifest` | 主畫面「加入主畫面」圖示（在 `main`；見下方儀表板） |
 | `scripts/dev.js` | 本機一鍵啟動前端 + Worker（服務 index／styles／js／backtest／data） |
 | `worker/src/index.js` | 薄路由（含 `/api/series`）、SSE、組請求、可選工具輪 |

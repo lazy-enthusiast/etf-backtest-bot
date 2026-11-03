@@ -18,5 +18,4 @@ dist/
 .DS_Store
 Thumbs.db
 
-# 本機心法／契約／方法論（留在 docs/，不進遠端）
-docs/*.md
+# Markdown（含 docs/*.md）納入版控。機密只放 .dev.vars / .env*，不要寫進 *.md。

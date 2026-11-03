@@ -1,7 +1,7 @@
 # 開發紀錄（WORK_LOG）
 
-精簡時間線。方法論見 [METHODOLOGY.md](./METHODOLOGY.md)；實作契約見 [CONTRACTS.md](./CONTRACTS.md)。  
-`docs/*.md` 仍列在 `.gitignore`。儀表板分支依使用者要求以 `git add -f` 提交這三份；日常不要連帶提交 secrets。
+精簡時間線。方法論見 [METHODOLOGY.md](./METHODOLOGY.md)；實作契約見 [CONTRACTS.md](./CONTRACTS.md)；讀法與改進見 [ANALYSIS.md](./ANALYSIS.md)。  
+`docs/*.md` 已納入版控。不要把 secrets 寫進 markdown，也不要提交 `.dev.vars`／`.env*`。
 
 ## 起源
 - 由 **deep-water** 幕僚 chatbot 改造：Cloudflare Worker → Vercel Proxy → OpenRouter；前端靜態頁 + 存取密碼。
@@ -20,7 +20,7 @@
 
 ## 前端與 Worker 重構
 - 前端拆成 `styles/` + `js/` ES modules；Worker 拆 `brain`／`cors`／`auth`／`mem0`／`openrouter`／`yahoo`／`context-budget`／`tools`。
-- 契約與方法論集中於本機 `docs/`（CONTRACTS／METHODOLOGY／WORK_LOG）。
+- 契約與方法論放在 `docs/`（CONTRACTS／METHODOLOGY／WORK_LOG），並納入版控。
 
 ## 模型與體驗
 - 動態 `GET /api/models`。
@@ -50,7 +50,7 @@
 - 前端：push `main` → GitHub Pages。
 - Worker：`cd worker && npx wrangler deploy`（secrets 不進 git）。
 - 改合成／CPI 才需更新並 commit `data/`；一般新 ETF 不必再塞 JSON。
-- 更新方法論／契約／本紀錄：改 `docs/`。要進遠端時只 `git add -f` 這三份 markdown。
+- 更新方法論／契約／本紀錄：改 `docs/` 後正常提交。`*.md` 不再被忽略。
 
 ## 主畫面圖示（main，c54a589）
 - `icon.png`、`manifest.webmanifest`，以及 `index.html` 的 `rel="icon"`／`apple-touch-icon`。給「加入主畫面」用，不是標題旁的標誌。
@@ -60,3 +60,8 @@
 - 拿掉可見的代號長提示、中位資產條、軌跡圖長說明。窄螢幕表單控制項 ≥16px（不鎖 viewport 縮放）。
 - 頂列只留「退休航道」文字。按鈕改「退休顧問」。placeholder 去掉 Shift+Enter。移除迴紋針與附件預覽；送出純文字仍可用。
 - 對話仍顯示「思考中…」，失敗為「連線失敗：…」。模型仍是手動：預設 DeepSeek，Sonnet 只在使用者切換時使用。
+
+## 文件進版控（2026-11）
+- 拿掉 `.gitignore` 的 `docs/*.md`。之後的 markdown 用一般 `git add`。
+- 新增 [ANALYSIS.md](./ANALYSIS.md)：方法、和其他回測器的差別、優先改進。
+- 稍早紀錄寫 Block Bootstrap、下滑路徑尚未做。這兩項，以及現金桶、支出曲線、股息稅拖累、費用拆分、匯率模組，後來都做成預設關閉的可選項（見 METHODOLOGY §8）。公布的成功率仍是模組全關時的歷史起始月結果。
