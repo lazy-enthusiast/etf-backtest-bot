@@ -3,6 +3,55 @@
 
 import { mappingLookupKey, normalizeSymbol } from './symbols.js';
 
+/** 計劃以港元計價。美元價格整段都乘這個固定數，不隨月份改變。 */
+export const HKD_PER_USD = 7.8;
+
+/** 概況與進階區共用。不要寫成歷史匯率或換匯成本已計入。 */
+export const HKD_PEG_NOTE = '結果用港元計算。美元開支全程按 1 美元 = 7.8 港元換，沒有算換匯費用，也不代表你在外國當地的物價。';
+
+export function priceCurrency(code) {
+  const c = String(code || '').trim().toUpperCase();
+  if (c === 'USD' || c === 'US') return 'USD';
+  if (c === 'HKD' || c === 'HK') return 'HKD';
+  return '';
+}
+
+export function unsupportedCurrencyMessage(symbol, code) {
+  const label = String(code || '').trim() ? String(code).trim().toUpperCase() : '未標幣別';
+  return `${symbol}：${label} 未支援。計劃以港元計價，只接受港元，或美元（按 1 美元 = 7.8 港元）。`;
+}
+
+/** 美元價格換成港元。港元原樣返回。其他幣別回 null，呼叫端必須拒絕。 */
+export function convertSeriesToHkd(series, currency) {
+  const kind = priceCurrency(currency);
+  if (kind === 'HKD') return { series, converted: false };
+  if (kind === 'USD') return { series: series.map(([d, p]) => [d, p * HKD_PER_USD]), converted: true };
+  return null;
+}
+
+export function alignPricesToHkd(symbols, dataBySymbol) {
+  const data = { ...dataBySymbol };
+  const usdConverted = [];
+  const hkdNative = [];
+  for (const symbol of symbols) {
+    const raw = dataBySymbol[symbol];
+    if (!raw?.series?.length) continue;
+    const converted = convertSeriesToHkd(raw.series, raw.currency);
+    if (!converted) throw new Error(unsupportedCurrencyMessage(symbol, raw.currency));
+    if (converted.converted) {
+      data[symbol] = { ...raw, currency: 'HKD', series: converted.series };
+      usdConverted.push(symbol);
+    } else {
+      hkdNative.push(symbol);
+    }
+  }
+  const note = (usdConverted.length || hkdNative.length) ? HKD_PEG_NOTE : '';
+  return {
+    data,
+    account: { unit: 'HKD', peg: HKD_PER_USD, usdConverted, hkdNative, note }
+  };
+}
+
 const SEGMENT_WARNINGS = {
   price_index: '價格指數，不含股息，報酬被低估',
   synthetic: '月度合成數據（Shiller 月均價／殖利率推算），波動與回撤被低估'
@@ -229,7 +278,9 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
   const rebalance = portfolio.rebalance || 'annual';
   const initial = portfolio.initial ?? 10000;
 
-  const spliced = holdings.map(h => buildSplicedSeries(h.symbol, mapping, dataBySymbol));
+  const needed = symbolsNeeded(holdings.map(h => h.symbol), mapping);
+  const aligned = alignPricesToHkd(needed, dataBySymbol);
+  const spliced = holdings.map(h => buildSplicedSeries(h.symbol, mapping, aligned.data));
 
   const firstDates = spliced.map(s => s.series[0][0]);
   const commonStart = firstDates.reduce((a, b) => (a > b ? a : b));
@@ -278,6 +329,7 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
   const limiting = assets.find(a => a.historyStart === commonStart);
 
   const warnings = spliced.flatMap(s => s.warnings);
+  if (aligned.account.usdConverted.length || aligned.account.hkdNative.length) warnings.unshift(aligned.account.note);
   for (const s of spliced) {
     for (const seg of s.segments) {
       if (SEGMENT_WARNINGS[seg.type] && seg.from < dates.at(-1) && seg.to > dates[0]) {
@@ -300,6 +352,7 @@ export function runBacktest(portfolio, mapping, dataBySymbol) {
     annualReturns: annualReturns(curve),
     assets,
     correlation: correlationMatrix(holdings.map(h => h.symbol), monthlyAssetReturns),
+    account: aligned.account,
     equityMonthly: monthly,
     assetMonthly: holdings.map((h, j) => ({
       symbol: h.symbol,

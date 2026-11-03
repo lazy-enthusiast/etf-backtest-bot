@@ -40,8 +40,8 @@ function plan(over = {}) {
 const eqR = Array.from({ length: 40 }, () => 0.01);
 const restR = Array.from({ length: 40 }, () => 0);
 const data = {
-  'AAA.US': { series: points(eqR) },
-  'BBB.US': { series: points(restR) }
+  'AAA.US': { currency: 'USD', series: points(eqR) },
+  'BBB.US': { currency: 'USD', series: points(restR) }
 };
 
 test('glide off matches the single blended series, including when sleeves are passed', () => {

@@ -275,6 +275,14 @@
   .tbl-wrap { overflow-x: auto; }
   .heat td { text-align: center; font-variant-numeric: tabular-nums; }
   .warn-list { margin: 10px 0 0; padding-left: 18px; color: var(--warn); font-size: 12.5px; }
+  .reshuffle-panel { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--surface-2); }
+  .reshuffle-panel summary { cursor: pointer; font-weight: 700; }
+  .reshuffle-panel .hint { color: var(--muted); font-size: 12.5px; margin: 8px 0; }
+  .reshuffle-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 8px 0; }
+  .reshuffle-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+  .reshuffle-controls input { width: 6.5rem; }
+  #reshuffleResult { font-size: 13.5px; margin: 8px 0 0; }
+  .reshuffle-aside { color: var(--faint); font-size: 12px; line-height: 1.45; margin: 4px 0 0; }
   .section-h { font-size: 13px; font-weight: 700; margin: 16px 0 8px; }
   .toggle-line { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .toggle-line label { font-size: 12.5px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }

@@ -50,6 +50,9 @@ export const DEFAULT_PLAN = {
   pathMode: 'historical',
   bootstrapSeed: 1,
   bootstrapBlock: 12,
+  // 區塊重排用自己的塊長與種子，不跟上面的舊拔靴開關共用。
+  reshuffleBlock: 12,
+  reshuffleSeed: 1,
   withdrawEvery: 1,
   guardrailEvery: 12
 };
@@ -117,6 +120,8 @@ export function normalizePlan(plan) {
   p.pathMode = p.pathMode === 'bootstrap' ? 'bootstrap' : 'historical';
   p.bootstrapSeed = Number.isFinite(Number(p.bootstrapSeed)) ? Math.trunc(Number(p.bootstrapSeed)) : 1;
   p.bootstrapBlock = Math.min(120, Math.max(1, Math.round(Number(p.bootstrapBlock) || 12)));
+  p.reshuffleBlock = clampReshuffleBlock(p.reshuffleBlock);
+  p.reshuffleSeed = Number.isFinite(Number(p.reshuffleSeed)) ? Math.trunc(Number(p.reshuffleSeed)) : 1;
   p.withdrawEvery = Math.min(12, Math.max(1, Math.round(Number(p.withdrawEvery) || 1)));
   p.guardrailEvery = Math.min(12, Math.max(1, Math.round(Number(p.guardrailEvery) || 12)));
   if (p.cashBucketYears === true || p.cashBucketYears === 'true') p.cashBucketYears = 3;
@@ -170,6 +175,66 @@ function normalizeIncomeSegments(value) {
     toAge: row?.toAge == null || row?.toAge === '' || !Number.isFinite(Number(row.toAge)) ? null : Math.round(Number(row.toAge)),
     amount: Math.max(0, Number(row?.amount) || 0)
   })).filter(row => row.amount > 0);
+}
+
+export const RESHUFFLE_PATHS = 1000;
+export const RESHUFFLE_MIN_MONTHS = 120;
+export const RESHUFFLE_BLOCK_MIN = 6;
+export const RESHUFFLE_BLOCK_MAX = 60;
+
+/** 新的區塊重排塊長。預設 12，只允許 6–60。不讀 bootstrapBlock。 */
+export function clampReshuffleBlock(value) {
+  const n = Math.round(Number(value));
+  const block = Number.isFinite(n) && n > 0 ? n : 12;
+  return Math.min(RESHUFFLE_BLOCK_MAX, Math.max(RESHUFFLE_BLOCK_MIN, block));
+}
+
+/** 塊長不得長過這段歷史。不重疊的塊少於 4 個時標成偏少。 */
+export function fitReshuffleBlock(requested, historyMonths) {
+  const asked = clampReshuffleBlock(requested);
+  const months = Math.max(0, Math.floor(Number(historyMonths) || 0));
+  if (months < RESHUFFLE_BLOCK_MIN) {
+    return { block: asked, capped: false, starts: 0, nonOverlapping: 0, few: true };
+  }
+  const cap = Math.min(RESHUFFLE_BLOCK_MAX, months);
+  const block = Math.min(asked, Math.max(RESHUFFLE_BLOCK_MIN, cap));
+  const starts = months - block + 1;
+  const nonOverlapping = Math.floor(months / block);
+  return { block, capped: block < asked, starts, nonOverlapping, few: nonOverlapping < 4 };
+}
+
+/**
+ * 同一個月份索引同時用於組合實質報酬，或股／其他兩袖與該月通膨。
+ * 不會為每一檔資產各抽一個月。
+ */
+export function growthAtMonthIndex(idx, { glideOn = false, glide = null, equityWeight = 0, blendedReal = null } = {}) {
+  if (glideOn) {
+    const gross = 1 + equityWeight * glide.equityR[idx] + (1 - equityWeight) * glide.restR[idx];
+    return gross * glide.feeFactor / glide.inflation[idx];
+  }
+  return 1 + blendedReal[idx];
+}
+
+/**
+ * 一條路徑的月份索引。一塊是歷史上連續的月份，塊內不環繞。
+ * 種子只決定塊從哪裡開始。費用、通膨與袖套都用同一個索引。
+ */
+export function drawReshuffleIndices(length, blockMonths, seed, count) {
+  const block = clampReshuffleBlock(blockMonths);
+  if (length < block) throw new Error('歷史短於一塊，不能重排');
+  const rng = mulberry32(seed >>> 0);
+  const idx = new Array(count);
+  let pos = block;
+  let start = 0;
+  for (let k = 0; k < count; k++) {
+    if (pos >= block) {
+      start = Math.floor(rng() * (length - block + 1));
+      pos = 0;
+    }
+    idx[k] = start + pos;
+    pos += 1;
+  }
+  return idx;
 }
 
 function mulberry32(seed) {
@@ -639,7 +704,7 @@ function equityYearReturn(bucket, idx, months, length) {
   return growth - 1;
 }
 
-function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null, bucket = null, applyCurve = false } = {}) {
+function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = false, glide = null, dividend = null, feeParts = null, fx = null, taxDrag = null, bucket = null, applyCurve = false, reshuffle = null } = {}) {
   const L = returns.length;
   const totalMonths = (p.endAge - p.currentAge) * 12;
   const retireMonth = (p.retireAge - p.currentAge) * 12;
@@ -647,6 +712,8 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
   const r = Float64Array.from(returns, x => x.r);
   const circular = L < totalMonths;
   const starts = circular ? L : L - totalMonths + 1;
+  const reshuffleOn = Boolean(reshuffle?.paths);
+  const pathCount = reshuffleOn ? reshuffle.paths : starts;
   const years = totalMonths / 12;
   const retireYears = p.endAge - p.retireAge;
   const contribution = p.monthlyContribution;
@@ -654,23 +721,23 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
   const targetMonthly = p.annualSpending / 12;
   const trackLinear = strategy === 'fixed_real';
 
-  const yearly = Array.from({ length: years + 1 }, () => new Float64Array(starts));
-  const runs = new Array(starts);
-  const totals = new Float64Array(starts);
-  const yearSpends = new Array(starts);
-  const yearFunded = new Array(starts);
-  const guardStats = new Array(starts);
+  const yearly = Array.from({ length: years + 1 }, () => new Float64Array(pathCount));
+  const runs = new Array(pathCount);
+  const totals = new Float64Array(pathCount);
+  const yearSpends = new Array(pathCount);
+  const yearFunded = new Array(pathCount);
+  const guardStats = new Array(pathCount);
   const rows = keepRows ? [] : null;
   const glideOn = Boolean(glide && p.glidePath && glide.equityR.length === L);
   const dividendOn = Boolean(dividend && p.dividendTax && dividend.monthlyRate > 0);
   const tax = resolveTaxDrag(taxDrag);
   const taxMonthly = tax.annual > 0 ? tax.annual / 12 : 0;
   const fxOn = Boolean(fx && !fx.skipped && p.fxMode);
-  const bootstrapOn = p.pathMode === 'bootstrap';
+  const bootstrapOn = !reshuffleOn && p.pathMode === 'bootstrap';
   let eqMin = Infinity;
   let eqMax = -Infinity;
 
-  for (let s = 0; s < starts; s++) {
+  for (let s = 0; s < pathCount; s++) {
     let balance = p.currentSavings;
     let base = p.currentSavings;
     let perSpend = 0;
@@ -684,6 +751,9 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
     const yearSpend = new Float64Array(retireYears);
     const funded = new Float64Array(retireYears);
     const rng = bootstrapOn ? mulberry32((p.bootstrapSeed + s * 997) >>> 0) : null;
+    const indices = reshuffleOn
+      ? drawReshuffleIndices(L, reshuffle.block, (Number(reshuffle.seed) + s * 997) >>> 0, totalMonths)
+      : null;
     let blockStart = 0;
     let blockPos = p.bootstrapBlock;
     const yearMonths = bootstrapOn ? [] : null;
@@ -702,11 +772,18 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
 
     for (let k = 0; k < totalMonths; k++) {
       let guardrailHit = 0;
-      if (bootstrapOn && blockPos >= p.bootstrapBlock) {
-        blockStart = Math.floor(rng() * L);
-        blockPos = 0;
+      let idx;
+      if (indices) {
+        idx = indices[k];
+      } else if (bootstrapOn) {
+        if (blockPos >= p.bootstrapBlock) {
+          blockStart = Math.floor(rng() * L);
+          blockPos = 0;
+        }
+        idx = (blockStart + blockPos++) % L;
+      } else {
+        idx = (s + k) % L;
       }
-      const idx = bootstrapOn ? (blockStart + blockPos++) % L : (s + k) % L;
       let equityWeight = null;
       let growth;
       if (glideOn) {
@@ -716,11 +793,8 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
         if (equityWeight > 1) equityWeight = 1;
         if (equityWeight < eqMin) eqMin = equityWeight;
         if (equityWeight > eqMax) eqMax = equityWeight;
-        const gross = 1 + equityWeight * glide.equityR[idx] + (1 - equityWeight) * glide.restR[idx];
-        growth = gross * glide.feeFactor / glide.inflation[idx];
-      } else {
-        growth = 1 + r[idx];
       }
+      growth = growthAtMonthIndex(idx, { glideOn, glide, equityWeight, blendedReal: r });
       if (taxMonthly) growth -= taxMonthly;
       const realReturn = growth - 1;
       const contrib = k < retireMonth ? contribution : 0;
@@ -859,7 +933,7 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
     yearFunded[s] = funded;
     guardStats[s] = { longest, largest };
     runs[s] = {
-      start: returns[s].month,
+      start: returns[s] ? returns[s].month : `重排-${s + 1}`,
       success: depletedAt === null,
       depletedAge: depletedAt === null ? null : p.currentAge + depletedAt / 12,
       endBalance: balance,
@@ -872,7 +946,7 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
   }
 
   return {
-    runs, yearly, starts, circular, years, rows, totals, yearSpends, guardStats, retireYears,
+    runs, yearly, starts: pathCount, circular, years, rows, totals, yearSpends, guardStats, retireYears,
     equityWeightRange: glideOn ? { min: eqMin, max: eqMax } : null,
     yearFunded
   };
@@ -1049,6 +1123,55 @@ export function runPrepared(prepared) {
 }
 
 /**
+ * 區塊重排。抽的是已經對齊、扣過費用與通膨的實質月報酬。
+ * 下滑打開時，兩袖與該月通膨共用同一個索引。不寫入 successRate。
+ */
+export function blockReshuffle(plan, returns, glide = null, dividend = null, fx = null, taxDrag = null) {
+  const p = normalizePlan({ ...plan, pathMode: 'historical' });
+  const L = returns?.length || 0;
+  const fit = fitReshuffleBlock(p.reshuffleBlock, L);
+  const result = {
+    label: '重排後達成比例',
+    paths: RESHUFFLE_PATHS,
+    blockMonths: fit.block,
+    requestedBlockMonths: p.reshuffleBlock,
+    seed: p.reshuffleSeed,
+    historyMonths: L,
+    planMonths: (p.endAge - p.currentAge) * 12,
+    blockStarts: fit.starts,
+    nonOverlappingBlocks: fit.nonOverlapping,
+    fewBlocks: fit.few,
+    capped: fit.capped,
+    intraBlockWrap: false,
+    jointMonth: true,
+    suppressed: null,
+    solventRate: null,
+    ruinAge: null,
+    sustainableSpending: null
+  };
+  if (L < RESHUFFLE_MIN_MONTHS) {
+    result.suppressed = '歷史短於 10 年，不報重排比例';
+    return result;
+  }
+  const options = {
+    ...sleeveOptions(p, glide, dividend, fx, taxDrag),
+    reshuffle: { paths: RESHUFFLE_PATHS, block: fit.block, seed: p.reshuffleSeed }
+  };
+  const primary = walkLife(p, returns, p.withdrawalStrategy, options);
+  const fixed = p.withdrawalStrategy === 'fixed_real'
+    ? primary
+    : walkLife(p, returns, 'fixed_real', options);
+  const solvent = primary.runs.filter(x => x.success).length;
+  const failed = primary.runs.map(x => x.depletedAge).filter(age => age != null);
+  const ruin = failed.length ? summarize(failed, [50]) : null;
+  const spend = summarize(fixed.runs.map(x => x.maxSpending).filter(Number.isFinite), [10, 50]);
+  result.solventRate = solvent / primary.runs.length;
+  result.ruinAge = ruin ? { min: ruin.min, p50: ruin.p50 } : null;
+  result.sustainableSpending = { p10: spend.p10, p50: spend.p50 };
+  return result;
+}
+
+/**
  * 以歷史每個起始月份模擬整個人生計劃（累積期 + 提領期）。
  * 歷史長度不足計劃年限時，改用循環序列（走到尾端後接回開頭），並在結果中標示。
  * @param returns realMonthlyReturns().returns
@@ -1172,8 +1295,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       starts
     },
     withdrawalStrategy: p.withdrawalStrategy,
-    // successRate 是這一次 walk 的占比。pathMode==='bootstrap' 時這一次已不是歷史滾動，主指標會被換掉。
-    // 新的蒙地卡羅不要沿這條換成主指標，應另成欄位、預設關閉。口徑見 docs/MONTE_CARLO_DESIGN.md。
+    // 歷史滾動占比。pathMode==='bootstrap' 仍會改寫這一個數字；區塊重排不可寫進來。
     successRate: successCount / starts,
     successRateFixedReal: fixedSuccessCount / starts,
     endBalance: summarize(runs.map(x => x.endBalance)),
@@ -1223,7 +1345,8 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       depletedAge: x.depletedAge,
       endBalance: x.endBalance,
       spendRatio: x.spendRatio
-    }))
+    })),
+    monteCarlo: blockReshuffle(p, returns, glide, dividend, fx, tax)
   };
 }
 

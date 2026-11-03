@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
 import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
-import { highlightLines } from './narrate.js';
+import { highlightLines, overviewNotes, reshuffleParts } from './narrate.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -106,6 +106,29 @@ function renderPhaseYield(phases, cagr) {
   }
 }
 
+function renderOverviewNotes(cur) {
+  const list = $('overviewNotes');
+  if (!list) return;
+  const notes = overviewNotes({ result: cur.result, sim: cur.sim, plan: cur.plan });
+  list.innerHTML = '';
+  notes.forEach(note => list.appendChild(el('li', '', note)));
+  list.hidden = notes.length === 0;
+}
+
+function renderReshuffle(cur) {
+  const priceIndex = (cur.result?.warnings || []).some(w => w.includes('價格指數') || w.includes('不含股息'));
+  const parts = reshuffleParts(cur.sim?.monteCarlo, {
+    priceIndex,
+    legacyOn: cur.plan?.pathMode === 'bootstrap'
+  });
+  const out = $('reshuffleResult');
+  const spend = $('reshuffleSpend');
+  const notes = $('reshuffleNotes');
+  if (out) out.textContent = parts.headline;
+  if (spend) spend.textContent = parts.spend;
+  if (notes) notes.textContent = parts.notes;
+}
+
 export function renderDashboard() {
   const cur = state.current;
   if (!cur) return;
@@ -136,8 +159,11 @@ export function renderDashboard() {
     }
     successSub.append(pill, document.createTextNode(successNote));
   }
+  renderWorstStart(cur);
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
   const said = highlightLines(sim, plan, { pct, money: compact }, { cagr: cur.result?.stats?.cagr });
+  renderOverviewNotes(cur);
+  renderReshuffle(cur);
   const sample = $('sampleWarning');
   if (sample) {
     sample.textContent = said.sample || '';
@@ -337,12 +363,7 @@ function yearTable(years) {
   );
 }
 
-function renderPathHighlights(cur) {
-  const node = $('pathHighlights');
-  const brief = cur?.sim?.spendingBrief;
-  if (!node) return;
-  node.innerHTML = '';
-  if (!brief?.tightest) { node.hidden = true; return; }
+function worstStartButton(brief) {
   const btn = el('button', 'linkish', brief.worstStart);
   btn.type = 'button';
   btn.onclick = () => {
@@ -350,14 +371,30 @@ function renderPathHighlights(cur) {
     renderActiveTab();
     openPath(brief.worstStart);
   };
+  return btn;
+}
+
+function renderWorstStart(cur) {
+  const node = $('worstStart');
+  const brief = cur?.sim?.spendingBrief;
+  if (!node) return;
+  node.innerHTML = '';
+  if (!brief?.tightest) { node.hidden = true; return; }
   node.append(
     document.createTextNode('最差起點 '),
-    btn,
+    worstStartButton(brief),
     document.createTextNode(`：最緊的一年 ${brief.tightest.age} 歲實質支出 ${compact(brief.tightest.spending)}`)
   );
-  if (brief.guardrail) {
-    node.append(document.createTextNode(`\n護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`));
-  }
+  node.hidden = false;
+}
+
+function renderPathHighlights(cur) {
+  const node = $('pathHighlights');
+  const brief = cur?.sim?.spendingBrief;
+  if (!node) return;
+  node.innerHTML = '';
+  if (!brief?.guardrail) { node.hidden = true; return; }
+  node.append(document.createTextNode(`護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`));
   node.hidden = false;
 }
 
@@ -670,7 +707,7 @@ export function renderAssets() {
   const warnings = [...r.warnings];
   if (state.current.sim.history.method === 'circular') warnings.push('歷史長度不足整個計劃年限，退休模擬以循環序列（走到尾端接回開頭）補足，結果較不可靠。');
   if (state.current.cpiFallbackMonths) warnings.push(`最近 ${state.current.cpiFallbackMonths} 個月沒有 CPI 資料，以固定通膨 ${state.current.plan.inflationRate}% 替代。`);
-  warnings.push('各資產以自身幣別計算，未做匯率換算；美國 CPI 未必反映你所在地的通膨。');
+  if (state.current.plan.inflationMode !== 'fixed') warnings.push('通膨用的是美國物價，不是香港物價。');
   box.appendChild(el('div', 'section-h', '數據限制'));
   const ul = el('ul', 'warn-list');
   warnings.forEach(w => ul.appendChild(el('li', '', w)));
