@@ -1172,6 +1172,8 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       starts
     },
     withdrawalStrategy: p.withdrawalStrategy,
+    // successRate 是這一次 walk 的占比。pathMode==='bootstrap' 時這一次已不是歷史滾動，主指標會被換掉。
+    // 新的蒙地卡羅不要沿這條換成主指標，應另成欄位、預設關閉。口徑見 docs/MONTE_CARLO_DESIGN.md。
     successRate: successCount / starts,
     successRateFixedReal: fixedSuccessCount / starts,
     endBalance: summarize(runs.map(x => x.endBalance)),
