@@ -216,6 +216,9 @@
   #exportPaths { margin-top: 8px; }
   #pathViewer { margin-top: 8px; }
   #pathViewer .tbl-wrap { max-height: 320px; overflow: auto; }
+  .property-block { margin-top: 12px; }
+  .property-quote { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  #propertyHighlight { white-space: pre-line; }
   .advanced-plan { margin-top: 8px; font-size: 13px; color: var(--muted); }
   .advanced-plan summary { cursor: pointer; }
   .advanced-plan input[type="text"], .advanced-plan input:not([type="checkbox"]), .advanced-plan textarea { width: 100%; margin-top: 6px; box-sizing: border-box; }

@@ -2,6 +2,8 @@
 // 全部以「今日幣值」（實質金額）計算：名目月報酬先扣費用、再以通膨折算成實質報酬。
 // 投入與支出在每月月初發生，之後套用當月報酬。
 
+import { normalizeProperty, CANNOT_PURCHASE_WARN, POST_PURCHASE_MIN } from './property.js';
+
 export const WITHDRAWAL_STRATEGIES = {
   fixed_real: '固定實質提領',
   guardrails: '護欄法（Guyton-Klinger）',
@@ -134,6 +136,7 @@ export function normalizePlan(plan) {
   p.lumpSums = normalizeLumpSums(p.lumpSums);
   p.otherIncomeSegments = normalizeIncomeSegments(p.otherIncomeSegments);
   p.compareBootstrap = p.compareBootstrap === true || p.compareBootstrap === 'true';
+  p.property = normalizeProperty(p);
   return p;
 }
 
@@ -207,6 +210,16 @@ export function fitReshuffleBlock(requested, historyMonths) {
  * 同一個月份索引同時用於組合實質報酬，或股／其他兩袖與該月通膨。
  * 不會為每一檔資產各抽一個月。
  */
+/** 與該月報酬成對的物價比。置業關閉時不讀。 */
+export function inflationAt(idx, returns, glideOn, glide, plan) {
+  if (glideOn && glide && Number.isFinite(glide.inflation?.[idx]) && glide.inflation[idx] > 0) {
+    return glide.inflation[idx];
+  }
+  const row = returns[idx];
+  if (row && Number.isFinite(row.inflation) && row.inflation > 0) return row.inflation;
+  return (1 + (Number(plan.inflationRate) || 0) / 100) ** (1 / 12);
+}
+
 export function growthAtMonthIndex(idx, { glideOn = false, glide = null, equityWeight = 0, blendedReal = null } = {}) {
   if (glideOn) {
     const gross = 1 + equityWeight * glide.equityR[idx] + (1 - equityWeight) * glide.restR[idx];
@@ -394,7 +407,11 @@ export function realMonthlyReturns(equityMonthly, plan, cpiSeries) {
       if (a && b) inflation = b / a;
       else cpiFallbackMonths++;
     }
-    returns.push({ month: date.slice(0, 7), r: (value / prevValue) * feeFactor / inflation - 1 });
+    returns.push({
+      month: date.slice(0, 7),
+      r: (value / prevValue) * feeFactor / inflation - 1,
+      inflation
+    });
   }
   return { returns, cpiFallbackMonths };
 }
@@ -734,6 +751,8 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
   const taxMonthly = tax.annual > 0 ? tax.annual / 12 : 0;
   const fxOn = Boolean(fx && !fx.skipped && p.fxMode);
   const bootstrapOn = !reshuffleOn && p.pathMode === 'bootstrap';
+  const prop = p.property?.active ? p.property : null;
+  const kBuy = prop ? (prop.purchaseAge - p.currentAge) * 12 : -1;
   let eqMin = Infinity;
   let eqMax = -Infinity;
 
@@ -760,6 +779,10 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
     let streak = 0;
     let longest = 0;
     let largest = 0;
+    let priceLevel = 1;
+    let purchased = false;
+    let purchasePriceLevel = null;
+    let balanceAfterPurchase = null;
     const bucketOn = Boolean(bucket && p.cashBucketYears > 0 && bucket.equityR?.length === L);
     let cashBal = 0;
     let riskyBal = balance;
@@ -813,6 +836,31 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
           if (k === (lump.age - p.currentAge) * 12) balance -= lump.amount;
         }
         if (balance < 0) balance = 0;
+      }
+      let downReal = 0;
+      let mortgageReal = 0;
+      let holdingReal = 0;
+      let rentReal = 0;
+      let housingFromPortfolio = 0;
+      if (prop) {
+        if (k === kBuy) {
+          const realDown = prop.cashNominal / priceLevel;
+          purchasePriceLevel = priceLevel;
+          if (balance + 1e-8 >= realDown) {
+            purchased = true;
+            downReal = realDown;
+            balance -= realDown;
+            if (balance < 0) balance = 0;
+            if (trackLinear) base -= realDown;
+            balanceAfterPurchase = balance;
+          }
+        }
+        if (k >= kBuy && purchasePriceLevel != null) {
+          if (purchased) {
+            if (k < kBuy + prop.termMonths) mortgageReal = prop.nominalPmt / priceLevel;
+            holdingReal = prop.holdingMonthly;
+          } else if (prop.rentIfCannot) rentReal = prop.rentMonthly;
+        }
       }
       let taxPaid = 0;
       if (dividendOn && balance > 0) {
@@ -872,6 +920,19 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
         }
         const payable = bucketPaid ? withdraw : Math.min(withdraw, Math.max(0, balance));
         if (!bucketPaid) balance -= withdraw;
+        const housingDue = mortgageReal + holdingReal + rentReal;
+        if (housingDue > 0) {
+          housingFromPortfolio = housingDue;
+          if (trackLinear) base -= housingDue;
+          if (bucketOn) {
+            riskyBal -= housingDue;
+            if (riskyBal < 0) {
+              cashBal += riskyBal;
+              riskyBal = 0;
+            }
+            balance = cashBal + riskyBal;
+          } else balance -= housingDue;
+        }
         totalSpent += withdraw;
         targetSpent += targetMonthly;
         retireMonths++;
@@ -923,8 +984,21 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
             fx_spread: balanceAfterFlows * (1 - (1 - feeParts.fxSpread / 100) ** (1 / 12))
           } : {}),
           ...(fxRateUsed == null ? {} : { fx_rate_used: fxRateUsed }),
-          ...(markGuardrail ? { guardrail_hit: guardrailHit } : {})
+          ...(markGuardrail ? { guardrail_hit: guardrailHit } : {}),
+          ...(prop ? {
+            price_level: priceLevel,
+            down_real: downReal,
+            mortgage_real: mortgageReal,
+            holding_real: holdingReal,
+            rent_real: rentReal,
+            housing_from_portfolio: housingFromPortfolio,
+            bought: k === kBuy && purchased ? 1 : 0
+          } : {})
         });
+      }
+      if (prop) {
+        const infl = inflationAt(idx, returns, glideOn, glide, p);
+        if (infl > 0) priceLevel *= infl;
       }
     }
 
@@ -942,6 +1016,13 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
       spendRatio: targetSpent > 0 ? totalSpent / targetSpent : 1,
       coverageRate: retireMonths > 0 ? coverageMonths / retireMonths : 1
     };
+    if (prop) {
+      runs[s].property = {
+        purchased,
+        priceLevel: purchasePriceLevel,
+        balanceAfter: balanceAfterPurchase
+      };
+    }
     if (yearMonths) runs[s].yearMonths = yearMonths;
   }
 
@@ -1074,7 +1155,8 @@ export function buildLifeLedger(plan, returns, strategy, glide = null, dividend 
       balance_at_retire: run.balanceAtRetire,
       total_withdrawal: walked.totals[s],
       spend_ratio: run.spendRatio,
-      depleted_age: run.depletedAge
+      depleted_age: run.depletedAge,
+      max_spending: run.maxSpending
     })),
     totals: walked.totals,
     cumWithdrawal: summarize(walked.totals)
@@ -1168,7 +1250,38 @@ export function blockReshuffle(plan, returns, glide = null, dividend = null, fx 
   result.solventRate = solvent / primary.runs.length;
   result.ruinAge = ruin ? { min: ruin.min, p50: ruin.p50 } : null;
   result.sustainableSpending = { p10: spend.p10, p50: spend.p50 };
+  if (p.property?.active && primary.runs[0]?.property) {
+    result.propertyProbe = {
+      priceLevel: primary.runs[0].property.priceLevel,
+      purchased: primary.runs[0].property.purchased
+    };
+  }
   return result;
+}
+
+function propertySummary(p, runs) {
+  if (!p.property?.active) return null;
+  const decided = runs.map(run => run.property).filter(Boolean);
+  const purchasedPaths = decided.filter(row => row.purchased).length;
+  const paths = decided.length;
+  const cannotPurchaseRate = paths ? (paths - purchasedPaths) / paths : 0;
+  const balances = decided
+    .filter(row => row.purchased && Number.isFinite(row.balanceAfter))
+    .map(row => row.balanceAfter);
+  const enough = balances.length >= POST_PURCHASE_MIN;
+  const post = enough ? summarize(balances, [10, 50]) : null;
+  return {
+    enabled: true,
+    housingLabel: p.property.rentIfCannot ? '已改計租金' : '不含住房開支',
+    cannotPurchaseRate,
+    paths,
+    purchasedPaths,
+    warnCannotPurchase: cannotPurchaseRate + 1e-12 >= CANNOT_PURCHASE_WARN,
+    postPurchase: post ? { p10: post.p10, p50: post.p50 } : null,
+    postPurchaseNote: enough ? null : '樣本不足',
+    quote: p.property.quote,
+    successNote: '已含置業現金流、未計樓淨值'
+  };
 }
 
 /**
@@ -1187,6 +1300,7 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
   const fixed = needFixedCompare ? runLifePaths(p, returns, 'fixed_real', glide, dividend, fx, tax) : primary;
   const { runs, yearly, starts, circular } = primary;
 
+  const property = propertySummary(p, runs);
   const successCount = runs.filter(x => x.success).length;
   const fixedSuccessCount = fixed.runs.filter(x => x.success).length;
   const sortedRuns = runs.slice().sort((a, b) =>
@@ -1346,7 +1460,8 @@ export function simulateRetirement(plan, returns, glide = null, dividend = null,
       endBalance: x.endBalance,
       spendRatio: x.spendRatio
     })),
-    monteCarlo: blockReshuffle(p, returns, glide, dividend, fx, tax)
+    monteCarlo: blockReshuffle(p, returns, glide, dividend, fx, tax),
+    ...(property ? { property } : {})
   };
 }
 
