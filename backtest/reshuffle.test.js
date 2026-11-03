@@ -9,6 +9,7 @@ import {
   simulateRetirement,
   RESHUFFLE_PATHS
 } from './retirement.js';
+import { HKD_PEG_NOTE } from './engine.js';
 import { overviewNotes, reshuffleParts } from '../js/narrate.js';
 
 function plan(over = {}) {
@@ -99,16 +100,17 @@ test('reshuffle sits beside the historical success rate and does not overwrite s
 test('overview copy states the peg and US CPI, and reshuffle copy stays out of the success rate', () => {
   const notes = overviewNotes({
     result: {
-      account: { note: '計劃以港元計價。美元價格已按 1 美元 = 7.8 港元換算。' },
+      account: { note: HKD_PEG_NOTE },
       warnings: ['2800.HK：價格指數，不含股息，報酬被低估']
     },
     sim: { history: { method: 'rolling' } },
     plan: { inflationMode: 'cpi', currency: 'HKD' }
   });
   const joined = notes.join('\n');
-  assert.match(joined, /7\.8/);
-  assert.match(joined, /美國 CPI/);
-  assert.match(joined, /價格指數/);
+  assert.match(joined, /7\.75/);
+  assert.match(joined, /外國當地的物價/);
+  assert.match(joined, /美國物價/);
+  assert.match(joined, /不含派息/);
   const parts = reshuffleParts({
     suppressed: null,
     blockMonths: 12,
@@ -124,12 +126,24 @@ test('overview copy states the peg and US CPI, and reshuffle copy stays out of t
     sustainableSpending: { p10: 100000, p50: 200000 }
   }, { priceIndex: true });
   const text = `${parts.headline}\n${parts.spend}\n${parts.notes}`;
-  assert.match(parts.headline, /重排後達成比例/);
-  assert.match(parts.spend, /今日購買力/);
-  assert.match(parts.spend, /不是概況上的歷史可花金額/);
-  assert.match(parts.notes, /抽樣起伏/);
-  assert.match(parts.notes, /偏保守/);
-  assert.doesNotMatch(text, /機率|勝率/);
+  assert.match(parts.headline, /重排後達成比例 61%/);
+  assert.match(parts.headline, /有多少條能撐到計劃結束/);
+  assert.match(parts.headline, /不是預測/);
+  assert.match(parts.headline, /一共模擬 1000 條，每塊 12 個月，種子 1/);
+  assert.match(parts.spend, /概況裡那個歷史可花金額/);
+  assert.match(parts.notes, /上下動一點/);
+  assert.match(parts.notes, /港股會顯得比較保守/);
+  assert.doesNotMatch(text, /機率|勝率|袖套|口徑|序列頭尾/);
+  assert.doesNotMatch(text, /區塊拔靴/);
+  const legacy = reshuffleParts({
+    suppressed: null,
+    blockMonths: 12,
+    seed: 1,
+    paths: 1000,
+    solventRate: 0.61,
+    sustainableSpending: { p10: 1, p50: 2 }
+  }, { legacyOn: true });
+  assert.match(legacy.notes, /你開了「區塊拔靴」/);
 });
 
 test('block length is capped by history and a short tape is marked as few blocks', () => {

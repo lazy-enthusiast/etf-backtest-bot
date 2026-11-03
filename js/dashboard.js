@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
+import { HKD_PEG_NOTE } from '../backtest/engine.js';
 import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
 import { highlightLines, overviewNotes, reshuffleParts } from './narrate.js';
 
@@ -116,8 +117,13 @@ function renderOverviewNotes(cur) {
 }
 
 function renderReshuffle(cur) {
+  const peg = $('reshufflePeg');
+  if (peg && !peg.textContent) peg.textContent = HKD_PEG_NOTE;
   const priceIndex = (cur.result?.warnings || []).some(w => w.includes('價格指數') || w.includes('不含股息'));
-  const parts = reshuffleParts(cur.sim?.monteCarlo, { priceIndex });
+  const parts = reshuffleParts(cur.sim?.monteCarlo, {
+    priceIndex,
+    legacyOn: cur.plan?.pathMode === 'bootstrap'
+  });
   const out = $('reshuffleResult');
   const spend = $('reshuffleSpend');
   const notes = $('reshuffleNotes');
@@ -692,7 +698,7 @@ export function renderAssets() {
   const warnings = [...r.warnings];
   if (state.current.sim.history.method === 'circular') warnings.push('歷史長度不足整個計劃年限，退休模擬以循環序列（走到尾端接回開頭）補足，結果較不可靠。');
   if (state.current.cpiFallbackMonths) warnings.push(`最近 ${state.current.cpiFallbackMonths} 個月沒有 CPI 資料，以固定通膨 ${state.current.plan.inflationRate}% 替代。`);
-  if (state.current.plan.inflationMode !== 'fixed') warnings.push('實質報酬扣的是美國 CPI，不是香港 CPI。');
+  if (state.current.plan.inflationMode !== 'fixed') warnings.push('通膨用的是美國物價，不是香港物價。');
   box.appendChild(el('div', 'section-h', '數據限制'));
   const ul = el('ul', 'warn-list');
   warnings.forEach(w => ul.appendChild(el('li', '', w)));

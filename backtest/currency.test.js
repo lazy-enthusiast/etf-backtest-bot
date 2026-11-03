@@ -21,10 +21,11 @@ test('a constant 7.8 peg leaves USD returns equal to the same path already in HK
   assert.deepEqual(hkd.account.usdConverted, []);
   assert.equal(usd.account.unit, 'HKD');
   assert.equal(usd.account.peg, 7.8);
-  assert.match(usd.account.note, /7\.8/);
+  assert.match(usd.account.note, /用港元算/);
+  assert.match(usd.account.note, /固定匯率/);
   assert.match(usd.account.note, /7\.75/);
-  assert.match(usd.account.note, /換匯成本/);
-  assert.match(usd.account.note, /不適用/);
+  assert.match(usd.account.note, /換匯費用/);
+  assert.match(usd.account.note, /外國當地的物價/);
   assert.match(usd.warnings[0], /7\.75/);
 });
 

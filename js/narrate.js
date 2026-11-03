@@ -113,11 +113,11 @@ export function overviewNotes({ result, sim, plan }) {
   const notes = [];
   if (result?.account?.note) notes.push(result.account.note);
   if (plan?.currency && plan.currency !== 'HKD') {
-    notes.push(`價格已換成港元。計劃幣別標成 ${plan.currency}，與計價單位不一致。v1 的價格單位是港元。`);
+    notes.push(`金額標成 ${plan.currency}，但價格是用港元算的。`);
   }
-  if (plan?.inflationMode !== 'fixed') notes.push('實質報酬扣的是美國 CPI，不是香港 CPI。');
-  for (const warning of result?.warnings || []) {
-    if (warning.includes('價格指數') || warning.includes('不含股息')) notes.push(warning);
+  if (plan?.inflationMode !== 'fixed') notes.push('通膨用的是美國物價，不是香港物價。');
+  if ((result?.warnings || []).some(w => w.includes('價格指數') || w.includes('不含股息'))) {
+    notes.push('有些較早的資料不含派息，數字會偏低。港股特別明顯。');
   }
   if (sim?.history?.method === 'circular') {
     notes.push('歷史長度不足整個計劃年限，退休模擬以循環序列補足。');
@@ -126,33 +126,34 @@ export function overviewNotes({ result, sim, plan }) {
 }
 
 /** 進階區文案。結果叫「重排後達成比例」，不叫機率或勝率。 */
-export function reshuffleParts(mc, { priceIndex = false } = {}) {
+export function reshuffleParts(mc, { priceIndex = false, legacyOn = false } = {}) {
   if (!mc) return { headline: '尚未計算。', spend: '', notes: '' };
   const blockLine = Number.isFinite(mc.historyMonths)
-    ? `這段歷史 ${mc.historyMonths} 個月，實際每塊 ${mc.blockMonths} 個月，不重疊約 ${mc.nonOverlappingBlocks ?? '—'} 塊（起點 ${mc.blockStarts ?? '—'} 個）。`
+    ? `這段歷史有 ${mc.historyMonths} 個月。大約能切出 ${mc.nonOverlappingBlocks ?? '—'} 段不重複的月份。`
     : '';
-  const capLine = mc.capped ? `塊長已從 ${mc.requestedBlockMonths} 收到 ${mc.blockMonths}，因為不能長過這段歷史。` : '';
-  const fewLine = mc.fewBlocks && !mc.suppressed ? '不重疊的塊不到 4 個，換種子時數字起伏會很大。' : '';
-  const noise = '1,000 條換一個種子，達成比例會有抽樣起伏。';
-  const price = priceIndex ? '延伸歷史若是價格指數（不含股息），港股這類袖套的報酬偏低，重排會一併偏保守。' : '';
-  const notes = [noise, fewLine, price].filter(Boolean).join('');
+  const capLine = mc.capped ? `你填的月數太長，已改成 ${mc.blockMonths} 個月。` : '';
+  const fewLine = mc.fewBlocks && !mc.suppressed ? '能切出的整段不多。換個種子，數字會跳很多。' : '';
+  const noise = '換一個種子，這個比例會上下動一點。';
+  const price = priceIndex ? '有些較早的資料不含派息，港股會顯得比較保守。重排也會跟著保守。' : '';
+  const legacy = legacyOn ? '你開了「區塊拔靴」。那個數字不能和這裡直接比。' : '';
+  const notes = [blockLine, capLine, fewLine, noise, price, legacy].filter(Boolean).join('');
   if (mc.suppressed) {
     return {
-      headline: `${mc.suppressed}。${blockLine}${capLine}這不改變上面的歷史占比。`,
+      headline: `${mc.suppressed}。上面圓環的數字不會因此改變。`,
       spend: '',
       notes
     };
   }
   const pctText = `${Math.round(mc.solventRate * 1000) / 10}%`;
   const ruin = mc.ruinAge
-    ? `沒走完的路徑裡，最早 ${mc.ruinAge.min.toFixed(1)} 歲用盡，中位 ${mc.ruinAge.p50.toFixed(1)} 歲。`
-    : '這 1,000 條都走到終點。';
+    ? `沒撐到的那些，最早 ${mc.ruinAge.min.toFixed(1)} 歲用完，中間是 ${mc.ruinAge.p50.toFixed(1)} 歲。`
+    : '';
   const amount = mc.sustainableSpending;
   const spend = amount
-    ? `旁註，不是概況上的歷史可花金額。固定實質：以今日購買力計，第一年與之後每一年的實質金額相同，期末剛好花完。P10 ${Math.round(amount.p10).toLocaleString('en-US')} 是偏低門檻（約一成重排路徑達不到），P50 ${Math.round(amount.p50).toLocaleString('en-US')} 是這些路徑的中位。`
+    ? `這不是概況裡那個歷史可花金額。這裡是用今天的購買力，每年花同樣多，到結束剛好花完。P10 ${Math.round(amount.p10).toLocaleString('en-US')} 比較緊，大約十次裡有一次做不到。P50 ${Math.round(amount.p50).toLocaleString('en-US')} 是中間。`
     : '';
   return {
-    headline: `重排後達成比例 ${pctText}。${mc.paths} 條，種子 ${mc.seed}。${blockLine}${capLine}${ruin}`,
+    headline: `重排後達成比例 ${pctText}。這是把歷史月份打亂之後，有多少條能撐到計劃結束。這不是預測。${ruin}一共模擬 ${mc.paths} 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。`,
     spend,
     notes
   };

@@ -10,6 +10,7 @@ import { writePortfolioForm, addHoldingRow, onPortfolioEdited } from './portfoli
 import { recalc, setStatus } from './recalc.js';
 import { migrateHoldings, usBareKeysFromMapping } from '../backtest/symbols.js';
 import { normalizePlan } from '../backtest/retirement.js';
+import { HKD_PEG_NOTE } from '../backtest/engine.js';
 import { renderDashboard, renderActiveTab } from './dashboard.js';
 import {
   loadModels, newConversation, getActiveConv, renderConvSelect, renderMessages,
@@ -63,6 +64,8 @@ function bindUi() {
     bindNumericInput(reshuffleSeed, { integer: true });
     reshuffleSeed.addEventListener('input', onPlanEdited);
   }
+  const reshufflePeg = $('reshufflePeg');
+  if (reshufflePeg) reshufflePeg.textContent = HKD_PEG_NOTE;
   $('authSubmitBtn')?.addEventListener('click', () => submitAuth());
   $('authInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); });
 

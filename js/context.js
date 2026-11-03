@@ -75,7 +75,7 @@ export function describeSim(cur) {
   const flex = sim.spendingFlexibility;
   const lines = [
     `方法：${h.start} ~ ${h.end} 共 ${h.months} 個月實質報酬（已扣費用與通膨），${h.starts} 個起始月份（${h.method === 'rolling' ? '完整歷史窗口' : h.method === 'bootstrap' ? '區塊拔靴，額外模式' : '歷史不足，循環序列'}）${cur.cpiFallbackMonths ? `；${cur.cpiFallbackMonths} 個月缺 CPI` : ''}`,
-    describeReshuffle(sim),
+    describeReshuffle(sim, plan),
     `提領規則 ${describeWithdrawal(plan)}；歷史成功率 ${pct(sim.successRate, 1)}` +
       (plan.withdrawalStrategy !== 'fixed_real' ? `（對照固定實質 ${pct(sim.successRateFixedReal, 1)}）` : ''),
     sim.balanceAtRetire ? `退休時資產：中位 ${money(sim.balanceAtRetire.p50)}、P10 ${money(sim.balanceAtRetire.p10)}、P90 ${money(sim.balanceAtRetire.p90)}；以中位數計初始淨提領率 ${pct(sim.initialWithdrawalRate, 2)}` : '已在退休期',
@@ -108,13 +108,13 @@ export function describeSim(cur) {
   return lines.join('\n');
 }
 
-function describeReshuffle(sim) {
+function describeReshuffle(sim, plan) {
   const mc = sim?.monteCarlo;
   if (!mc) return null;
-  if (mc.suppressed) return `區塊重排：${mc.suppressed}。這不改變歷史占比。`;
+  if (mc.suppressed) return `區塊重排：${mc.suppressed}。上面圓環的數字不變。`;
   const spend = mc.sustainableSpending;
-  const blocks = Number.isFinite(mc.nonOverlappingBlocks) ? `，不重疊約 ${mc.nonOverlappingBlocks} 塊` : '';
-  return `重排後達成比例 ${pct(mc.solventRate, 1)}（不是預測）。${mc.paths} 條，每塊 ${mc.blockMonths} 個月${blocks}，種子 ${mc.seed}。旁註的固定實質可花金額（今日購買力，各年實質相同）P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}，不是概況上的歷史可花金額。舊的區塊拔靴口徑不同。`;
+  const legacy = plan?.pathMode === 'bootstrap' ? '你開了「區塊拔靴」。那個數字不能和這裡直接比。' : '';
+  return `重排後達成比例 ${pct(mc.solventRate, 1)}。這是把歷史月份打亂之後，有多少條能撐到計劃結束。這不是預測。P10 ${money(spend?.p10)}、P50 ${money(spend?.p50)}，和概況裡那個歷史可花金額不是同一件事。一共模擬 ${mc.paths} 條，每塊 ${mc.blockMonths} 個月，種子 ${mc.seed}。${legacy}`;
 }
 
 export function describeBacktest(name, r, brief) {

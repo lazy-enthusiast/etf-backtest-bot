@@ -7,7 +7,7 @@ import { mappingLookupKey, normalizeSymbol } from './symbols.js';
 export const HKD_PER_USD = 7.8;
 
 /** 概況與進階區共用。不要寫成歷史匯率或換匯成本已計入。 */
-export const HKD_PEG_NOTE = '整段路徑假設 1 美元 = 7.8 港元，不隨月份改變。實際聯繫匯率大致在 7.75–7.85。這裡沒有計入換匯成本。若聯繫匯率制度改變，這些結果不適用。結果只涵蓋港元或美元支出，不包括其他貨幣，也不代表海外當地物價。';
+export const HKD_PEG_NOTE = '結果用港元算。美元開支按固定匯率換：全程都是 1 美元 = 7.8 港元。真實匯率大約在 7.75 到 7.85。沒有算進換匯費用。如果聯繫匯率的做法改了，這些數字就不適用。不包括其他貨幣，也不代表你在外國當地的物價。';
 
 export function priceCurrency(code) {
   const c = String(code || '').trim().toUpperCase();
