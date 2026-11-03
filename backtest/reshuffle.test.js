@@ -107,8 +107,9 @@ test('overview copy states the peg and US CPI, and reshuffle copy stays out of t
     plan: { inflationMode: 'cpi', currency: 'HKD' }
   });
   const joined = notes.join('\n');
-  assert.match(joined, /7\.75/);
+  assert.match(joined, /7\.8 港元/);
   assert.match(joined, /外國當地的物價/);
+  assert.doesNotMatch(joined, /7\.75/);
   assert.match(joined, /美國物價/);
   assert.match(joined, /不含派息/);
   const parts = reshuffleParts({

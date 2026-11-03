@@ -1,7 +1,6 @@
 import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
-import { HKD_PEG_NOTE } from '../backtest/engine.js';
 import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
 import { highlightLines, overviewNotes, reshuffleParts } from './narrate.js';
 
@@ -117,8 +116,6 @@ function renderOverviewNotes(cur) {
 }
 
 function renderReshuffle(cur) {
-  const peg = $('reshufflePeg');
-  if (peg && !peg.textContent) peg.textContent = HKD_PEG_NOTE;
   const priceIndex = (cur.result?.warnings || []).some(w => w.includes('價格指數') || w.includes('不含股息'));
   const parts = reshuffleParts(cur.sim?.monteCarlo, {
     priceIndex,
@@ -162,6 +159,7 @@ export function renderDashboard() {
     }
     successSub.append(pill, document.createTextNode(successNote));
   }
+  renderWorstStart(cur);
   setDelta('kpiSuccessDelta', sim.successRate, prev?.successRate, x => pct(x));
   const said = highlightLines(sim, plan, { pct, money: compact }, { cagr: cur.result?.stats?.cagr });
   renderOverviewNotes(cur);
@@ -365,12 +363,7 @@ function yearTable(years) {
   );
 }
 
-function renderPathHighlights(cur) {
-  const node = $('pathHighlights');
-  const brief = cur?.sim?.spendingBrief;
-  if (!node) return;
-  node.innerHTML = '';
-  if (!brief?.tightest) { node.hidden = true; return; }
+function worstStartButton(brief) {
   const btn = el('button', 'linkish', brief.worstStart);
   btn.type = 'button';
   btn.onclick = () => {
@@ -378,14 +371,30 @@ function renderPathHighlights(cur) {
     renderActiveTab();
     openPath(brief.worstStart);
   };
+  return btn;
+}
+
+function renderWorstStart(cur) {
+  const node = $('worstStart');
+  const brief = cur?.sim?.spendingBrief;
+  if (!node) return;
+  node.innerHTML = '';
+  if (!brief?.tightest) { node.hidden = true; return; }
   node.append(
     document.createTextNode('最差起點 '),
-    btn,
+    worstStartButton(brief),
     document.createTextNode(`：最緊的一年 ${brief.tightest.age} 歲實質支出 ${compact(brief.tightest.spending)}`)
   );
-  if (brief.guardrail) {
-    node.append(document.createTextNode(`\n護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`));
-  }
+  node.hidden = false;
+}
+
+function renderPathHighlights(cur) {
+  const node = $('pathHighlights');
+  const brief = cur?.sim?.spendingBrief;
+  if (!node) return;
+  node.innerHTML = '';
+  if (!brief?.guardrail) { node.hidden = true; return; }
+  node.append(document.createTextNode(`護欄：最長連續下調 ${brief.guardrail.longest} 年，單次最大 ${compact(brief.guardrail.largest)}`));
   node.hidden = false;
 }
 
