@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { pct, num2, money, compact } from './dom.js';
 import { inflationLabel, requiredPhaseReturns, formatRequiredPhaseReturns } from '../backtest/retirement.js';
-import { highlightLines, planOptionLines } from './narrate.js';
+import { highlightLines, planOptionLines, propertyOverviewLines } from './narrate.js';
 import { loadMeta, backtestableSymbols, earliestDate } from './data.js';
 
 function shortSnippet(snippet, tightAge) {
@@ -97,6 +97,7 @@ export function describeSim(cur) {
     said.bootstrapMode,
     said.frequency,
     said.sample,
+    ...propertyOverviewLines(sim, chatFmt(plan)),
     '各年齡資產分位：' + keyAges.map(a => {
       const b = sim.bands.find(x => x.age === a);
       return b ? `${a} 歲 P10 ${compact(b.p10)} / 中位 ${compact(b.p50)} / P90 ${compact(b.p90)}` : '';

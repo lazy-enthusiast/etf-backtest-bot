@@ -1,4 +1,5 @@
 import { effectiveSampleNote, spendingCurveNote } from '../backtest/retirement.js';
+export { propertyQuoteText } from '../backtest/property.js';
 
 function side(name, row, fmt) {
   return `${name}成功率 ${fmt.pct(row.successRate, 0)}、期末中位 ${fmt.money(row.endBalanceP50)}、最差最低年支出 ${fmt.money(row.worstMinSpend)}`;
@@ -96,6 +97,33 @@ export function planOptionLines(plan) {
   if (plan.lumpSums?.length) lines.push(`一次性支出 ${plan.lumpSums.length} 筆。`);
   if (plan.otherIncomeSegments?.length) lines.push(`分段其他收入 ${plan.otherIncomeSegments.length} 段。`);
   if (plan.compareBootstrap) lines.push('拔靴對照：開。歷史成功率仍是公布的成功率。');
+  if (plan.property?.active) {
+    const home = plan.property;
+    const rent = home.rentIfCannot ? '無法置業改計租金。' : '無法置業不含住房開支。';
+    lines.push(`置業：${home.purchaseAge} 歲，樓價 ${home.priceWan} 萬（置業當年名目）。${rent}軌跡不含樓淨值。`);
+  }
+  return lines;
+}
+
+function propertyRateText(rate) {
+  const pct = Math.round(Number(rate) * 1000) / 10;
+  if (!Number.isFinite(pct)) return '—';
+  return Number.isInteger(pct) ? String(pct) : pct.toFixed(1);
+}
+
+/** 置業開啟時的短標。租金開關無關，預設也要標住房假設。 */
+export function propertyOverviewLines(sim, fmt) {
+  const info = sim?.property;
+  if (!info?.enabled) return [];
+  const lines = [
+    info.successNote || '已含置業現金流、未計樓淨值',
+    `無法置業 ${propertyRateText(info.cannotPurchaseRate)}% · ${info.housingLabel}`
+  ];
+  if (info.warnCannotPurchase) lines.push('無法置業比例偏高');
+  if (info.postPurchase) {
+    lines.push(`置業後餘額 P10 ${fmt.money(info.postPurchase.p10)} · P50 ${fmt.money(info.postPurchase.p50)}`);
+  } else lines.push('置業後餘額樣本不足');
+  lines.push('可花金額：含住房開支下的原計劃提領');
   return lines;
 }
 

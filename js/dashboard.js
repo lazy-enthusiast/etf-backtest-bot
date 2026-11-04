@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { STORE } from './config.js';
 import { $, el, pct, num2, intFmt, money, compact } from './dom.js';
 import { requiredPhaseReturns, inflationLabel, REQUIRED_RETURN_LABEL, buildPathYears, formatPathCsv } from '../backtest/retirement.js';
-import { highlightLines, overviewNotes, reshuffleParts } from './narrate.js';
+import { highlightLines, overviewNotes, reshuffleParts, propertyOverviewLines } from './narrate.js';
 
 export function themeColors() {
   const css = getComputedStyle(document.body);
@@ -236,6 +236,7 @@ export function renderDashboard() {
   renderFanChart(cur, c);
   renderPathHighlights(cur);
   paintHighlights(said);
+  showLine('propertyHighlight', propertyOverviewLines(sim, { money: compact }).join('\n'));
   renderInflationLabel(cur);
   renderPathActions(cur);
   renderActiveTab();

@@ -95,6 +95,8 @@ export function parsePlanBlock(text) {
   if (Array.isArray(obj.lumpSums) || typeof obj.lumpSums === 'string') changes.lumpSums = obj.lumpSums;
   if (Array.isArray(obj.otherIncomeSegments) || typeof obj.otherIncomeSegments === 'string') changes.otherIncomeSegments = obj.otherIncomeSegments;
   if (obj.compareBootstrap === true || obj.compareBootstrap === false) changes.compareBootstrap = obj.compareBootstrap;
+  if (obj.property === false || obj.property === null) changes.property = null;
+  else if (obj.property && typeof obj.property === 'object') changes.property = { enabled: true, ...obj.property };
   if (obj.cashBucketYears === null || obj.cashBucketYears === false) changes.cashBucketYears = null;
   else if (obj.cashBucketYears === true) changes.cashBucketYears = true;
   else if (obj.cashBucketYears !== undefined && Number.isFinite(Number(obj.cashBucketYears))) changes.cashBucketYears = Number(obj.cashBucketYears);
@@ -128,6 +130,10 @@ export function formatPlanValue(key, v) {
   if (key === 'spendingCurve') return ({ flat: '固定', declining: '75歲後遞減', u_shape: '先降後升' })[v] || v;
   if (key === 'compareBootstrap') return v ? '開' : '關';
   if (key === 'lumpSums' || key === 'otherIncomeSegments') return Array.isArray(v) ? `${v.length} 段` : String(v || '');
+  if (key === 'property') {
+    if (!v || v.enabled === false) return '關';
+    return v.priceWan ? `${v.purchaseAge ?? ''}歲／${v.priceWan}萬` : '開';
+  }
   if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
   if (key === 'dividendYields' || key === 'dividendTaxRates') {
     return v && typeof v === 'object' ? Object.entries(v).map(([k, n]) => `${k}:${n}`).join(', ') : String(v || '');
