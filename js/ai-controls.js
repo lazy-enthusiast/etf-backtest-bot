@@ -132,7 +132,12 @@ export function formatPlanValue(key, v) {
   if (key === 'lumpSums' || key === 'otherIncomeSegments') return Array.isArray(v) ? `${v.length} 段` : String(v || '');
   if (key === 'property') {
     if (!v || v.enabled === false) return '關';
-    return v.priceWan ? `${v.purchaseAge ?? ''}歲／${v.priceWan}萬` : '開';
+    const price = Number.isFinite(Number(v.price))
+      ? Number(v.price)
+      : (Number.isFinite(Number(v.priceWan)) ? Number(v.priceWan) * 10000 : null);
+    if (price == null) return '開';
+    const cash = v.funding === 'cash' ? '全現金／' : '';
+    return `${v.purchaseAge ?? ''}歲／${cash}${intFmt.format(Math.round(price))}`;
   }
   if (['ter', 'turnover', 'turnoverCost', 'fxSpread'].includes(key)) return `${v}%`;
   if (key === 'dividendYields' || key === 'dividendTaxRates') {

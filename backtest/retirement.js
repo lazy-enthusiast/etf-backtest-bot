@@ -783,6 +783,7 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
     let purchased = false;
     let purchasePriceLevel = null;
     let balanceAfterPurchase = null;
+    let mortgageMonths = 0;
     const bucketOn = Boolean(bucket && p.cashBucketYears > 0 && bucket.equityR?.length === L);
     let cashBal = 0;
     let riskyBal = balance;
@@ -857,7 +858,10 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
         }
         if (k >= kBuy && purchasePriceLevel != null) {
           if (purchased) {
-            if (k < kBuy + prop.termMonths) mortgageReal = prop.nominalPmt / priceLevel;
+            if (k < kBuy + prop.termMonths && prop.nominalPmt > 0) {
+              mortgageReal = prop.nominalPmt / priceLevel;
+              mortgageMonths += 1;
+            }
             holdingReal = prop.holdingMonthly;
           } else if (prop.rentIfCannot) rentReal = prop.rentMonthly;
         }
@@ -1020,7 +1024,8 @@ function walkLife(p, returns, strategy, { keepRows = false, markGuardrail = fals
       runs[s].property = {
         purchased,
         priceLevel: purchasePriceLevel,
-        balanceAfter: balanceAfterPurchase
+        balanceAfter: balanceAfterPurchase,
+        mortgageMonths
       };
     }
     if (yearMonths) runs[s].yearMonths = yearMonths;
@@ -1253,7 +1258,9 @@ export function blockReshuffle(plan, returns, glide = null, dividend = null, fx 
   if (p.property?.active && primary.runs[0]?.property) {
     result.propertyProbe = {
       priceLevel: primary.runs[0].property.priceLevel,
-      purchased: primary.runs[0].property.purchased
+      purchased: primary.runs[0].property.purchased,
+      mortgageMonths: primary.runs[0].property.mortgageMonths,
+      nominalPmt: p.property.nominalPmt
     };
   }
   return result;

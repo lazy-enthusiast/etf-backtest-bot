@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { $, intFmt } from './dom.js';
 import { saveJSON } from './storage.js';
 import { loadMeta, runBacktestCached, loadCpi } from './data.js';
+import { normalizePlan } from '../backtest/retirement.js';
 import { readPlanForm } from './plan-form.js';
 import { readPortfolioForm, validateHoldings } from './portfolio-form.js';
 import { renderDashboard } from './dashboard.js';
@@ -19,6 +20,13 @@ export async function recalc({ markPrevious = true, label } = {}) {
   if (!Object.keys(pf.holdings).length) { setStatus('請至少輸入一檔 ETF 與權重。', true); return null; }
   const symErrors = validateHoldings(pf.holdings);
   if (symErrors.length) { setStatus('計算失敗：' + symErrors[0], true); return null; }
+  const planned = normalizePlan(readPlanForm());
+  if (planned.property?.blocked) {
+    state.plan = planned;
+    saveJSON(STORE.plan, planned);
+    setStatus(planned.property.blockReason, true);
+    return null;
+  }
   state.portfolio = pf;
   saveJSON(STORE.portfolio, pf);
   $('calcBtn').disabled = true;

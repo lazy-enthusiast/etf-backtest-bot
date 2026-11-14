@@ -121,7 +121,7 @@ export function renderPlanForm() {
   form.appendChild(renderGlideFields());
 }
 
-function propertyInput(id, label, placeholder, numeric) {
+function propertyInput(id, label, placeholder, numeric, moneyUnit) {
   const field = el('div', 'field');
   const lab = el('label', '', label);
   lab.htmlFor = id;
@@ -129,9 +129,14 @@ function propertyInput(id, label, placeholder, numeric) {
   const input = el('input');
   input.id = id;
   input.placeholder = placeholder || '';
-  bindNumericInput(input, numeric);
+  bindNumericInput(input, { integer: Boolean(numeric.integer), money: Boolean(numeric.money) });
   input.addEventListener('input', onPlanEdited);
   wrap.appendChild(input);
+  if (moneyUnit != null) {
+    const unit = el('span', 'unit', '');
+    unit.dataset.money = moneyUnit;
+    wrap.appendChild(unit);
+  }
   field.append(lab, wrap);
   return field;
 }
@@ -150,23 +155,36 @@ function renderPropertyBlock() {
   const fields = el('div', 'property-fields');
   fields.id = 'propertyFields';
   fields.hidden = true;
+  const funding = el('div', 'seg property-funding');
+  funding.id = 'plan-propertyFunding';
+  [['mortgage', '按揭'], ['cash', '全現金']].forEach(([value, text]) => {
+    const b = el('button', '', text);
+    b.type = 'button';
+    b.dataset.value = value;
+    b.onclick = () => {
+      funding.querySelectorAll('button').forEach(btn => btn.classList.toggle('on', btn === b));
+      onPlanEdited();
+    };
+    funding.appendChild(b);
+  });
   const grid = el('div', 'plan-row cols-3');
   grid.append(
-    propertyInput('plan-propertyAge', '置業年齡', '', { integer: true, min: 0, step: 1 }),
-    propertyInput('plan-propertyPrice', '樓價（萬）', '置業當年名目', { integer: false, min: 0, step: 1 }),
-    propertyInput('plan-propertyLtv', '按揭成數（%）', '', { integer: false, min: 0, max: 100, step: 1 })
+    propertyInput('plan-propertyAge', '置業年齡', '', { integer: true }),
+    propertyInput('plan-propertyPrice', '樓價', '置業當年名目', { money: true }),
+    propertyInput('plan-propertyLtv', '按揭成數（%）', '', { integer: false })
   );
   const costs = el('div', 'plan-row cols-3');
   costs.append(
-    propertyInput('plan-propertyCommission', '佣金（萬）', '空白＝樓價×1%', { integer: false, min: 0, step: 0.1 }),
-    propertyInput('plan-propertyLegal', '律師費（萬）', '', { integer: false, min: 0, step: 0.1 }),
-    propertyInput('plan-propertyReno', '裝修（萬）', '', { integer: false, min: 0, step: 0.1 })
+    propertyInput('plan-propertyCommission', '佣金', '空白＝樓價×1%', { money: true }),
+    propertyInput('plan-propertyLegal', '律師費', '', { money: true }),
+    propertyInput('plan-propertyReno', '裝修', '', { money: true })
   );
-  const loan = el('div', 'plan-row cols-3');
+  const loan = el('div', 'plan-row cols-3 mortgage-fields');
+  loan.id = 'propertyMortgageFields';
   loan.append(
-    propertyInput('plan-propertyRate', '按揭年利率（%）', '', { integer: false, min: 0, step: 0.1 }),
-    propertyInput('plan-propertyYears', '按揭年期（年）', '', { integer: true, min: 1, step: 1 }),
-    propertyInput('plan-propertyHolding', '每月其他持有費用（元）', '今日幣值', { integer: false, money: true, min: 0, step: 100 })
+    propertyInput('plan-propertyRate', '按揭年利率（%）', '可以是 0', { integer: false }),
+    propertyInput('plan-propertyYears', '按揭年期（年）', '', { integer: true }),
+    propertyInput('plan-propertyHolding', '每月其他持有費用', '今日幣值', { money: true }, '/月')
   );
   const rentRow = el('label', 'check-row');
   const rentToggle = el('input');
@@ -177,10 +195,12 @@ function renderPropertyBlock() {
   const rentFields = el('div', 'plan-row cols-2');
   rentFields.id = 'propertyRentFields';
   rentFields.hidden = true;
-  rentFields.append(propertyInput('plan-propertyRentMonthly', '每月租金（元）', '今日幣值', { integer: false, money: true, min: 0, step: 100 }));
+  rentFields.append(propertyInput('plan-propertyRentMonthly', '每月租金', '今日幣值', { money: true }, '/月'));
   const quote = el('p', 'property-quote');
   quote.id = 'propertyQuote';
-  fields.append(grid, costs, loan, rentRow, rentFields, quote);
+  const note = el('p', 'property-note');
+  note.id = 'propertyBlock';
+  fields.append(funding, grid, costs, loan, rentRow, rentFields, quote, note);
   box.append(row, fields);
   return box;
 }
@@ -192,6 +212,15 @@ function updatePropertyQuote() {
   if (fields) fields.hidden = !on;
   const rentFields = $('propertyRentFields');
   if (rentFields) rentFields.hidden = !on || !prop?.rentIfCannot;
+  const cash = prop?.funding === 'cash';
+  const mortgageFields = $('propertyMortgageFields');
+  if (mortgageFields) mortgageFields.classList.toggle('is-idle', Boolean(on && cash));
+  const block = $('propertyBlock');
+  if (block) {
+    const reason = on ? prop?.blockReason : '';
+    block.textContent = reason || (on && cash ? '全現金，不計按揭' : '');
+    block.classList.toggle('is-warn', Boolean(reason));
+  }
   const node = $('propertyQuote');
   if (!node) return;
   node.textContent = on && prop?.quote
@@ -487,21 +516,33 @@ export function readPlanForm() {
   return p;
 }
 
+function propertyView(p) {
+  if (!p?.property) return null;
+  return retirement.normalizePlan(p).property;
+}
+
 function writePropertyForm(p) {
-  const prop = p.property;
+  const prop = propertyView(p);
   const toggle = $('plan-property');
-  if (toggle && document.activeElement !== toggle) toggle.checked = Boolean(prop?.enabled);
+  if (toggle && document.activeElement !== toggle) toggle.checked = Boolean(p.property && p.property.enabled !== false);
   const set = (id, value, asMoney = false) => {
     const input = $(id);
     if (!input || document.activeElement === input) return;
     input.value = value == null || value === '' ? '' : shownNumber(value, asMoney);
   };
+  const funding = $('plan-propertyFunding');
+  if (funding) {
+    funding.querySelectorAll('button').forEach(b => {
+      if (document.activeElement === b) return;
+      b.classList.toggle('on', b.dataset.value === prop?.funding);
+    });
+  }
   set('plan-propertyAge', prop?.purchaseAge);
-  set('plan-propertyPrice', prop?.priceWan);
+  set('plan-propertyPrice', prop?.price, true);
   set('plan-propertyLtv', prop?.ltvPct);
-  set('plan-propertyCommission', prop?.commissionWan);
-  set('plan-propertyLegal', prop?.legalWan);
-  set('plan-propertyReno', prop?.renovationWan);
+  set('plan-propertyCommission', prop?.commissionSpecified, true);
+  set('plan-propertyLegal', prop?.legal, true);
+  set('plan-propertyReno', prop?.renovation, true);
   set('plan-propertyRate', prop?.mortgageRatePct);
   set('plan-propertyYears', prop?.mortgageYears);
   set('plan-propertyHolding', prop?.holdingMonthly, true);
@@ -511,20 +552,27 @@ function writePropertyForm(p) {
   updatePropertyQuote();
 }
 
+function readOptional(id) {
+  const input = $(id);
+  if (!input || input.value.trim() === '') return null;
+  return readInputNumber(input.value);
+}
+
 function readPropertyForm() {
   if (!$('plan-property')?.checked) return null;
-  const commission = $('plan-propertyCommission');
-  const commissionBlank = !commission || commission.value.trim() === '';
+  const funding = document.querySelector('#plan-propertyFunding button.on')?.dataset.value || 'unconfirmed';
   return {
     enabled: true,
+    moneyUnit: 'currency',
+    funding,
     purchaseAge: readNum($('plan-propertyAge')?.value, state.plan.currentAge),
-    priceWan: readNum($('plan-propertyPrice')?.value, 0),
-    ltvPct: readNum($('plan-propertyLtv')?.value, 0),
-    commissionWan: commissionBlank ? null : readNum(commission.value, 0),
-    legalWan: readNum($('plan-propertyLegal')?.value, 0),
-    renovationWan: readNum($('plan-propertyReno')?.value, 0),
-    mortgageRatePct: readNum($('plan-propertyRate')?.value, 0),
-    mortgageYears: readNum($('plan-propertyYears')?.value, 30),
+    price: readOptional('plan-propertyPrice'),
+    ltvPct: readOptional('plan-propertyLtv'),
+    commissionSpecified: readOptional('plan-propertyCommission'),
+    legal: readOptional('plan-propertyLegal'),
+    renovation: readOptional('plan-propertyReno'),
+    mortgageRatePct: readOptional('plan-propertyRate'),
+    mortgageYears: readOptional('plan-propertyYears'),
     holdingMonthly: readNum($('plan-propertyHolding')?.value, 0),
     rentIfCannot: Boolean($('plan-propertyRent')?.checked),
     rentMonthly: readNum($('plan-propertyRentMonthly')?.value, 0)

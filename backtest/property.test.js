@@ -5,9 +5,10 @@ import {
   buildLifeLedger,
   normalizePlan,
   drawReshuffleIndices,
-  realMonthlyReturns
+  realMonthlyReturns,
+  blockReshuffle
 } from './retirement.js';
-import { stampDutyHKD, mortgagePayment } from './property.js';
+import { stampDutyHKD, mortgagePayment, propertyNeedsMigration } from './property.js';
 import { propertyOverviewLines, propertyQuoteText } from '../js/narrate.js';
 
 const GOLDEN_SPEND = {
@@ -549,4 +550,319 @@ test('portfolio bands stay the portfolio; real monthly returns keep inflation be
   assert.ok(on.bands[1].p50 < off.bands[1].p50);
   assert.equal(on.propertyEquity, undefined);
   assert.equal(on.bands[1].property, undefined);
+});
+
+function roundTrip(property) {
+  const once = normalizePlan(base({ property })).property;
+  const saved = JSON.parse(JSON.stringify(once));
+  const twice = normalizePlan(base({ property: saved })).property;
+  return { once, twice, saved };
+}
+
+test('legacy 萬 amounts convert once and survive another save', () => {
+  const legacy = {
+    enabled: true,
+    purchaseAge: 40,
+    priceWan: 1000,
+    price: 10_000_000,
+    commissionWan: null,
+    commission: 100_000,
+    legalWan: 0,
+    renovationWan: 1.5,
+    ltvPct: 50,
+    mortgageRatePct: 0,
+    mortgageYears: 20,
+    holdingMonthly: 0
+  };
+  const { once, twice } = roundTrip(legacy);
+  assert.equal(once.moneyUnit, 'currency');
+  assert.equal(once.price, 10_000_000);
+  assert.equal(once.commissionSpecified, null);
+  assert.equal(once.commission, 100_000);
+  assert.equal(once.legal, 0);
+  assert.equal(once.renovation, 15_000);
+  assert.equal(once.priceWan, undefined);
+  assert.equal(twice.price, 10_000_000);
+  assert.equal(twice.renovation, 15_000);
+  assert.equal(twice.commission, 100_000);
+  assert.equal(twice.loan, 5_000_000);
+
+  const fraction = roundTrip({ enabled: true, priceWan: 0.04, ltvPct: 0, commissionWan: 0, mortgageYears: 5 });
+  assert.equal(fraction.once.price, 0.04 * 10000);
+  assert.equal(fraction.twice.price, fraction.once.price);
+
+  const blank = roundTrip({
+    enabled: true,
+    moneyUnit: 'currency',
+    price: null,
+    commissionSpecified: null,
+    legal: null,
+    renovation: null,
+    funding: 'cash'
+  });
+  assert.equal(blank.once.price, null);
+  assert.equal(blank.once.active, false);
+  assert.equal(blank.twice.price, null);
+  assert.equal(blank.twice.legal, null);
+
+  const zeros = roundTrip({
+    enabled: true,
+    moneyUnit: 'currency',
+    price: 0,
+    commissionSpecified: 0,
+    legal: 0,
+    renovation: 0,
+    funding: 'cash',
+    ltvPct: 60
+  });
+  assert.equal(zeros.once.price, 0);
+  assert.equal(zeros.once.commission, 0);
+  assert.equal(zeros.twice.price, 0);
+  assert.equal(zeros.twice.commission, 0);
+  assert.equal(zeros.twice.loan, 0);
+
+  const currency = roundTrip({
+    enabled: true,
+    moneyUnit: 'currency',
+    price: 10_000_000,
+    priceWan: 10_000_000,
+    commissionSpecified: 80_000,
+    legal: 20_000,
+    legalWan: 20_000,
+    renovation: 0,
+    funding: 'mortgage',
+    ltvPct: 50,
+    mortgageRatePct: 0,
+    mortgageYears: 20
+  });
+  assert.equal(currency.once.price, 10_000_000);
+  assert.equal(currency.once.legal, 20_000);
+  assert.equal(currency.twice.price, 10_000_000);
+  assert.equal(currency.twice.loan, 5_000_000);
+  assert.equal(propertyNeedsMigration(legacy), true);
+  assert.equal(propertyNeedsMigration(currency.saved), false);
+  assert.equal(propertyNeedsMigration({ moneyUnit: 'currency', price: 10_000_000, priceWan: 1 }), true);
+});
+
+test('blank or zero LTV is not silent cash, and legacy zero stays cash', () => {
+  const returns = flat(24, 0, 1);
+  const common = {
+    currentAge: 40,
+    retireAge: 42,
+    endAge: 43,
+    currentSavings: 5_000_000,
+    annualSpending: 0
+  };
+  const off = simulateRetirement(base(common), returns);
+  const missing = simulateRetirement(base({
+    ...common,
+    property: { enabled: true, priceWan: 100, mortgageRatePct: 0, mortgageYears: 10 }
+  }), returns);
+  assert.equal(missing.plan.property.blocked, true);
+  assert.equal(missing.plan.property.funding, 'unconfirmed');
+  assert.equal(missing.plan.property.blockReason, '請選擇全現金或按揭');
+  assert.equal(missing.endBalance.p50, off.endBalance.p50);
+  assert.equal(missing.property, undefined);
+
+  const explicitZero = simulateRetirement(base({
+    ...common,
+    property: buy({ priceWan: 100, ltvPct: 0, commissionWan: 0, mortgageYears: 10, holdingMonthly: 80 })
+  }), returns);
+  assert.equal(explicitZero.plan.property.funding, 'cash');
+  assert.equal(explicitZero.plan.property.blocked, undefined);
+  assert.equal(explicitZero.plan.property.loan, 0);
+  assert.equal(explicitZero.plan.property.nominalPmt, 0);
+  assert.equal(explicitZero.plan.property.active, true);
+  assert.match(explicitZero.plan.property.quote.paidToText, /全現金/);
+
+  const unconfirmedZero = normalizePlan(base({
+    property: {
+      enabled: true,
+      moneyUnit: 'currency',
+      funding: 'unconfirmed',
+      price: 1_000_000,
+      ltvPct: 0,
+      mortgageRatePct: 0,
+      mortgageYears: 10
+    }
+  })).property;
+  assert.equal(unconfirmedZero.funding, 'unconfirmed');
+  assert.equal(unconfirmedZero.blocked, true);
+  assert.equal(unconfirmedZero.loan, undefined);
+
+  const mortgageZero = normalizePlan(base({
+    property: {
+      enabled: true,
+      moneyUnit: 'currency',
+      funding: 'mortgage',
+      price: 1_000_000,
+      ltvPct: 0,
+      mortgageRatePct: 0,
+      mortgageYears: 10
+    }
+  })).property;
+  assert.equal(mortgageZero.blocked, true);
+  assert.equal(mortgageZero.blockReason, '按揭成數須大於 0');
+  assert.equal(mortgageZero.active, false);
+
+  const cashKeepsLoanInputs = normalizePlan(base({
+    property: {
+      enabled: true,
+      moneyUnit: 'currency',
+      funding: 'cash',
+      price: 1_000_000,
+      ltvPct: 70,
+      mortgageRatePct: 2.5,
+      mortgageYears: 25,
+      holdingMonthly: 80
+    }
+  })).property;
+  assert.equal(cashKeepsLoanInputs.loan, 0);
+  assert.equal(cashKeepsLoanInputs.nominalPmt, 0);
+  assert.equal(cashKeepsLoanInputs.ltvPct, 70);
+  assert.equal(cashKeepsLoanInputs.mortgageRatePct, 2.5);
+  assert.equal(cashKeepsLoanInputs.mortgageYears, 25);
+  assert.equal(cashKeepsLoanInputs.holdingMonthly, 80);
+  assert.equal(cashKeepsLoanInputs.down, 1_000_000);
+});
+
+test('mortgage mode rejects incomplete terms and accepts a zero rate', () => {
+  const price = {
+    enabled: true,
+    moneyUnit: 'currency',
+    funding: 'mortgage',
+    price: 1_200_000,
+    ltvPct: 50
+  };
+  const noRate = normalizePlan(base({ property: { ...price, mortgageYears: 10 } })).property;
+  assert.equal(noRate.blocked, true);
+  assert.equal(noRate.blockReason, '請填按揭年利率（可以是 0）');
+  const noYears = normalizePlan(base({ property: { ...price, mortgageRatePct: 3 } })).property;
+  assert.equal(noYears.blocked, true);
+  assert.equal(noYears.blockReason, '按揭年期須大於 0');
+  assert.notEqual(noYears.mortgageYears, 30);
+  const zeroRate = normalizePlan(base({
+    property: { ...price, mortgageRatePct: 0, mortgageYears: 10 }
+  })).property;
+  assert.equal(zeroRate.blocked, undefined);
+  assert.equal(zeroRate.loan, 600_000);
+  assert.ok(Math.abs(zeroRate.nominalPmt - 600_000 / 120) < 1e-6);
+  const negative = normalizePlan(base({
+    property: { ...price, mortgageRatePct: -1, mortgageYears: 10 }
+  })).property;
+  assert.equal(negative.blockReason, '按揭年利率不可為負');
+});
+
+test('salary pays the mortgage until retirement, including payoff and a purchase after retirement', () => {
+  const returns = flat(60, 0, 1);
+  const plan = base({
+    currentAge: 40,
+    retireAge: 43,
+    endAge: 45,
+    currentSavings: 5_000_000,
+    monthlyContribution: 1000,
+    annualSpending: 0,
+    property: buy({
+      purchaseAge: 40,
+      priceWan: 100,
+      ltvPct: 50,
+      commissionWan: 0,
+      mortgageRatePct: 0,
+      mortgageYears: 2,
+      holdingMonthly: 40
+    })
+  });
+  const sim = simulateRetirement(plan, returns);
+  const prop = sim.plan.property;
+  const rows = buildLifeLedger(plan, returns).rows.filter(row => row.start_month === '2000-01');
+  assert.equal(sim.balanceAtRetire.p50, 5_000_000 - prop.cashNominal + 1000 * 36);
+  for (const row of rows) {
+    if (row.k < 24) assert.ok(Math.abs(row.mortgage_real - prop.nominalPmt) < 1e-6);
+    else assert.equal(row.mortgage_real, 0);
+    if (row.k < 36) assert.equal(row.housing_from_portfolio, 0);
+    else assert.ok(Math.abs(row.housing_from_portfolio - 40) < 1e-6);
+    if (row.k < 36) assert.equal(row.contribution, 1000);
+  }
+
+  const endsAtRetire = base({
+    currentAge: 40,
+    retireAge: 42,
+    endAge: 44,
+    currentSavings: 5_000_000,
+    annualSpending: 0,
+    property: buy({ purchaseAge: 40, priceWan: 100, ltvPct: 50, commissionWan: 0, mortgageYears: 2, holdingMonthly: 0 })
+  });
+  for (const row of buildLifeLedger(endsAtRetire, returns).rows) {
+    if (row.k < 24) assert.equal(row.housing_from_portfolio, 0);
+    else assert.equal(row.mortgage_real, 0);
+  }
+
+  const after = base({
+    currentAge: 60,
+    retireAge: 60,
+    endAge: 63,
+    currentSavings: 5_000_000,
+    annualSpending: 0,
+    property: buy({ purchaseAge: 61, priceWan: 100, ltvPct: 40, commissionWan: 0, mortgageRatePct: 0, mortgageYears: 2, holdingMonthly: 15 })
+  });
+  const afterProp = normalizePlan(after).property;
+  for (const row of buildLifeLedger(after, flat(36, 0, 1)).rows.filter(row => row.start_month === '2000-01')) {
+    if (row.k < 12) {
+      assert.equal(row.mortgage_real, 0);
+      assert.equal(row.housing_from_portfolio, 0);
+    } else if (row.k < 36) {
+      assert.ok(Math.abs(row.mortgage_real - afterProp.nominalPmt) < 1e-6);
+      assert.ok(Math.abs(row.housing_from_portfolio - (afterProp.nominalPmt + 15)) < 1e-6);
+    }
+  }
+
+  const cash = base({
+    currentAge: 40,
+    retireAge: 42,
+    endAge: 44,
+    currentSavings: 5_000_000,
+    annualSpending: 0,
+    property: {
+      enabled: true,
+      moneyUnit: 'currency',
+      funding: 'cash',
+      price: 1_000_000,
+      ltvPct: 80,
+      mortgageRatePct: 3,
+      mortgageYears: 20,
+      commissionSpecified: 0,
+      holdingMonthly: 25
+    }
+  });
+  const cashProp = normalizePlan(cash).property;
+  assert.equal(cashProp.loan, 0);
+  for (const row of buildLifeLedger(cash, flat(48, 0, 1)).rows) {
+    assert.equal(row.mortgage_real, 0);
+    if (row.k < 24) assert.equal(row.housing_from_portfolio, 0);
+    else assert.equal(row.housing_from_portfolio, 25);
+  }
+  assert.equal(cashProp.down, 1_000_000);
+});
+
+test('historical and reshuffled mortgages stay on the age axis', () => {
+  const returns = flat(120, 0, i => 1 + ((i % 12) + 1) / 1000);
+  const plan = base({
+    currentAge: 40,
+    retireAge: 42,
+    endAge: 44,
+    currentSavings: 5_000_000,
+    annualSpending: 0,
+    reshuffleSeed: 3,
+    property: buy({ purchaseAge: 41, priceWan: 100, ltvPct: 50, commissionWan: 0, mortgageRatePct: 0, mortgageYears: 2, holdingMonthly: 0 })
+  });
+  const hits = buildLifeLedger(plan, returns).rows.filter(row => row.mortgage_real > 0);
+  assert.ok(hits.length > 0);
+  for (const row of hits) assert.ok(row.k >= 12 && row.k < 36);
+  const quiet = buildLifeLedger(plan, returns).rows.filter(row => row.k < 12 || row.k >= 36);
+  for (const row of quiet) assert.equal(row.mortgage_real, 0);
+  const shuffled = blockReshuffle(plan, returns);
+  assert.equal(shuffled.propertyProbe.purchased, true);
+  assert.equal(shuffled.propertyProbe.mortgageMonths, 24);
+  const historical = simulateRetirement(plan, returns);
+  assert.equal(historical.plan.property.nominalPmt, shuffled.propertyProbe.nominalPmt);
 });

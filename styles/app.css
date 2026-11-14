@@ -18,6 +18,8 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
   }
   html, body { height: 100%; }
+  html.vv-sync, html.vv-sync body { height: var(--app-height); }
+  html.vv-sync body { transform: translateY(var(--app-offset, 0px)); }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif; display: flex; flex-direction: column; overflow: hidden; }
   button, input, select, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; }
@@ -78,7 +80,9 @@
 
   /* ===== Shell：主內容 ~2/3｜顧問 ~1/3 ===== */
   .shell { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr); }
-  .dash { overflow-y: auto; min-height: 0; padding: 24px 28px 36px; display: flex; flex-direction: column; gap: 20px; min-width: 0; background: var(--bg); }
+  .dash { overflow: hidden; min-height: 0; padding: 24px 28px 12px; display: flex; flex-direction: column; gap: 12px; min-width: 0; background: var(--bg); }
+  .dash-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; -webkit-overflow-scrolling: touch; }
+  .dash-scroll .field { scroll-margin-top: 12px; scroll-margin-bottom: 16px; }
   .above-tabs { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
   .advisor { border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 
@@ -174,7 +178,7 @@
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn.block { width: 100%; padding: 12px; font-size: 14px; }
   details.adv summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin: 6px 0; }
-  .calc-bar { display: flex; align-items: center; gap: 12px; position: sticky; bottom: 0; z-index: 6; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .calc-bar { display: flex; align-items: center; gap: 12px; position: static; flex: none; z-index: 6; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
   .calc-bar .btn.block { width: auto; min-width: 140px; padding: 10px 18px; }
   .status { font-size: 12px; color: var(--muted); min-height: 18px; flex: 1; text-align: left; }
   .status.error { color: var(--bad); }
@@ -217,7 +221,12 @@
   #pathViewer { margin-top: 8px; }
   #pathViewer .tbl-wrap { max-height: 320px; overflow: auto; }
   .property-block { margin-top: 12px; }
+  .property-funding { width: 100%; margin-top: 8px; }
+  .mortgage-fields.is-idle { opacity: 0.55; }
   .property-quote { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .property-note { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .property-note:empty { display: none; }
+  .property-note.is-warn { color: var(--warn); }
   #propertyHighlight { white-space: pre-line; }
   .advanced-plan { margin-top: 8px; font-size: 13px; color: var(--muted); }
   .advanced-plan summary { cursor: pointer; }
@@ -370,12 +379,13 @@
   }
   @media (max-width: 1100px) {
     .shell { grid-template-columns: 1fr; overflow: hidden; }
-    .dash { overflow-y: auto; min-height: 0; }
+    .dash { overflow: hidden; min-height: 0; }
+    .dash-scroll { overflow-y: auto; min-height: 0; }
     .workspace { grid-template-columns: 1fr; }
     .advisor { position: fixed; inset: 0 0 0 auto; width: min(440px, 100%); z-index: 40; transform: translateX(100%); transition: transform 0.25s ease; box-shadow: -10px 0 30px rgba(0, 0, 0, 0.2); }
     body.advisor-open .advisor { transform: none; }
     #advisorToggle { display: inline-flex; }
-    .calc-bar { position: sticky; bottom: 0; }
+    .calc-bar { position: static; }
     .plan-chip { display: none; }
     input, select, textarea,
     .authBox input,

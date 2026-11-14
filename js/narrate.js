@@ -100,7 +100,11 @@ export function planOptionLines(plan) {
   if (plan.property?.active) {
     const home = plan.property;
     const rent = home.rentIfCannot ? '無法置業改計租金。' : '無法置業不含住房開支。';
-    lines.push(`置業：${home.purchaseAge} 歲，樓價 ${home.priceWan} 萬（置業當年名目）。${rent}軌跡不含樓淨值。`);
+    const cash = home.funding === 'cash' ? '全現金。' : '';
+    const price = Number.isFinite(Number(home.price))
+      ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(Number(home.price))
+      : '—';
+    lines.push(`置業：${home.purchaseAge} 歲，樓價 ${price} 元（置業當年名目）。${cash}${rent}軌跡不含樓淨值。`);
   }
   return lines;
 }
