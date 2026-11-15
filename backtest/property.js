@@ -88,9 +88,9 @@ function commissionSpecifiedFrom(raw) {
     if (isBlank(raw.commissionWan)) return null;
     return wanToCurrency(raw.commissionWan);
   }
-  if (raw.moneyUnit === PROPERTY_MONEY_UNIT && !('loan' in raw) && 'commission' in raw) {
-    return blankNumber(raw.commission);
-  }
+  // 提示詞寫 commission（元）。省略或 null 代表樓價 1%；0 與自訂金額要原樣留下。
+  // 存檔後的計算結果也把已算出的佣金放在 commission，並帶著 loan。那不是新的指示。
+  if ('commission' in raw && !('loan' in raw)) return blankNumber(raw.commission);
   return null;
 }
 

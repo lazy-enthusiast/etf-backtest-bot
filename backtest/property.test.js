@@ -866,3 +866,99 @@ test('historical and reshuffled mortgages stay on the age axis', () => {
   const historical = simulateRetirement(plan, returns);
   assert.equal(historical.plan.property.nominalPmt, shuffled.propertyProbe.nominalPmt);
 });
+
+test('unspecified commission is 1% of price; explicit 0 and custom amounts stay put', () => {
+  const mortgage = {
+    enabled: true,
+    price: 1_000_000,
+    funding: 'mortgage',
+    ltvPct: 50,
+    mortgageRatePct: 0,
+    mortgageYears: 10
+  };
+  const omitted = normalizePlan(base({ property: { ...mortgage } })).property;
+  assert.equal(omitted.commissionSpecified, null);
+  assert.equal(omitted.commission, 10_000);
+  assert.equal(omitted.cashNominal, 500_000 + 10_000 + omitted.stamp);
+
+  const blank = normalizePlan(base({ property: { ...mortgage, commission: null } })).property;
+  assert.equal(blank.commission, 10_000);
+  assert.equal(blank.commissionSpecified, null);
+
+  const zero = normalizePlan(base({ property: { ...mortgage, commission: 0 } })).property;
+  assert.equal(zero.commissionSpecified, 0);
+  assert.equal(zero.commission, 0);
+  assert.equal(zero.cashNominal, 500_000 + zero.stamp);
+
+  const custom = normalizePlan(base({ property: { ...mortgage, commission: 25_000 } })).property;
+  assert.equal(custom.commissionSpecified, 25_000);
+  assert.equal(custom.commission, 25_000);
+  assert.equal(custom.cashNominal, 500_000 + 25_000 + custom.stamp);
+
+  const wan = normalizePlan(base({ property: { ...mortgage, price: undefined, priceWan: 100, commissionWan: 1.5 } })).property;
+  assert.equal(wan.price, 1_000_000);
+  assert.equal(wan.commission, 15_000);
+  const wanBlank = normalizePlan(base({ property: { ...mortgage, price: undefined, priceWan: 100, commissionWan: null } })).property;
+  assert.equal(wanBlank.commission, 10_000);
+  const wanZero = normalizePlan(base({ property: { ...mortgage, price: undefined, priceWan: 100, commissionWan: 0 } })).property;
+  assert.equal(wanZero.commission, 0);
+});
+
+test('an AI property patch uses commission in dollars and does not add another 1%', () => {
+  const existing = normalizePlan(base({
+    currentSavings: 5_000_000,
+    property: {
+      enabled: true,
+      price: 1_000_000,
+      funding: 'mortgage',
+      ltvPct: 50,
+      mortgageRatePct: 2,
+      mortgageYears: 20
+    }
+  }));
+  assert.equal(existing.property.commission, 10_000);
+  assert.equal(existing.property.commissionSpecified, null);
+
+  const patched = normalizePlan({
+    ...existing,
+    property: {
+      enabled: true,
+      price: 1_000_000,
+      funding: 'mortgage',
+      ltvPct: 50,
+      mortgageRatePct: 2,
+      mortgageYears: 20,
+      commission: 25_000
+    }
+  });
+  assert.equal(patched.currentSavings, 5_000_000);
+  assert.equal(patched.property.commission, 25_000);
+  assert.equal(patched.property.commissionSpecified, 25_000);
+  assert.equal(patched.property.loan, 500_000);
+
+  const cleared = normalizePlan({
+    ...patched,
+    property: {
+      enabled: true,
+      price: 1_000_000,
+      funding: 'mortgage',
+      ltvPct: 50,
+      mortgageRatePct: 2,
+      mortgageYears: 20
+    }
+  });
+  assert.equal(cleared.property.commissionSpecified, null);
+  assert.equal(cleared.property.commission, 10_000);
+
+  const saved = JSON.parse(JSON.stringify(patched.property));
+  const again = normalizePlan(base({ property: saved })).property;
+  const third = normalizePlan(base({ property: JSON.parse(JSON.stringify(again)) })).property;
+  assert.equal(again.commission, 25_000);
+  assert.equal(third.commission, 25_000);
+  assert.equal(third.price, 1_000_000);
+
+  const savedDefault = JSON.parse(JSON.stringify(existing.property));
+  const defaultAgain = normalizePlan(base({ property: savedDefault })).property;
+  assert.equal(defaultAgain.commissionSpecified, null);
+  assert.equal(defaultAgain.commission, 10_000);
+});
