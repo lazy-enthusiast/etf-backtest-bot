@@ -10,6 +10,8 @@ import { writePortfolioForm, addHoldingRow, onPortfolioEdited } from './portfoli
 import { recalc, setStatus } from './recalc.js';
 import { migrateHoldings, usBareKeysFromMapping } from '../backtest/symbols.js';
 import { normalizePlan } from '../backtest/retirement.js';
+import { propertyNeedsMigration } from '../backtest/property.js';
+import { bindVisualViewport } from './viewport-frame.js';
 import { renderDashboard, renderActiveTab } from './dashboard.js';
 import {
   loadModels, newConversation, getActiveConv, renderConvSelect, renderMessages,
@@ -53,6 +55,7 @@ function bindUi() {
   });
 
   $('calcBtn')?.addEventListener('click', () => recalc({ markPrevious: true }));
+  bindVisualViewport();
   const reshuffleBlock = $('reshuffleBlock');
   const reshuffleSeed = $('reshuffleSeed');
   if (reshuffleBlock) {
@@ -112,6 +115,9 @@ async function init() {
   const planInput = savedPlan && typeof savedPlan === 'object' && !Array.isArray(savedPlan) ? savedPlan : {};
   try {
     state.plan = normalizePlan(planInput);
+    if (propertyNeedsMigration(planInput.property)) {
+      saveJSON(STORE.plan, { ...planInput, property: state.plan.property });
+    }
   } catch (err) {
     console.error('計劃讀取失敗，保留本機原檔', err);
     state.plan = normalizePlan({});

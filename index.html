@@ -38,6 +38,7 @@
 <div class="shell">
   <!-- ===== 主區 ~2/3：圖表、指標、組合與假設 ===== -->
   <main class="dash">
+    <div class="dash-scroll">
     <div class="above-tabs">
     <section class="workspace">
       <section class="card portfolio-card">
@@ -96,10 +97,6 @@
       <div class="legend-note" id="fanNote" hidden></div>
     </section>
 
-    <div class="calc-bar">
-      <button class="btn primary block" id="calcBtn">重新計算</button>
-      <div class="status" id="status"></div>
-    </div>
     </div>
 
     <section class="card results-card">
@@ -178,8 +175,13 @@
       </div>
       <div class="tab-panel" id="tab-scenarios" hidden></div>
       <div class="tab-panel" id="tab-performance" hidden></div>
-      <div class="tab-panel" id="tab-assets" hidden></div>
+      <div class="tab-panel" id="tab-assets" hidden>      </div>
     </section>
+    </div>
+    <div class="calc-bar">
+      <button class="btn primary block" id="calcBtn">重新計算</button>
+      <div class="status" id="status"></div>
+    </div>
   </main>
 
   <!-- ===== 右 ~1/3：AI 對話 ===== -->
